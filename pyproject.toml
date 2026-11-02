@@ -1,0 +1,35 @@
+[project]
+name = "genio"
+version = "0.0.1"
+description = "Genio: 대화형 로우코드 플랫폼 (프로토타입)"
+requires-python = ">=3.12,<3.13"
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["apps", "packages"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "N", "S", "SIM", "RUF"]
+ignore = ["RUF001", "RUF002", "RUF003"]  # 한국어 문구의 전각 문자 허용
+
+[tool.ruff.lint.per-file-ignores]
+"**/tests/**" = ["S101"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+mypy_path = ["apps", "packages"]
+packages = ["api", "worker", "nodes"]
+explicit_package_bases = true
+plugins = ["pydantic.mypy"]
+
+[[tool.mypy.overrides]]
+module = ["celery", "celery.*"]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+pythonpath = ["apps", "packages"]
+testpaths = ["apps/api/tests", "apps/worker/tests", "packages/nodes/tests"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
