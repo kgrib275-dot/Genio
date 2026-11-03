@@ -1,0 +1,33 @@
+{
+  "key": "tpl_feedback_to_linear",
+  "type": "template",
+  "name": "고객 피드백을 제품 이슈로",
+  "summary": "고객 피드백을 기능 요청·버그·칭찬으로 나누고, 기능 요청과 버그만 Linear 이슈로 올려요.",
+  "version": "1.0.0",
+  "publisher": "platform",
+  "price": 0,
+  "category": "개발",
+  "app_type": "workflow",
+  "tags": [
+    "linear",
+    "피드백",
+    "분류",
+    "제품",
+    "이슈"
+  ],
+  "requires": {
+    "items": [
+      "linear"
+    ]
+  },
+  "blanks": [
+    {
+      "key": "team",
+      "label": "Linear 팀 id",
+      "node_id": "n3",
+      "field": "params.team_id",
+      "example": "9cfb482a-81e3-4154-b5b9-2c805e70a02d"
+    }
+  ],
+  "permissions": []
+}

@@ -1,0 +1,33 @@
+{
+  "key": "tpl_meeting_to_notion",
+  "type": "template",
+  "name": "회의 메모를 노션 회의록으로",
+  "summary": "회의 메모를 붙여 넣으면 결정 사항·할 일로 정리해 노션 데이터베이스에 회의록 페이지를 만들어요.",
+  "version": "1.0.0",
+  "publisher": "platform",
+  "price": 0,
+  "category": "문서·지식",
+  "app_type": "workflow",
+  "tags": [
+    "notion",
+    "노션",
+    "회의록",
+    "회의",
+    "요약"
+  ],
+  "requires": {
+    "items": [
+      "notion"
+    ]
+  },
+  "blanks": [
+    {
+      "key": "db",
+      "label": "회의록 데이터베이스 id",
+      "node_id": "n3",
+      "field": "params.database_id",
+      "example": "1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d"
+    }
+  ],
+  "permissions": []
+}

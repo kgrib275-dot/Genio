@@ -1,0 +1,128 @@
+{
+  "version": 1,
+  "nodes": [
+    {
+      "id": "n1",
+      "type": "input",
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "data": {
+        "label": "피드백",
+        "fields": [
+          {
+            "key": "message",
+            "label": "고객 피드백",
+            "type": "text",
+            "required": true
+          }
+        ]
+      }
+    },
+    {
+      "id": "n2",
+      "type": "question_classifier",
+      "position": {
+        "x": 300,
+        "y": 0
+      },
+      "data": {
+        "label": "피드백 나누기",
+        "provider": "default",
+        "query": "{{n1.message}}",
+        "classes": [
+          {
+            "id": "feature",
+            "name": "기능 요청",
+            "description": "새 기능·개선 요청"
+          },
+          {
+            "id": "bug",
+            "name": "버그",
+            "description": "오류·고장 신고"
+          },
+          {
+            "id": "praise",
+            "name": "칭찬·기타",
+            "description": "칭찬이나 그 밖의 의견"
+          }
+        ]
+      }
+    },
+    {
+      "id": "n3",
+      "type": "connector",
+      "position": {
+        "x": 600,
+        "y": -80
+      },
+      "data": {
+        "label": "이슈 올리기",
+        "connector": "linear",
+        "credential_id": "{{credential:linear}}",
+        "action": "create_issue",
+        "params": {
+          "team_id": "",
+          "title": "[고객] {{n1.message}}",
+          "description": "분류: {{n2.class_name}}\n\n{{n1.message}}"
+        }
+      }
+    },
+    {
+      "id": "n4",
+      "type": "output",
+      "position": {
+        "x": 900,
+        "y": -80
+      },
+      "data": {
+        "label": "이슈 결과",
+        "template": "제품팀에 전달했어요: {{n3.url}}"
+      }
+    },
+    {
+      "id": "n5",
+      "type": "output",
+      "position": {
+        "x": 600,
+        "y": 120
+      },
+      "data": {
+        "label": "감사 답",
+        "template": "소중한 의견 감사합니다! 팀에 공유할게요."
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "e1",
+      "source": "n1",
+      "target": "n2"
+    },
+    {
+      "id": "e2",
+      "source": "n2",
+      "target": "n3",
+      "sourceHandle": "feature"
+    },
+    {
+      "id": "e3",
+      "source": "n2",
+      "target": "n3",
+      "sourceHandle": "bug"
+    },
+    {
+      "id": "e4",
+      "source": "n3",
+      "target": "n4"
+    },
+    {
+      "id": "e5",
+      "source": "n2",
+      "target": "n5",
+      "sourceHandle": "praise"
+    }
+  ],
+  "variables": {}
+}

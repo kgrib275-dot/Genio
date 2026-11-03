@@ -1,0 +1,118 @@
+{
+  "version": 1,
+  "nodes": [
+    {
+      "id": "n1",
+      "type": "input",
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "data": {
+        "label": "요청",
+        "fields": [
+          {
+            "key": "message",
+            "label": "요청 내용",
+            "type": "text",
+            "required": true
+          },
+          {
+            "key": "requester",
+            "label": "요청자",
+            "type": "text",
+            "required": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "n2",
+      "type": "llm",
+      "position": {
+        "x": 300,
+        "y": 0
+      },
+      "data": {
+        "label": "요약·유형 정하기",
+        "provider": "default",
+        "temperature": 0.3,
+        "system": "사내 요청을 Jira 이슈로 만들 수 있게 정리하세요. issue_type은 Bug, Task 중 하나.",
+        "prompt": "요청자: {{n1.requester}}\n{{n1.message}}",
+        "output_schema": {
+          "type": "object",
+          "properties": {
+            "summary": {
+              "type": "string"
+            },
+            "description": {
+              "type": "string"
+            },
+            "issue_type": {
+              "type": "string",
+              "enum": [
+                "Bug",
+                "Task"
+              ]
+            }
+          },
+          "required": [
+            "summary",
+            "description",
+            "issue_type"
+          ]
+        }
+      }
+    },
+    {
+      "id": "n3",
+      "type": "connector",
+      "position": {
+        "x": 600,
+        "y": 0
+      },
+      "data": {
+        "label": "이슈 만들기",
+        "connector": "jira",
+        "credential_id": "{{credential:jira}}",
+        "action": "create_issue",
+        "params": {
+          "project_key": "OPS",
+          "summary": "{{n2.summary}}",
+          "description": "{{n2.description}}",
+          "issue_type": "{{n2.issue_type}}"
+        }
+      }
+    },
+    {
+      "id": "n4",
+      "type": "output",
+      "position": {
+        "x": 900,
+        "y": 0
+      },
+      "data": {
+        "label": "결과",
+        "template": "{{n3.key}} 티켓을 만들었어요: {{n3.url}}"
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "e1",
+      "source": "n1",
+      "target": "n2"
+    },
+    {
+      "id": "e2",
+      "source": "n2",
+      "target": "n3"
+    },
+    {
+      "id": "e3",
+      "source": "n3",
+      "target": "n4"
+    }
+  ],
+  "variables": {}
+}

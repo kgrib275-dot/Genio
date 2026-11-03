@@ -1,0 +1,18 @@
+{
+  "key": "prompts_summary",
+  "type": "prompt_pack",
+  "name": "요약 프롬프트 팩",
+  "summary": "긴 글·문서·대화를 목적에 맞게 요약하는 프롬프트 모음.",
+  "version": "1.0.0",
+  "publisher": "platform",
+  "price": 0,
+  "category": "프롬프트",
+  "tags": [
+    "요약",
+    "정리",
+    "문서",
+    "보고",
+    "프롬프트"
+  ],
+  "permissions": []
+}

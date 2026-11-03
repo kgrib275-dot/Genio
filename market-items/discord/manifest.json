@@ -1,0 +1,65 @@
+{
+  "key": "discord",
+  "type": "connector",
+  "name": "Discord",
+  "summary": "디스코드 채널에 웹훅으로 메시지를 보내요.",
+  "version": "1.0.0",
+  "publisher": "platform",
+  "price": 0,
+  "category": "메신저",
+  "tags": [
+    "discord",
+    "디스코드",
+    "메신저",
+    "커뮤니티",
+    "알림"
+  ],
+  "requires": {
+    "credentials": [
+      {
+        "key": "webhook_url",
+        "label": "웹후크 주소(https://discord.com/api/webhooks/...)",
+        "secret": true,
+        "required": true
+      }
+    ]
+  },
+  "actions": [
+    {
+      "key": "send_message",
+      "label": "메시지 보내기",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "content": {
+            "type": "string",
+            "title": "보낼 내용(2,000자까지)"
+          },
+          "username": {
+            "type": "string",
+            "title": "보내는 이름(선택)"
+          }
+        },
+        "required": [
+          "content"
+        ]
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "sent": {
+            "type": "boolean"
+          },
+          "message_id": {
+            "type": "string"
+          }
+        },
+        "required": []
+      }
+    }
+  ],
+  "permissions": [
+    "network:discord.com",
+    "network:discordapp.com"
+  ]
+}

@@ -1,0 +1,18 @@
+{
+  "key": "prompts_tone",
+  "type": "prompt_pack",
+  "name": "고객 응대 말투 프롬프트 팩",
+  "summary": "같은 답을 친절·간결·격식·사과 등 상황에 맞는 말투로 바꾸는 프롬프트 모음.",
+  "version": "1.0.0",
+  "publisher": "platform",
+  "price": 0,
+  "category": "프롬프트",
+  "tags": [
+    "고객지원",
+    "말투",
+    "톤",
+    "CS",
+    "프롬프트"
+  ],
+  "permissions": []
+}

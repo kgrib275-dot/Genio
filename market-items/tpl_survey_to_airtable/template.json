@@ -1,0 +1,119 @@
+{
+  "version": 1,
+  "nodes": [
+    {
+      "id": "n1",
+      "type": "input",
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "data": {
+        "label": "설문 응답",
+        "fields": [
+          {
+            "key": "name",
+            "label": "응답자",
+            "type": "text",
+            "required": false
+          },
+          {
+            "key": "message",
+            "label": "의견",
+            "type": "text",
+            "required": true
+          }
+        ]
+      }
+    },
+    {
+      "id": "n2",
+      "type": "llm",
+      "position": {
+        "x": 300,
+        "y": 0
+      },
+      "data": {
+        "label": "감정·주제 뽑기",
+        "provider": "default",
+        "temperature": 0.3,
+        "system": "고객 의견의 감정과 주제를 뽑으세요.",
+        "prompt": "{{n1.message}}",
+        "output_schema": {
+          "type": "object",
+          "properties": {
+            "sentiment": {
+              "type": "string",
+              "enum": [
+                "좋음",
+                "보통",
+                "나쁨"
+              ]
+            },
+            "topic": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "sentiment",
+            "topic"
+          ]
+        }
+      }
+    },
+    {
+      "id": "n3",
+      "type": "connector",
+      "position": {
+        "x": 600,
+        "y": 0
+      },
+      "data": {
+        "label": "표에 추가",
+        "connector": "airtable",
+        "credential_id": "{{credential:airtable}}",
+        "action": "create_record",
+        "params": {
+          "base_id": "",
+          "table": "설문",
+          "fields": {
+            "응답자": "{{n1.name}}",
+            "의견": "{{n1.message}}",
+            "감정": "{{n2.sentiment}}",
+            "주제": "{{n2.topic}}"
+          }
+        }
+      }
+    },
+    {
+      "id": "n4",
+      "type": "output",
+      "position": {
+        "x": 900,
+        "y": 0
+      },
+      "data": {
+        "label": "결과",
+        "template": "의견을 저장했어요({{n2.sentiment}} · {{n2.topic}})."
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "e1",
+      "source": "n1",
+      "target": "n2"
+    },
+    {
+      "id": "e2",
+      "source": "n2",
+      "target": "n3"
+    },
+    {
+      "id": "e3",
+      "source": "n3",
+      "target": "n4"
+    }
+  ],
+  "variables": {}
+}

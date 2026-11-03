@@ -1,0 +1,28 @@
+{
+  "prompts": [
+    {
+      "key": "product_intro",
+      "title": "상품 소개",
+      "system": "상품 정보를 받아 고객 이점 중심의 소개 문단을 쓰세요. 과장·허위 표현 금지.",
+      "prompt": "{{n1.message}}"
+    },
+    {
+      "key": "ad_copy",
+      "title": "광고 문구 5개",
+      "system": "짧은 광고 문구 5개를 서로 다른 느낌(감성·정보·유머·긴급·신뢰)으로 쓰세요.",
+      "prompt": "{{n1.message}}"
+    },
+    {
+      "key": "sns_post",
+      "title": "SNS 글",
+      "system": "인스타그램 게시글을 쓰세요. 첫 줄은 눈길을 끄는 문장, 해시태그 5개 이내.",
+      "prompt": "{{n1.message}}"
+    },
+    {
+      "key": "press_release",
+      "title": "보도자료 초안",
+      "system": "보도자료 형식(제목-부제-리드-본문-회사 소개)으로 초안을 쓰세요. 사실만 쓰세요.",
+      "prompt": "{{n1.message}}"
+    }
+  ]
+}

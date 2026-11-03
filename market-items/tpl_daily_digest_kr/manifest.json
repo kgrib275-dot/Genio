@@ -1,0 +1,25 @@
+{
+  "key": "tpl_daily_digest_kr",
+  "type": "template",
+  "name": "오늘의 업무 요약을 사내 메신저로",
+  "summary": "오늘 있었던 일을 붙여 넣으면 세 줄로 요약해 두레이와 카카오워크에 동시에 보내요(병렬 갈래, 예약 실행에 알맞음).",
+  "version": "1.0.0",
+  "publisher": "platform",
+  "price": 0,
+  "category": "사내 공지",
+  "app_type": "workflow",
+  "tags": [
+    "병렬",
+    "두레이",
+    "카카오워크",
+    "일일 보고",
+    "요약"
+  ],
+  "requires": {
+    "items": [
+      "dooray",
+      "kakaowork"
+    ]
+  },
+  "permissions": []
+}

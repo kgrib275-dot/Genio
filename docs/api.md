@@ -515,3 +515,18 @@ Project = {id, workspace_id, name, description, color: indigo|sky|emerald|amber|
 - `/llm/catalog`에 preset 모델이 더해진다(단가를 모르는 모델은 0 → 비용 미집계).
 - AI 단계(`llm`) `images`: 문자열 목록(최대 4). 값은 올린 파일 id(입력 단계 `type: "file"` 항목, `{{n1.photo}}`) 또는 공개 http(s) 이미지 주소. 엔진이 읽어 형식(PNG·JPG·GIF·WEBP, 앞 바이트로 판별)·크기(장당 5MB)를 검사하고 공급자 형식(OpenAI `image_url` data URL, Anthropic `image` base64, Gemini `inline_data`)으로 보낸다. 주소는 서버가 받으며 사설망·localhost 차단 규칙이 그대로 적용된다.
 - 챗 첨부: 파일 올리기를 켠 챗 앱에서 사진을 첨부하면 입력 단계의 파일 항목으로 들어가고, AI 단계 `images`로 넘기면 AI가 사진을 본다(화면은 첨부 전 미리 보기를 보여 줌).
+
+## v0.6 마켓 확대
+
+기본 마켓 아이템이 21개에서 52개로 늘었다(커넥터 21 · 템플릿 21 · 프롬프트 팩 9 · 단계 1). API 형식은 그대로다. `GET /market/items`의 `category`·`q`·`type`으로 거른다.
+
+| 종류 | 새 아이템 |
+|---|---|
+| 커넥터(13) | `notion`(페이지 만들기·DB 조회), `jira`(이슈 만들기·JQL 찾기), `teams`(워크플로 웹후크 카드), `discord`(웹훅), `telegram`(봇 메시지), `github`(이슈 만들기·목록), `trello`(카드), `asana`(할 일), `airtable`(줄 추가·읽기), `hubspot`(연락처), `linear`(이슈·팀 목록), `dooray`(수신 웹훅), `kakaowork`(사람·대화방 메시지) |
+| 템플릿(11) | 병렬 갈래 5개: `tpl_parallel_translate_summary`, `tpl_parallel_order_check`, `tpl_parallel_broadcast`, `tpl_lead_capture`, `tpl_daily_digest_kr`. 그 밖: `tpl_bug_to_github`, `tpl_request_to_jira`, `tpl_meeting_to_notion`, `tpl_survey_to_airtable`, `tpl_feedback_to_linear`, `tpl_chat_to_task` |
+| 프롬프트 팩(7) | `prompts_writing`, `prompts_meeting`, `prompts_tone`, `prompts_translate`, `prompts_summary`, `prompts_hr`, `prompts_marketing` |
+
+- 모든 커넥터는 `net.http`(safe_http: 사설 IP 차단, 타임아웃·응답 크기 제한)로만 호출하고, manifest `permissions`에 선언한 도메인만 접속한다.
+- 비밀값은 헤더로만 보낸다. Trello는 OAuth 헤더를 쓰고, 텔레그램만 주소에 토큰이 들어간다. 오류 문장에는 주소를 넣지 않고, 런타임이 비밀값을 지운다.
+- Google Calendar는 OAuth가 필요해 넣지 않았다. LINE Notify는 서비스가 종료돼 넣지 않았다.
+- 화면: 마켓 종류 칩에 개수를 보이고, 분류 칩(개수 포함, 누르면 거르기)과 정렬(많이 설치한 순·이름순·새로 나온 순)을 넣었다.

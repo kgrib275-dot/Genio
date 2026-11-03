@@ -1,0 +1,36 @@
+{
+  "key": "tpl_parallel_broadcast",
+  "type": "template",
+  "name": "공지를 여러 메신저에 동시에",
+  "summary": "공지 한 번 입력으로 슬랙·Teams·디스코드에 동시에 올려요(병렬 갈래, 보내기 전 승인).",
+  "version": "1.0.0",
+  "publisher": "platform",
+  "price": 0,
+  "category": "사내 공지",
+  "app_type": "workflow",
+  "tags": [
+    "병렬",
+    "공지",
+    "슬랙",
+    "teams",
+    "디스코드",
+    "알림"
+  ],
+  "requires": {
+    "items": [
+      "slack",
+      "teams",
+      "discord"
+    ]
+  },
+  "blanks": [
+    {
+      "key": "channel",
+      "label": "슬랙 채널",
+      "node_id": "n3",
+      "field": "params.channel",
+      "example": "#general"
+    }
+  ],
+  "permissions": []
+}

@@ -1,0 +1,33 @@
+{
+  "key": "tpl_survey_to_airtable",
+  "type": "template",
+  "name": "설문 응답 분석해 Airtable에 쌓기",
+  "summary": "고객 설문 응답의 감정(좋음·보통·나쁨)과 주제를 AI로 뽑아 Airtable 표에 한 줄씩 쌓아요.",
+  "version": "1.0.0",
+  "publisher": "platform",
+  "price": 0,
+  "category": "데이터",
+  "app_type": "workflow",
+  "tags": [
+    "airtable",
+    "설문",
+    "감정 분석",
+    "고객 의견",
+    "데이터"
+  ],
+  "requires": {
+    "items": [
+      "airtable"
+    ]
+  },
+  "blanks": [
+    {
+      "key": "base",
+      "label": "Airtable 베이스 id",
+      "node_id": "n3",
+      "field": "params.base_id",
+      "example": "appAbCdEfGhIjKlMn"
+    }
+  ],
+  "permissions": []
+}

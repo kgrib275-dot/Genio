@@ -1,0 +1,79 @@
+{
+  "key": "trello",
+  "type": "connector",
+  "name": "Trello",
+  "summary": "트렐로 보드의 목록에 카드를 만들어요.",
+  "version": "1.0.0",
+  "publisher": "platform",
+  "price": 0,
+  "category": "개발·업무관리",
+  "tags": [
+    "trello",
+    "트렐로",
+    "칸반",
+    "카드",
+    "업무관리"
+  ],
+  "requires": {
+    "credentials": [
+      {
+        "key": "api_key",
+        "label": "API 키",
+        "secret": true,
+        "required": true
+      },
+      {
+        "key": "token",
+        "label": "토큰",
+        "secret": true,
+        "required": true
+      }
+    ]
+  },
+  "actions": [
+    {
+      "key": "create_card",
+      "label": "카드 만들기",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "list_id": {
+            "type": "string",
+            "title": "목록 id(24자리)"
+          },
+          "name": {
+            "type": "string",
+            "title": "카드 제목"
+          },
+          "desc": {
+            "type": "string",
+            "title": "설명"
+          },
+          "due": {
+            "type": "string",
+            "title": "마감일(예: 2026-12-31, 선택)"
+          }
+        },
+        "required": [
+          "list_id",
+          "name"
+        ]
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          }
+        },
+        "required": []
+      }
+    }
+  ],
+  "permissions": [
+    "network:api.trello.com"
+  ]
+}

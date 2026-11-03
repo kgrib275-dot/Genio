@@ -1,0 +1,121 @@
+{
+  "version": 1,
+  "nodes": [
+    {
+      "id": "n1",
+      "type": "input",
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "data": {
+        "label": "오늘 있었던 일",
+        "fields": [
+          {
+            "key": "message",
+            "label": "내용",
+            "type": "text",
+            "required": true
+          },
+          {
+            "key": "email",
+            "label": "카카오워크로 받을 사람 이메일",
+            "type": "text",
+            "required": true
+          }
+        ]
+      }
+    },
+    {
+      "id": "n2",
+      "type": "llm",
+      "position": {
+        "x": 300,
+        "y": 0
+      },
+      "data": {
+        "label": "세 줄 요약",
+        "provider": "default",
+        "temperature": 0.3,
+        "system": "업무 내용을 팀원이 아침에 읽을 세 줄 요약으로 쓰세요.",
+        "prompt": "{{n1.message}}"
+      }
+    },
+    {
+      "id": "n3",
+      "type": "connector",
+      "position": {
+        "x": 600,
+        "y": -100
+      },
+      "data": {
+        "label": "두레이로 보내기",
+        "connector": "dooray",
+        "credential_id": "{{credential:dooray}}",
+        "action": "send_message",
+        "params": {
+          "text": "{{n2.text}}",
+          "bot_name": "업무 요약"
+        }
+      }
+    },
+    {
+      "id": "n4",
+      "type": "connector",
+      "position": {
+        "x": 600,
+        "y": 100
+      },
+      "data": {
+        "label": "카카오워크로 보내기",
+        "connector": "kakaowork",
+        "credential_id": "{{credential:kakaowork}}",
+        "action": "send_to_user",
+        "params": {
+          "email": "{{n1.email}}",
+          "text": "{{n2.text}}"
+        }
+      }
+    },
+    {
+      "id": "n5",
+      "type": "output",
+      "position": {
+        "x": 900,
+        "y": 0
+      },
+      "data": {
+        "label": "결과",
+        "template": "요약을 보냈어요.\n{{n2.text}}"
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "e1",
+      "source": "n1",
+      "target": "n2"
+    },
+    {
+      "id": "e2",
+      "source": "n2",
+      "target": "n3"
+    },
+    {
+      "id": "e3",
+      "source": "n2",
+      "target": "n4"
+    },
+    {
+      "id": "e4",
+      "source": "n3",
+      "target": "n5"
+    },
+    {
+      "id": "e5",
+      "source": "n4",
+      "target": "n5"
+    }
+  ],
+  "variables": {}
+}

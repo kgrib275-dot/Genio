@@ -1,0 +1,149 @@
+{
+  "version": 1,
+  "nodes": [
+    {
+      "id": "n1",
+      "type": "input",
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "data": {
+        "label": "주문",
+        "fields": [
+          {
+            "key": "order_id",
+            "label": "주문 번호",
+            "type": "text",
+            "required": true
+          },
+          {
+            "key": "sku",
+            "label": "상품 코드",
+            "type": "text",
+            "required": true
+          }
+        ]
+      }
+    },
+    {
+      "id": "n2",
+      "type": "http",
+      "position": {
+        "x": 300,
+        "y": -120
+      },
+      "data": {
+        "label": "재고 확인",
+        "method": "GET",
+        "url": "https://inventory.example.com/api/stock?sku={{n1.sku}}",
+        "headers": {},
+        "_on_error": "default",
+        "_default": {
+          "status": 0,
+          "body": {
+            "available": 0
+          }
+        }
+      }
+    },
+    {
+      "id": "n3",
+      "type": "http",
+      "position": {
+        "x": 300,
+        "y": 120
+      },
+      "data": {
+        "label": "결제 확인",
+        "method": "GET",
+        "url": "https://payments.example.com/api/orders/{{n1.order_id}}",
+        "headers": {},
+        "_on_error": "default",
+        "_default": {
+          "status": 0,
+          "body": {
+            "paid": false
+          }
+        }
+      }
+    },
+    {
+      "id": "n4",
+      "type": "condition",
+      "position": {
+        "x": 600,
+        "y": 0
+      },
+      "data": {
+        "label": "출고 가능?",
+        "cases": [
+          {
+            "id": "ok",
+            "when": "{{n2.status}} == 200 and {{n3.status}} == 200"
+          }
+        ],
+        "else": "hold"
+      }
+    },
+    {
+      "id": "n5",
+      "type": "output",
+      "position": {
+        "x": 900,
+        "y": -80
+      },
+      "data": {
+        "label": "출고 승인",
+        "template": "주문 {{n1.order_id}}: 재고·결제 확인 완료, 출고해요."
+      }
+    },
+    {
+      "id": "n6",
+      "type": "output",
+      "position": {
+        "x": 900,
+        "y": 80
+      },
+      "data": {
+        "label": "보류",
+        "template": "주문 {{n1.order_id}}: 재고 또는 결제 확인이 안 돼 보류해요. 담당자 확인이 필요해요."
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "e1",
+      "source": "n1",
+      "target": "n2"
+    },
+    {
+      "id": "e2",
+      "source": "n1",
+      "target": "n3"
+    },
+    {
+      "id": "e3",
+      "source": "n2",
+      "target": "n4"
+    },
+    {
+      "id": "e4",
+      "source": "n3",
+      "target": "n4"
+    },
+    {
+      "id": "e5",
+      "source": "n4",
+      "target": "n5",
+      "sourceHandle": "ok"
+    },
+    {
+      "id": "e6",
+      "source": "n4",
+      "target": "n6",
+      "sourceHandle": "hold"
+    }
+  ],
+  "variables": {}
+}

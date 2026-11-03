@@ -455,6 +455,8 @@ export interface MarketItem {
   tags: string[];
   installs: number;
   installed: boolean | null;
+  /** 마켓 분류(manifest.category, 없으면 종류) */
+  category?: string;
 }
 
 export interface MarketItemDetail extends MarketItem {

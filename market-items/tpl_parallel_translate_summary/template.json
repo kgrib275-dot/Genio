@@ -1,0 +1,106 @@
+{
+  "version": 1,
+  "nodes": [
+    {
+      "id": "n1",
+      "type": "input",
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "data": {
+        "label": "받은 문의",
+        "fields": [
+          {
+            "key": "message",
+            "label": "문의 내용(어느 언어든)",
+            "type": "text",
+            "required": true
+          }
+        ]
+      }
+    },
+    {
+      "id": "n2",
+      "type": "llm",
+      "position": {
+        "x": 300,
+        "y": -120
+      },
+      "data": {
+        "label": "한국어로 번역",
+        "provider": "default",
+        "temperature": 0.3,
+        "system": "글을 자연스러운 한국어로 번역하세요. 번역문만 출력하세요.",
+        "prompt": "{{n1.message}}"
+      }
+    },
+    {
+      "id": "n3",
+      "type": "llm",
+      "position": {
+        "x": 300,
+        "y": 120
+      },
+      "data": {
+        "label": "세 줄 요약",
+        "provider": "default",
+        "temperature": 0.3,
+        "system": "고객 문의를 한국어 세 줄로 요약하고, 마지막 줄에 고객이 원하는 것을 쓰세요.",
+        "prompt": "{{n1.message}}"
+      }
+    },
+    {
+      "id": "n4",
+      "type": "template",
+      "position": {
+        "x": 600,
+        "y": 0
+      },
+      "data": {
+        "label": "합치기",
+        "template": "■ 요약\n{{n3.text}}\n\n■ 번역 전문\n{{n2.text}}"
+      }
+    },
+    {
+      "id": "n5",
+      "type": "output",
+      "position": {
+        "x": 900,
+        "y": 0
+      },
+      "data": {
+        "label": "결과",
+        "template": "{{n4.output}}"
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "e1",
+      "source": "n1",
+      "target": "n2"
+    },
+    {
+      "id": "e2",
+      "source": "n1",
+      "target": "n3"
+    },
+    {
+      "id": "e3",
+      "source": "n2",
+      "target": "n4"
+    },
+    {
+      "id": "e4",
+      "source": "n3",
+      "target": "n4"
+    },
+    {
+      "id": "e5",
+      "source": "n4",
+      "target": "n5"
+    }
+  ],
+  "variables": {}
+}

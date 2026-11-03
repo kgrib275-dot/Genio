@@ -1,0 +1,35 @@
+{
+  "key": "tpl_parallel_order_check",
+  "type": "template",
+  "name": "주문 확인: 재고와 결제를 동시에",
+  "summary": "주문이 들어오면 재고 시스템과 결제 시스템을 동시에 조회하고, 둘 다 괜찮을 때만 출고를 승인해요(병렬 갈래).",
+  "version": "1.0.0",
+  "publisher": "platform",
+  "price": 0,
+  "category": "주문·물류",
+  "app_type": "workflow",
+  "tags": [
+    "병렬",
+    "주문",
+    "재고",
+    "결제",
+    "물류"
+  ],
+  "blanks": [
+    {
+      "key": "stock_url",
+      "label": "재고 조회 주소",
+      "node_id": "n2",
+      "field": "url",
+      "example": "https://inventory.example.com/api/stock?sku={{n1.sku}}"
+    },
+    {
+      "key": "pay_url",
+      "label": "결제 조회 주소",
+      "node_id": "n3",
+      "field": "url",
+      "example": "https://payments.example.com/api/orders/{{n1.order_id}}"
+    }
+  ],
+  "permissions": []
+}

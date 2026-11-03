@@ -1,0 +1,99 @@
+{
+  "key": "kakaowork",
+  "type": "connector",
+  "name": "카카오워크",
+  "summary": "카카오워크 봇으로 사람(이메일)이나 대화방에 메시지를 보내요.",
+  "version": "1.0.0",
+  "publisher": "platform",
+  "price": 0,
+  "category": "메신저",
+  "tags": [
+    "kakaowork",
+    "카카오워크",
+    "카카오",
+    "봇",
+    "메신저",
+    "알림"
+  ],
+  "requires": {
+    "credentials": [
+      {
+        "key": "app_key",
+        "label": "봇 앱 키(Bot App Key)",
+        "secret": true,
+        "required": true
+      }
+    ]
+  },
+  "actions": [
+    {
+      "key": "send_to_user",
+      "label": "사람에게 보내기",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string",
+            "title": "받는 사람 이메일"
+          },
+          "text": {
+            "type": "string",
+            "title": "보낼 내용"
+          }
+        },
+        "required": [
+          "email",
+          "text"
+        ]
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "sent": {
+            "type": "boolean"
+          },
+          "conversation_id": {
+            "type": "string"
+          }
+        },
+        "required": []
+      }
+    },
+    {
+      "key": "send_to_conversation",
+      "label": "대화방에 보내기",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "conversation_id": {
+            "type": "string",
+            "title": "대화방 id"
+          },
+          "text": {
+            "type": "string",
+            "title": "보낼 내용"
+          }
+        },
+        "required": [
+          "conversation_id",
+          "text"
+        ]
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "sent": {
+            "type": "boolean"
+          },
+          "conversation_id": {
+            "type": "string"
+          }
+        },
+        "required": []
+      }
+    }
+  ],
+  "permissions": [
+    "network:api.kakaowork.com"
+  ]
+}

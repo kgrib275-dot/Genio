@@ -1,6 +1,6 @@
 import { HelpButton } from "@/help/HelpButton";
 import { LayoutTemplate, MessageSquareText, Plug, Puzzle, type LucideIcon } from "lucide-react";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { PageContainer } from "@/app/Layout";
 import { ErrorBox, Loading } from "@/components/ErrorBox";
@@ -15,6 +15,7 @@ import { useInstallations, useMarketItems, useUninstall } from "@/lib/api/resour
 import { useInstallationsV5, useUpdateInstallation } from "@/lib/api/v5b";
 import type { MarketType } from "@/lib/api/types";
 import { cn, formatDate } from "@/lib/cn";
+import { SORTS, sortItems, type SortKey } from "@/lib/marketSort";
 import { optionsFrom, useListControls } from "@/lib/useListControls";
 
 const FALLBACK_ICON = { Icon: Puzzle, tile: "bg-slate-100 text-slate-600" };
@@ -116,13 +117,55 @@ function Installed({ ws }: { ws: string }) {
   );
 }
 
+/** 분류 칩: 분류마다 개수를 보여 주고 누르면 그 분류만 본다(다시 누르면 해제). */
+function CategoryChips({
+  items,
+  value,
+  onChange,
+}: {
+  items?: { category?: string }[];
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  const counts = new Map<string, number>();
+  for (const it of items ?? []) {
+    if (it.category) counts.set(it.category, (counts.get(it.category) ?? 0) + 1);
+  }
+  if (counts.size < 2) return null;
+  const cats = [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], "ko"));
+  return (
+    <div className="-mx-1 mb-3 flex gap-1.5 overflow-x-auto px-1 pb-1" aria-label="분류">
+      {cats.map(([cat, n]) => (
+        <button
+          key={cat}
+          type="button"
+          aria-pressed={value === cat}
+          onClick={() => onChange(value === cat ? "" : cat)}
+          className={cn(
+            "shrink-0 rounded-lg border px-2.5 py-1 text-xs font-medium transition-colors",
+            value === cat
+              ? "border-indigo-300 bg-indigo-50 text-indigo-700"
+              : "border-slate-200 bg-white text-slate-600 hover:border-slate-300",
+          )}
+        >
+          {cat} <span className="text-slate-400">{n}</span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
 export default function MarketPage() {
   const ws = useSession((s) => s.workspaceId);
   const [params, setParams] = useSearchParams();
   const type = params.get("type") ?? "";
   const [tab, setTab] = useState<"all" | "installed">("all");
   const items = useMarketItems(ws, { type: type || undefined });
-  const c = useListControls(items.data, {
+  // 종류별 개수는 전체 목록에서 센다(종류 칩에 표시)
+  const all = useMarketItems(ws, {});
+  const [sort, setSort] = useState<SortKey>("popular");
+  const sorted = useMemo(() => sortItems(items.data, sort), [items.data, sort]);
+  const c = useListControls(sorted, {
     key: "market-items",
     defaultSize: 20,
     search: (it) => `${it.name} ${it.summary} ${it.publisher} ${it.tags.join(" ")}`,
@@ -130,8 +173,8 @@ export default function MarketPage() {
       {
         id: "category",
         label: "분류",
-        options: optionsFrom(items.data, (it) => (it as { category?: string }).category),
-        match: (it, v) => (it as { category?: string }).category === v,
+        options: optionsFrom(items.data, (it) => it.category),
+        match: (it, v) => it.category === v,
       },
       {
         id: "installed",
@@ -175,10 +218,11 @@ export default function MarketPage() {
         <>
           <div className="mb-5 flex flex-wrap items-center gap-2">
             {[
-              { key: "", label: "전체" },
+              { key: "", label: "전체", count: all.data?.length },
               ...(Object.keys(ko.marketTypes) as MarketType[]).map((t) => ({
                 key: t,
                 label: ko.marketTypes[t],
+                count: all.data?.filter((it) => it.type === t).length,
               })),
             ].map((c) => (
               <button
@@ -198,11 +242,43 @@ export default function MarketPage() {
                 )}
               >
                 {c.label}
+                {c.count !== undefined && (
+                  <span
+                    className={cn(
+                      "ml-1 text-xs",
+                      type === c.key ? "text-white/70" : "text-slate-400",
+                    )}
+                  >
+                    {c.count}
+                  </span>
+                )}
               </button>
             ))}
           </div>
+          <CategoryChips
+            items={items.data}
+            value={c.filterValues.category ?? ""}
+            onChange={(v) => c.setFilter("category", v)}
+          />
           {(items.data ?? []).length > 0 && (
-            <ListToolbar c={c} placeholder="이름·설명·태그로 찾기" className="mb-4" />
+            <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-start">
+              <ListToolbar c={c} placeholder="이름·설명·태그로 찾기" className="flex-1" />
+              <label className="flex shrink-0 items-center gap-2 text-xs text-slate-500">
+                정렬
+                <select
+                  aria-label="정렬"
+                  value={sort}
+                  onChange={(e) => setSort(e.target.value as SortKey)}
+                  className="h-9 rounded-lg border border-slate-200 bg-white px-2 text-sm text-slate-700"
+                >
+                  {SORTS.map((o) => (
+                    <option key={o.value} value={o.value}>
+                      {o.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
           )}
           {items.isLoading && <Loading />}
           <ErrorBox error={items.error} />
