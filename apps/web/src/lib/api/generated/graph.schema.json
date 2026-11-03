@@ -69,10 +69,66 @@
           "additionalProperties": true,
           "title": "Data",
           "type": "object"
+        },
+        "disabled": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Disabled"
         }
       },
       "required": ["id", "type"],
       "title": "GraphNode",
+      "type": "object"
+    },
+    "GraphNote": {
+      "additionalProperties": false,
+      "description": "캔버스 메모(실행과 무관). n8n의 스티커 메모.",
+      "properties": {
+        "id": {
+          "maxLength": 64,
+          "minLength": 1,
+          "title": "Id",
+          "type": "string"
+        },
+        "text": {
+          "default": "",
+          "maxLength": 5000,
+          "title": "Text",
+          "type": "string"
+        },
+        "position": {
+          "$ref": "#/$defs/Position"
+        },
+        "width": {
+          "default": 220,
+          "maximum": 1200,
+          "minimum": 80,
+          "title": "Width",
+          "type": "number"
+        },
+        "height": {
+          "default": 140,
+          "maximum": 1200,
+          "minimum": 60,
+          "title": "Height",
+          "type": "number"
+        },
+        "color": {
+          "default": "yellow",
+          "enum": ["yellow", "blue", "green", "pink", "gray"],
+          "title": "Color",
+          "type": "string"
+        }
+      },
+      "required": ["id"],
+      "title": "GraphNote",
       "type": "object"
     },
     "Position": {
@@ -117,6 +173,21 @@
       "additionalProperties": true,
       "title": "Variables",
       "type": "object"
+    },
+    "notes": {
+      "anyOf": [
+        {
+          "items": {
+            "$ref": "#/$defs/GraphNote"
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Notes"
     }
   },
   "title": "Graph",

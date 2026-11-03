@@ -144,6 +144,8 @@ class Deployment(Base):
     access: Mapped[str] = mapped_column(String(20), default="workspace")
     allowed_roles: Mapped[list[str]] = mapped_column(TextArray, default=list)
     created_at: Mapped[datetime] = _created()
+    # v0.4: 위젯 모양(색·위치·인사말 등)
+    appearance: Mapped[dict[str, Any]] = mapped_column(JsonType, default=dict, server_default="{}")
 
 
 class Run(Base):
@@ -492,3 +494,68 @@ class ProjectMember(Base):
         ForeignKey("projects.id", ondelete="CASCADE"), index=True
     )
     user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+
+
+# ---------- v0.4 자동 실행(웹훅·예약)과 데이터 표 ----------
+class AppTrigger(Base):
+    """앱을 자동으로 실행하는 방법. kind=webhook(외부 호출) | schedule(예약)."""
+
+    __tablename__ = "app_triggers"
+    id: Mapped[str] = _id()
+    app_id: Mapped[str] = mapped_column(ForeignKey("apps.id", ondelete="CASCADE"), index=True)
+    kind: Mapped[str] = mapped_column(String(20))
+    name: Mapped[str] = mapped_column(String(100), default="", server_default="")
+    enabled: Mapped[bool] = mapped_column(default=True, server_default="true")
+    # webhook 주소에 쓰는 비밀 토큰(예약은 없음)
+    token: Mapped[str | None] = mapped_column(String(64), unique=True, nullable=True)
+    # webhook: {mode: async|sync, version?}; schedule: {cron, timezone, input, version?}
+    config: Mapped[dict[str, Any]] = mapped_column(JsonType, default=dict, server_default="{}")
+    next_run_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, index=True
+    )
+    last_run_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_run_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    last_status: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    created_by: Mapped[str | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    created_at: Mapped[datetime] = _created()
+
+
+class DataTable(Base):
+    """워크스페이스 안의 작은 표(흐름이 값을 저장·조회). n8n Data Tables·Make Data store와 같은 역할."""
+
+    __tablename__ = "data_tables"
+    __table_args__ = (UniqueConstraint("workspace_id", "name"),)
+    id: Mapped[str] = _id()
+    workspace_id: Mapped[str] = mapped_column(
+        ForeignKey("workspaces.id", ondelete="CASCADE"), index=True
+    )
+    project_id: Mapped[str | None] = mapped_column(
+        ForeignKey("projects.id", ondelete="SET NULL", name="data_tables_project_id_fkey"),
+        nullable=True,
+        index=True,
+    )
+    name: Mapped[str] = mapped_column(String(100))
+    description: Mapped[str] = mapped_column(Text, default="", server_default="")
+    # [{key, label, type: text|number|boolean|date|json}]
+    columns: Mapped[list[dict[str, Any]]] = mapped_column(JsonType, default=list)
+    created_by: Mapped[str | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    created_at: Mapped[datetime] = _created()
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False
+    )
+
+
+class DataRow(Base):
+    __tablename__ = "data_rows"
+    __table_args__ = (UniqueConstraint("table_id", "row_key"),)
+    id: Mapped[str] = _id()
+    table_id: Mapped[str] = mapped_column(
+        ForeignKey("data_tables.id", ondelete="CASCADE"), index=True
+    )
+    # 값 찾기·덮어쓰기(upsert)에 쓰는 고유 키(없어도 됨)
+    row_key: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    data: Mapped[dict[str, Any]] = mapped_column(JsonType, default=dict)
+    created_at: Mapped[datetime] = _created()
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False
+    )

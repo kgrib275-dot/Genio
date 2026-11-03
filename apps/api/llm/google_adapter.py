@@ -63,6 +63,7 @@ class GoogleAdapter:
         prompt: str,
         temperature: float | None,
         json_schema: dict[str, Any] | None,
+        on_delta: OnText | None = None,
     ) -> LlmResult:
         sys_prompt = system + (json_instruction(json_schema) if json_schema else "")
         body: dict[str, Any] = {"contents": [{"role": "user", "parts": [{"text": prompt}]}]}
@@ -78,6 +79,8 @@ class GoogleAdapter:
         data = self._post(f"models/{model}:generateContent", body)
         parts = (data.get("candidates") or [{}])[0].get("content", {}).get("parts", [])
         text = "".join(p.get("text", "") for p in parts)
+        if on_delta is not None and text and not json_schema:
+            on_delta(text)
         usage = data.get("usageMetadata", {})
         return LlmResult(
             text=text,

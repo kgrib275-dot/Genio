@@ -40,7 +40,10 @@ class NodeServices(Protocol):
         prompt: str,
         temperature: float | None,
         json_schema: JsonSchema | None,
+        stream: bool = False,
     ) -> LlmResult: ...
+
+    # stream=True: 답 조각을 실행 이벤트로 흘려보낸다(공유 챗 실시간 표시)
 
     def http_request(
         self,

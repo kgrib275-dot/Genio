@@ -89,6 +89,7 @@ class AnthropicAdapter:
         prompt: str,
         temperature: float | None,
         json_schema: dict[str, Any] | None,
+        on_delta: OnText | None = None,
     ) -> LlmResult:
         del temperature  # 현재 API 버전은 temperature를 받지 않는다(ADR 0003)
         sys_prompt = system + (json_instruction(json_schema) if json_schema else "")
@@ -101,7 +102,14 @@ class AnthropicAdapter:
         if sys_prompt.strip():
             params["system"] = sys_prompt
         try:
-            resp = self.client.beta.messages.create(**params)
+            if on_delta is not None:
+                with self.client.beta.messages.stream(**params) as stream:
+                    for event in stream:
+                        if event.type == "text":
+                            on_delta(event.text)
+                    resp = stream.get_final_message()
+            else:
+                resp = self.client.beta.messages.create(**params)
         except anthropic.APIError as exc:
             raise _map_error(exc) from exc
         if resp.stop_reason == "refusal":

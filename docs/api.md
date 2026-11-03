@@ -311,3 +311,60 @@ Project = {id, workspace_id, name, description, color: indigo|sky|emerald|amber|
 - `GET /workspaces/{ws}/apps?project=<id>|none`, `GET /workspaces/{ws}/knowledge-bases?project=<id>|none` 필터.
 - `POST /workspaces/{ws}/apps`, `POST /workspaces/{ws}/knowledge-bases` 요청에 `project_id?`.
 - `PATCH /apps/{id}`, `PATCH /knowledge-bases/{id}` 요청에 `project_id` (빈 문자열 `""`이면 '프로젝트 없음'으로 옮김).
+
+---
+# v0.4 (ADR 0008) — 자동 실행·데이터 표·캔버스·챗 경험
+
+## 자동 실행(트리거)
+`Trigger = {id, app_id, kind: "webhook"|"schedule", name, enabled, config, url?, next_run_at, last_run_at, last_run_id, last_status, created_at}`
+- webhook `config = {mode: "async"|"sync", version?: number}` — `url`은 webhook만(전체 주소, 편집 권한자에게만).
+- schedule `config = {cron: "0 9 * * 1-5", timezone: "Asia/Seoul", input: {}, version?: number}` — cron 5칸, 최소 1분.
+
+| 메서드 | 경로 | 권한 | 요청 | 응답 |
+|---|---|---|---|---|
+| GET | `/apps/{id}/triggers` | owner, admin, builder, operator | | `[Trigger]` |
+| POST | `/apps/{id}/triggers` | owner, admin, builder | `{kind, name?, enabled?, config}` | 201 `Trigger` (cron이 틀리면 422 두 줄 오류) |
+| PATCH | `/triggers/{id}` | owner, admin, builder | `{name?, enabled?, config?}` | `Trigger` (next_run_at 다시 계산) |
+| POST | `/triggers/{id}/rotate-token` | owner, admin, builder | | `Trigger` (webhook만, 옛 주소는 바로 막힘) |
+| POST | `/triggers/{id}/run-now` | owner, admin, builder | | 201 `Run` (trigger=`schedule` 또는 `webhook`) |
+| DELETE | `/triggers/{id}` | owner, admin, builder | | 204 |
+| POST·GET | `/hooks/{token}` | 공개(토큰) | JSON 본문(+쿼리) = 입력 | async: 202 `{run_id, status}` · sync: 200 `{run_id, status, output}`(30초 넘으면 202) · 꺼짐/없음 404 · 저장한 버전 없음 409 |
+| POST | `/runs/{id}/rerun` | owner, admin, builder | `{input?}` | 201 `Run` (같은 앱·버전, 입력 생략 시 원래 입력, trigger=`rerun`) |
+
+- 실패하면 다른 앱 실행: 앱 기능 `features.on_failure = {app_id: string|null}`. 실패한 실행이 끝나면 그 앱을 `trigger="on_failure"`, 입력 `{failed_app_id, failed_app_name, run_id, error, input}`로 실행. `on_failure`로 시작된 실행이 실패하면 다시 부르지 않는다.
+- Run.trigger 값: test, chat, api, schedule, webhook, rerun, on_failure, preview.
+
+## 데이터 표
+`DataTable = {id, workspace_id, project_id, name, description, columns: [{key, label, type: text|number|boolean|date|json}], row_count, created_at, updated_at}`
+`DataRow = {id, table_id, row_key, data: {}, created_at, updated_at}`
+
+| 메서드 | 경로 | 권한 | 요청 | 응답 |
+|---|---|---|---|---|
+| GET | `/workspaces/{ws}/data-tables` | 모든 역할(볼 수 있는 프로젝트만) | | `[DataTable]` |
+| POST | `/workspaces/{ws}/data-tables` | owner, admin, builder | `{name, description?, columns?, project_id?}` | 201 `DataTable` (같은 이름 409) |
+| GET·PATCH·DELETE | `/data-tables/{id}` | 보기: 모든 역할 · 바꾸기: owner, admin, builder | `{name?, description?, columns?, project_id?}` | `DataTable` / 204 |
+| GET | `/data-tables/{id}/rows?limit=50&offset=0&q=` | 모든 역할 | | `{total, rows: [DataRow]}` (q는 값 전체 글 검색) |
+| POST | `/data-tables/{id}/rows` | owner, admin, builder, operator | `{row_key?, data}` | 201 `DataRow` (row_key 겹치면 409) |
+| PATCH·DELETE | `/data-rows/{id}` | owner, admin, builder, operator | `{row_key?, data?}` | `DataRow` / 204 |
+| POST | `/data-tables/{id}/import` | owner, admin, builder | multipart `file`(CSV, 첫 줄 머리글, 1MB·5000행 이하) | `{imported, columns}` |
+| GET | `/data-tables/{id}/export.csv` | 모든 역할 | | `text/csv` (UTF-8 BOM) |
+
+## 새 블록(`GET /workspaces/{ws}/nodes`에 자동 노출)
+| type | 이름 | data | 출력 |
+|---|---|---|---|
+| `wait` | 기다리기 | `{seconds: 1~300}` | `{waited_seconds}` |
+| `set_fields` | 값 정리 | `{fields: [{key, value(템플릿), type: text|number|boolean|json}], keep_input?: bool, source?: 템플릿}` | 만든 값들 |
+| `date_time` | 날짜·시간 | `{operation: now|format|add|diff, value?, format?, amount?, unit?: minutes|hours|days|weeks|months, other?, timezone?}` | `{result, iso, timestamp}` |
+| `run_app` | 다른 앱 실행 | `{app_id, input: {키: 템플릿}}` | 그 앱의 출력(`text` 등) |
+| `data_table` | 데이터 표 | `{table_id, operation: insert|upsert|get|find|list|delete|count, row_key?, data?: {키: 템플릿}, filter?: {키: 템플릿}, limit?}` | `{row, rows, count, found}` |
+
+## 그래프 형식 추가(schemas/graph.py)
+- `GraphNode.disabled?: boolean` — 끈 블록은 건너뛰고(단계 상태 `skipped`) 입력을 그대로 다음으로. 분기 블록은 첫 번째 출구로.
+- `Graph.notes?: [{id, text, position, width, height, color: yellow|blue|green|pink|gray}]` — 실행과 무관한 캔버스 메모.
+
+## 챗 경험
+- 공개 챗 SSE(`POST /public/apps/{token}/chat`)에 이벤트 추가: `delta {text, node_id}`(답 조각, 쌓아서 보여 줌), `delta_reset {}`(다른 AI 블록이 시작돼 지금까지 조각을 지움). 마지막 `answer`가 최종 글이다. 출력 검열을 켠 앱은 delta를 보내지 않는다.
+- `GET /public/apps/{token}/sessions/{session_id}/messages` — 이 세션(브라우저가 가진 무작위 id)의 메시지 `[{id, role, content, created_at, feedback, citations?}]`. 다른 앱의 세션이면 404.
+- `GET /public/apps/{token}`에 `appearance` 추가.
+- 배포 모양: `PATCH /deployments/{id}` `{appearance: {primary_color: "#4f46e5", position: "right"|"left", launcher_text, greeting, open_on_load, width, height, title}}` (owner, admin, builder). widget.js가 이 값을 쓴다.
+- 대화로 시험하기: `POST /apps/{id}/preview/chat` (owner, admin, builder) — 공개 챗과 같은 SSE 이벤트, 작업본 그래프로 실행, trigger=`preview`. 로그·모니터링 집계에서 뺀다.

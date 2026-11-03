@@ -4,7 +4,7 @@
 노드별 data 형식은 각 NodeSpec의 input_schema가 정한다.
 """
 
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -33,6 +33,21 @@ class GraphNode(BaseModel):
     type: str = Field(min_length=1, max_length=64)
     position: Position = Field(default_factory=Position)
     data: dict[str, Any] = Field(default_factory=dict)
+    # v0.4: 끈 블록은 실행하지 않고 건너뛴다(입력을 그대로 다음으로 넘김)
+    disabled: bool | None = None
+
+
+class GraphNote(BaseModel):
+    """캔버스 메모(실행과 무관). n8n의 스티커 메모."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: str = Field(min_length=1, max_length=64)
+    text: str = Field(default="", max_length=5000)
+    position: Position = Field(default_factory=Position)
+    width: float = Field(default=220, ge=80, le=1200)
+    height: float = Field(default=140, ge=60, le=1200)
+    color: Literal["yellow", "blue", "green", "pink", "gray"] = "yellow"
 
 
 class GraphEdge(BaseModel):
@@ -52,6 +67,8 @@ class Graph(BaseModel):
     nodes: list[GraphNode] = Field(default_factory=list)
     edges: list[GraphEdge] = Field(default_factory=list)
     variables: dict[str, Any] = Field(default_factory=dict)
+    # v0.4: 캔버스 메모
+    notes: list[GraphNote] | None = None
 
     def dump(self) -> dict[str, Any]:
         return self.model_dump(by_alias=True, exclude_none=True)

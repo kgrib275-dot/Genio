@@ -67,7 +67,10 @@ class ChatAdapter(Protocol):
         prompt: str,
         temperature: float | None,
         json_schema: dict[str, Any] | None,
+        on_delta: OnText | None = None,
     ) -> LlmResult: ...
+
+    # on_delta: 답이 만들어지는 대로 글 조각을 받는다(v0.4 답변 실시간 표시).
 
     def chat(
         self,

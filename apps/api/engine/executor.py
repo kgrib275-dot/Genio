@@ -10,6 +10,7 @@
 import concurrent.futures
 import logging
 import time
+from collections.abc import Callable
 from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any
@@ -49,6 +50,9 @@ class RunServices:
         self.workspace_id = workspace_id
         self.usage: list[tuple[str, int, int]] = []
         self.depth = 0
+        # v0.4: 답 조각을 받는 곳(node_id, 글 조각)과 지금 실행 중인 노드
+        self.on_delta: Callable[[str, str], None] | None = None
+        self.current_node: str = ""
 
     def llm_complete(
         self,
@@ -59,7 +63,15 @@ class RunServices:
         prompt: str,
         temperature: float | None,
         json_schema: dict[str, Any] | None,
+        stream: bool = False,
     ) -> LlmResult:
+        sink = self.on_delta
+        node_id = self.current_node
+        on_delta = (
+            (lambda t: sink(node_id, t))
+            if stream and sink is not None and json_schema is None
+            else None
+        )
         try:
             llm = resolve_llm(self.db, self.workspace_id, provider, model)
             result = llm.adapter.complete(
@@ -68,6 +80,7 @@ class RunServices:
                 prompt=prompt,
                 temperature=temperature,
                 json_schema=json_schema,
+                on_delta=on_delta,
             )
         except LlmError as exc:
             raise NodeError(f"{exc.message} {exc.hint}", retryable=exc.retryable) from None
@@ -280,6 +293,11 @@ def _execute(db: Session, run_id: str) -> None:
         return
     ensure_market_nodes(db)
     services = RunServices(db, app.workspace_id)
+    run_id_for_events = run.id
+    services.on_delta = lambda node_id, text: events.publish(
+        run_id_for_events,
+        {"run_id": run_id_for_events, "type": "delta", "node_id": node_id, "text": text},
+    )
     try:
         graph = load_graph(db, run)
     except NodeError as exc:
@@ -364,6 +382,7 @@ def _execute(db: Session, run_id: str) -> None:
         db.add(step)
         db.commit()
         _publish(run, step)
+        services.current_node = node.id
 
         def make_ctx(
             extra: dict[str, Any] | None = None, *, _node_id: str = node.id

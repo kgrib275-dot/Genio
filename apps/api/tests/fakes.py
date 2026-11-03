@@ -49,6 +49,7 @@ class FakeAdapter:
         prompt: str,
         temperature: float | None,
         json_schema: dict[str, Any] | None,
+        on_delta: OnText | None = None,
     ) -> LlmResult:
         self.calls.append({"kind": "complete", "system": system, "prompt": prompt})
         if json_schema:
@@ -80,9 +81,13 @@ class FakeAdapter:
             return LlmResult(
                 text=f"문서에 따르면: {first[:80]}", model=model, input_tokens=200, output_tokens=40
             )
-        return LlmResult(
-            text=f"요약: {prompt[:50]}", model=model, input_tokens=50, output_tokens=10
-        )
+        text = f"요약: {prompt[:50]}"
+        if on_delta is not None:
+            # 실제 공급자처럼 두 조각으로 나눠 보낸다
+            half = len(text) // 2
+            on_delta(text[:half])
+            on_delta(text[half:])
+        return LlmResult(text=text, model=model, input_tokens=50, output_tokens=10)
 
     def chat(
         self,

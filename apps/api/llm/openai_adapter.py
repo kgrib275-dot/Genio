@@ -71,6 +71,7 @@ class OpenAIAdapter:
         prompt: str,
         temperature: float | None,
         json_schema: dict[str, Any] | None,
+        on_delta: OnText | None = None,
     ) -> LlmResult:
         sys_prompt = system + (json_instruction(json_schema) if json_schema else "")
         msgs: list[dict[str, Any]] = []
@@ -82,6 +83,8 @@ class OpenAIAdapter:
             params["temperature"] = temperature
         if json_schema:
             params["response_format"] = {"type": "json_object"}
+        if on_delta is not None and not json_schema:
+            return self._complete_stream(params, on_delta)
         try:
             try:
                 resp = self.client.chat.completions.create(**params)
@@ -101,6 +104,35 @@ class OpenAIAdapter:
             input_tokens=usage.prompt_tokens if usage else 0,
             output_tokens=usage.completion_tokens if usage else 0,
         )
+
+    def _complete_stream(self, params: dict[str, Any], on_delta: OnText) -> LlmResult:
+        """답을 조각으로 받으며 on_delta로 넘긴다. 사용량은 마지막 조각에 온다."""
+        text = ""
+        model = str(params["model"])
+        in_tok = out_tok = 0
+        try:
+            try:
+                stream = self.client.chat.completions.create(
+                    **params, stream=True, stream_options={"include_usage": True}
+                )
+            except openai.BadRequestError:
+                params.pop("temperature", None)
+                stream = self.client.chat.completions.create(
+                    **params, stream=True, stream_options={"include_usage": True}
+                )
+            for chunk in stream:
+                model = chunk.model or model
+                if chunk.choices:
+                    piece = chunk.choices[0].delta.content or ""
+                    if piece:
+                        text += piece
+                        on_delta(piece)
+                if chunk.usage:
+                    in_tok = chunk.usage.prompt_tokens
+                    out_tok = chunk.usage.completion_tokens
+        except openai.OpenAIError as exc:
+            raise _map_error(exc) from exc
+        return LlmResult(text=text, model=model, input_tokens=in_tok, output_tokens=out_tok)
 
     def chat(
         self,

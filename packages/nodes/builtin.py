@@ -95,6 +95,7 @@ def _run_llm(data: dict[str, Any], ctx: NodeContext) -> NodeResult:
         "prompt": prompt,
         "temperature": float(temp) if temp is not None else None,
         "json_schema": schema,
+        "stream": schema is None,
     }
     result = ctx.services.llm_complete(**kwargs)
     usage: dict[str, Any] = {
