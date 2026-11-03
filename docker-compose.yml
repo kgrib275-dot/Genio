@@ -97,15 +97,19 @@ services:
     image: tailscale/tailscale:v1.80.3
     hostname: genio
     environment:
-      TS_HOSTNAME: genio
-      TS_STATE_DIR: /var/lib/tailscale
-      TS_SERVE_CONFIG: /config/serve.json
-      TS_USERSPACE: "true"
       TS_AUTHKEY: ${TS_AUTHKEY:-}
-      TS_AUTH_ONCE: "true"
+    # 기본 시작 스크립트는 로그인을 60초만 기다리고 재시작해 승인 링크가 계속 바뀐다.
+    # 그래서 직접 띄우고, 승인될 때까지 기다린 뒤 HTTPS(443) → web:5190으로 넘긴다.
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        tailscaled --tun=userspace-networking --statedir=/var/lib/tailscale &
+        sleep 2
+        tailscale up --hostname=genio ${TS_AUTHKEY:+--auth-key=$$TS_AUTHKEY} --timeout=0
+        tailscale serve --bg --https=443 http://web:5190
+        wait
     volumes:
       - tsstate:/var/lib/tailscale
-      - ./deploy/tailscale:/config:ro
     depends_on:
       - web
     restart: unless-stopped

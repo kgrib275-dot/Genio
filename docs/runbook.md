@@ -40,7 +40,7 @@ api 컨테이너가 시작할 때 `alembic upgrade head`를 먼저 실행한다.
 
 ## 공유 (Tailscale)
 - **genio 주소**: compose의 `tailscale` 서비스가 tailnet에 `genio` 기기로 올라가 https://genio.tail6bd481.ts.net 을 연다.
-  처음 한 번 `docker compose logs tailscale`에 나오는 로그인 링크로 승인한다(또는 `.env`에 `TS_AUTHKEY`).
+  처음 한 번 `docker compose logs tailscale`에 나오는 로그인 링크로 승인한다(또는 `.env`에 `TS_AUTHKEY`). 링크는 승인할 때까지 바뀌지 않는다.
 ```bash
 tailscale serve --bg --https=9443 http://127.0.0.1:5190   # 켜기(tailnet 전용)
 tailscale serve status                                       # 확인
