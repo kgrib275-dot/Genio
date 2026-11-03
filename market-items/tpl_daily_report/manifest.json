@@ -1,0 +1,18 @@
+{
+  "key": "tpl_daily_report",
+  "type": "template",
+  "name": "일일 보고 생성",
+  "summary": "오늘 한 일 메모를 받아 보고서 형식으로 정리해요.",
+  "version": "1.0.0",
+  "publisher": "platform",
+  "price": 0,
+  "tags": [
+    "보고",
+    "일일보고",
+    "주간보고"
+  ],
+  "requires": {
+    "items": []
+  },
+  "permissions": []
+}

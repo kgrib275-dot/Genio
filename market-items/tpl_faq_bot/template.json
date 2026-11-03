@@ -1,0 +1,83 @@
+{
+  "version": 1,
+  "nodes": [
+    {
+      "id": "n1",
+      "type": "input",
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "data": {
+        "label": "사용자 입력",
+        "fields": [
+          {
+            "key": "message",
+            "label": "질문",
+            "type": "text",
+            "required": true
+          }
+        ]
+      }
+    },
+    {
+      "id": "n2",
+      "type": "knowledge_search",
+      "position": {
+        "x": 300,
+        "y": 0
+      },
+      "data": {
+        "label": "문서 검색",
+        "kb_id": "{{kb}}",
+        "query": "{{n1.message}}",
+        "top_k": 4
+      }
+    },
+    {
+      "id": "n3",
+      "type": "llm",
+      "position": {
+        "x": 600,
+        "y": 0
+      },
+      "data": {
+        "label": "답변 작성",
+        "provider": "default",
+        "temperature": 0.2,
+        "system": "당신은 사내 FAQ 도우미입니다. 아래 자료에 있는 내용으로만 짧고 정확하게 답하세요. 자료에 없으면 '문서에서 찾지 못했어요. 담당 부서에 문의해 주세요.'라고 답하세요.",
+        "prompt": "자료:\n{{n2.context}}\n\n이전 대화:\n{{input.history}}\n\n질문: {{n1.message}}"
+      }
+    },
+    {
+      "id": "n4",
+      "type": "output",
+      "position": {
+        "x": 900,
+        "y": 0
+      },
+      "data": {
+        "label": "답변",
+        "template": "{{n3.text}}"
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "e1",
+      "source": "n1",
+      "target": "n2"
+    },
+    {
+      "id": "e2",
+      "source": "n2",
+      "target": "n3"
+    },
+    {
+      "id": "e3",
+      "source": "n3",
+      "target": "n4"
+    }
+  ],
+  "variables": {}
+}

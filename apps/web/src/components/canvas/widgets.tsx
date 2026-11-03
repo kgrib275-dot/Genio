@@ -1,0 +1,234 @@
+// 노드 설정 폼의 사용자 정의 위젯(설계서 §9: JSON Schema → 폼 자동 생성)
+import { lazy, Suspense, useEffect, useState } from "react";
+import type { FieldProps, IconButtonProps, WidgetProps } from "@rjsf/utils";
+import { useConnectorDefinitions, useCredentials, useKnowledgeBases } from "@/lib/api/resources";
+
+const MonacoEditor = lazy(() => import("@monaco-editor/react"));
+
+export interface NodeFormContext {
+  wsId: string;
+  formData: Record<string, unknown>;
+}
+
+const inputCls =
+  "w-full rounded-md border border-slate-300 bg-white px-2 py-1.5 text-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500";
+
+function ctxOf(props: WidgetProps | FieldProps): NodeFormContext {
+  return (props.formContext ??
+    props.registry.formContext ?? { wsId: "", formData: {} }) as NodeFormContext;
+}
+
+export function TextareaWidget(props: WidgetProps) {
+  return (
+    <textarea
+      id={props.id}
+      className={`${inputCls} min-h-[90px] font-mono text-xs`}
+      value={(props.value as string | undefined) ?? ""}
+      disabled={props.disabled || props.readonly}
+      onChange={(e) => props.onChange(e.target.value === "" ? undefined : e.target.value)}
+    />
+  );
+}
+
+export function CodeWidget(props: WidgetProps) {
+  return (
+    <div className="overflow-hidden rounded-md border border-slate-300">
+      <Suspense fallback={<TextareaWidget {...props} />}>
+        <MonacoEditor
+          height="220px"
+          defaultLanguage="python"
+          value={(props.value as string | undefined) ?? ""}
+          onChange={(v) => props.onChange(v ?? "")}
+          options={{ minimap: { enabled: false }, fontSize: 12, scrollBeyondLastLine: false }}
+        />
+      </Suspense>
+    </div>
+  );
+}
+
+export function KbWidget(props: WidgetProps) {
+  const kbs = useKnowledgeBases(ctxOf(props).wsId);
+  return (
+    <select
+      id={props.id}
+      className={inputCls}
+      value={(props.value as string | undefined) ?? ""}
+      onChange={(e) => props.onChange(e.target.value || undefined)}
+    >
+      <option value="">지식베이스 선택</option>
+      {(kbs.data ?? []).map((kb) => (
+        <option key={kb.id} value={kb.id}>
+          {kb.name} (문서 {kb.document_count}개)
+        </option>
+      ))}
+    </select>
+  );
+}
+
+export function ConnectorWidget(props: WidgetProps) {
+  const defs = useConnectorDefinitions(ctxOf(props).wsId);
+  return (
+    <select
+      id={props.id}
+      className={inputCls}
+      value={(props.value as string | undefined) ?? ""}
+      onChange={(e) => props.onChange(e.target.value || undefined)}
+    >
+      <option value="">서비스 선택</option>
+      {(defs.data ?? []).map((d) => (
+        <option key={d.id} value={d.key}>
+          {d.name}
+        </option>
+      ))}
+    </select>
+  );
+}
+
+export function CredentialWidget(props: WidgetProps) {
+  const ctx = ctxOf(props);
+  const creds = useCredentials(ctx.wsId);
+  const connector = ctx.formData.connector as string | undefined;
+  const list = (creds.data ?? []).filter((c) => !connector || c.connector_key === connector);
+  return (
+    <div>
+      <select
+        id={props.id}
+        className={inputCls}
+        value={(props.value as string | undefined) ?? ""}
+        onChange={(e) => props.onChange(e.target.value || undefined)}
+      >
+        <option value="">연결 정보 선택</option>
+        {list.map((c) => (
+          <option key={c.id} value={c.id}>
+            {c.name}
+          </option>
+        ))}
+      </select>
+      {creds.error ? (
+        <p className="mt-1 text-xs text-slate-500">연결 정보 목록을 볼 권한이 없어요.</p>
+      ) : (
+        list.length === 0 && (
+          <p className="mt-1 text-xs text-slate-500">
+            등록된 연결 정보가 없어요. 관리자가 &apos;연결 정보&apos; 메뉴에서 등록할 수 있어요.
+          </p>
+        )
+      )}
+    </div>
+  );
+}
+
+export function ConnectorActionWidget(props: WidgetProps) {
+  const ctx = ctxOf(props);
+  const defs = useConnectorDefinitions(ctx.wsId);
+  const connector = ctx.formData.connector as string | undefined;
+  const def = (defs.data ?? []).find((d) => d.key === connector);
+  return (
+    <select
+      id={props.id}
+      className={inputCls}
+      value={(props.value as string | undefined) ?? ""}
+      onChange={(e) => props.onChange(e.target.value || undefined)}
+    >
+      <option value="">{connector ? "동작 선택" : "먼저 서비스를 고르세요"}</option>
+      {(def?.manifest.actions ?? []).map((a) => (
+        <option key={a.key} value={a.key}>
+          {a.label}
+        </option>
+      ))}
+    </select>
+  );
+}
+
+/** JSON 값 입력(객체·배열·형식 없는 값). 해석이 안 되면 경고만 보이고 값은 바꾸지 않는다. */
+export function JsonField(props: FieldProps) {
+  const toText = (v: unknown) => (v === undefined ? "" : JSON.stringify(v, null, 2));
+  const [text, setText] = useState(() => toText(props.formData));
+  const [bad, setBad] = useState(false);
+
+  useEffect(() => {
+    setText((prev) => {
+      try {
+        if (JSON.stringify(JSON.parse(prev || "null")) === JSON.stringify(props.formData ?? null)) {
+          return prev;
+        }
+      } catch {
+        return prev;
+      }
+      return toText(props.formData);
+    });
+  }, [props.formData]);
+
+  const title = props.schema.title ?? props.name;
+  return (
+    <div className="mb-3">
+      <label htmlFor={props.idSchema.$id} className="mb-1 block text-xs font-medium text-slate-600">
+        {title}
+      </label>
+      <textarea
+        id={props.idSchema.$id}
+        className={`${inputCls} min-h-[80px] font-mono text-xs ${bad ? "border-red-400" : ""}`}
+        value={text}
+        onChange={(e) => {
+          const t = e.target.value;
+          setText(t);
+          if (!t.trim()) {
+            setBad(false);
+            props.onChange(undefined);
+            return;
+          }
+          try {
+            props.onChange(JSON.parse(t));
+            setBad(false);
+          } catch {
+            setBad(true);
+          }
+        }}
+      />
+      {bad && (
+        <p className="mt-1 text-xs text-red-600">
+          JSON 형식이 맞지 않아요. 따옴표와 괄호를 확인하세요.
+        </p>
+      )}
+    </div>
+  );
+}
+
+function TextButton({
+  label,
+  tone,
+  props,
+}: {
+  label: string;
+  tone: string;
+  props: IconButtonProps;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={props.onClick}
+      disabled={props.disabled}
+      className={`${props.className ?? ""} rounded px-2 py-0.5 text-xs font-medium ${tone} hover:bg-slate-100 disabled:opacity-40`}
+    >
+      {label}
+    </button>
+  );
+}
+
+export function AddButton(props: IconButtonProps) {
+  return <TextButton label="+ 추가" tone="text-indigo-600" props={props} />;
+}
+export function RemoveButton(props: IconButtonProps) {
+  return <TextButton label="삭제" tone="text-red-600" props={props} />;
+}
+export function MoveUpButton(props: IconButtonProps) {
+  return <TextButton label="위로" tone="text-slate-500" props={props} />;
+}
+export function MoveDownButton(props: IconButtonProps) {
+  return <TextButton label="아래로" tone="text-slate-500" props={props} />;
+}
+export function CopyButton(props: IconButtonProps) {
+  return <TextButton label="복사" tone="text-slate-500" props={props} />;
+}
+export function NoSubmitButton() {
+  return null;
+}

@@ -1,0 +1,166 @@
+{
+  "version": 1,
+  "nodes": [
+    {
+      "id": "n1",
+      "type": "input",
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "data": {
+        "label": "사용자 입력",
+        "fields": [
+          {
+            "key": "message",
+            "label": "문의 내용",
+            "type": "text",
+            "required": true
+          }
+        ]
+      }
+    },
+    {
+      "id": "n2",
+      "type": "llm",
+      "position": {
+        "x": 300,
+        "y": 0
+      },
+      "data": {
+        "label": "문의 분류",
+        "provider": "default",
+        "temperature": 0.2,
+        "system": "고객 문의를 billing(결제·환불·청구), tech(오류·사용법·기술), other(그 밖) 중 하나로 분류하세요.",
+        "prompt": "{{n1.message}}",
+        "output_schema": {
+          "type": "object",
+          "properties": {
+            "category": {
+              "type": "string",
+              "enum": [
+                "billing",
+                "tech",
+                "other"
+              ]
+            }
+          },
+          "required": [
+            "category"
+          ]
+        }
+      }
+    },
+    {
+      "id": "n3",
+      "type": "condition",
+      "position": {
+        "x": 600,
+        "y": 0
+      },
+      "data": {
+        "label": "분류별 분기",
+        "cases": [
+          {
+            "id": "billing",
+            "when": "{{n2.category}} == 'billing'"
+          },
+          {
+            "id": "tech",
+            "when": "{{n2.category}} == 'tech'"
+          }
+        ],
+        "else": "other"
+      }
+    },
+    {
+      "id": "n4",
+      "type": "connector",
+      "position": {
+        "x": 900,
+        "y": -160
+      },
+      "data": {
+        "label": "#billing 전송",
+        "connector": "slack",
+        "credential_id": "{{credential:slack}}",
+        "action": "post_message",
+        "params": {
+          "channel": "#billing",
+          "text": "[결제 문의] {{n1.message}}"
+        }
+      }
+    },
+    {
+      "id": "n5",
+      "type": "connector",
+      "position": {
+        "x": 900,
+        "y": 0
+      },
+      "data": {
+        "label": "#tech 전송",
+        "connector": "slack",
+        "credential_id": "{{credential:slack}}",
+        "action": "post_message",
+        "params": {
+          "channel": "#tech",
+          "text": "[기술 문의] {{n1.message}}"
+        }
+      }
+    },
+    {
+      "id": "n6",
+      "type": "output",
+      "position": {
+        "x": 1200,
+        "y": 0
+      },
+      "data": {
+        "label": "결과",
+        "template": "분류: {{n2.category}}"
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "e1",
+      "source": "n1",
+      "target": "n2"
+    },
+    {
+      "id": "e2",
+      "source": "n2",
+      "target": "n3"
+    },
+    {
+      "id": "e3",
+      "source": "n3",
+      "target": "n4",
+      "sourceHandle": "billing"
+    },
+    {
+      "id": "e4",
+      "source": "n3",
+      "target": "n5",
+      "sourceHandle": "tech"
+    },
+    {
+      "id": "e5",
+      "source": "n3",
+      "target": "n6",
+      "sourceHandle": "other"
+    },
+    {
+      "id": "e6",
+      "source": "n4",
+      "target": "n6"
+    },
+    {
+      "id": "e7",
+      "source": "n5",
+      "target": "n6"
+    }
+  ],
+  "variables": {}
+}

@@ -1,3 +1,78 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  font-family:
+    "Pretendard",
+    "Apple SD Gothic Neo",
+    "Malgun Gothic",
+    system-ui,
+    -apple-system,
+    sans-serif;
+  @apply bg-slate-50 text-slate-900;
+}
+
+/* 빌더 patch로 바뀐 노드 2초 하이라이트 */
+@keyframes genio-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(250, 204, 21, 0.9);
+  }
+  100% {
+    box-shadow: 0 0 0 10px rgba(250, 204, 21, 0);
+  }
+}
+.genio-highlight {
+  animation: genio-pulse 1s ease-out 2;
+  outline: 2px solid rgb(250 204 21);
+}
+
+/* react-jsonschema-form 기본 마크업(부트스트랩 클래스) 정리 */
+.genio-form fieldset {
+  border: 0;
+  margin: 0;
+  padding: 0;
+}
+.genio-form legend {
+  @apply mb-2 text-sm font-semibold text-slate-700;
+}
+.genio-form .form-group {
+  @apply mb-3;
+}
+.genio-form .control-label,
+.genio-form label {
+  @apply mb-1 block text-xs font-medium text-slate-600;
+}
+.genio-form .field-description {
+  @apply mb-1 text-xs text-slate-500;
+}
+.genio-form input[type="text"],
+.genio-form input[type="number"],
+.genio-form input[type="email"],
+.genio-form input:not([type]),
+.genio-form select,
+.genio-form textarea {
+  @apply w-full rounded-md border border-slate-300 bg-white px-2 py-1.5 text-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500;
+}
+.genio-form input[type="checkbox"] {
+  @apply mr-1;
+}
+.genio-form .checkbox label {
+  @apply flex items-center gap-1 text-sm;
+}
+.genio-form .array-item {
+  @apply mb-2 rounded border border-slate-200 bg-slate-50 p-2;
+}
+.genio-form .array-item-toolbox .btn-group {
+  @apply flex justify-end gap-1;
+}
+.genio-form .error-detail,
+.genio-form .text-danger {
+  @apply text-xs text-red-600;
+}

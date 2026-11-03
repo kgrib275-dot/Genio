@@ -1,0 +1,15 @@
+{
+  "key": "prompts_cs",
+  "type": "prompt_pack",
+  "name": "고객 응대 프롬프트 팩",
+  "summary": "문의 분류, 공감 답변, 불만 완화 등 고객 응대용 프롬프트 모음.",
+  "version": "1.0.0",
+  "publisher": "platform",
+  "price": 0,
+  "tags": [
+    "고객지원",
+    "CS",
+    "프롬프트"
+  ],
+  "permissions": []
+}

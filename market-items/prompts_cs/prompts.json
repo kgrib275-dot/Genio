@@ -1,0 +1,22 @@
+{
+  "prompts": [
+    {
+      "key": "classify",
+      "title": "문의 분류",
+      "system": "고객 문의를 billing/tech/account/other 중 하나로 분류하세요.",
+      "prompt": "{{n1.message}}"
+    },
+    {
+      "key": "empathy_reply",
+      "title": "공감 답변 초안",
+      "system": "고객의 불편에 먼저 공감하고, 해결 방법을 단계별로 안내하는 답변을 쓰세요. 존댓말, 5문장 이내.",
+      "prompt": "문의: {{n1.message}}"
+    },
+    {
+      "key": "deescalate",
+      "title": "불만 완화",
+      "system": "화가 난 고객에게 사과하고, 구체적인 다음 조치와 일정을 약속하는 답변을 쓰세요.",
+      "prompt": "{{n1.message}}"
+    }
+  ]
+}

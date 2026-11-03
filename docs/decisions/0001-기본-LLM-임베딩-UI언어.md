@@ -1,11 +1,11 @@
 # ADR 0001. 빌더 LLM, 임베딩 모델, UI 언어 기본값
 
-- 상태: 잠정 채택 (design.md 확정 시 재검토)
+- 상태: 채택
 - 날짜: 2026-11-03
 
 ## 배경
 CLAUDE.md "첫 세션에서 할 일" 2번은 `docs/design.md` §13의 결정 사항을 확인하고, 답이 없으면 기본값을 ADR 0001로 남기라고 한다.
-첫 세션 시점에 `docs/design.md`가 로컬과 원격 저장소(github.com/kgrib275-dot/Genio) 어디에도 없어 §13을 확인할 수 없었다.
+첫 세션에는 `docs/design.md`가 없었다. 이후 받은 설계서 §13은 권장안(Claude Sonnet 또는 GPT-4o급, text-embedding-3-small, 한국어 기본)만 적고 확정하지 않았다. 그래서 아래 기본값을 그대로 채택한다.
 
 ## 결정
 | 항목 | 기본값 | 설정 키 |
@@ -25,4 +25,4 @@ CLAUDE.md "첫 세션에서 할 일" 2번은 `docs/design.md` §13의 결정 사
 ## 영향
 - 빌더 툴 호출은 Anthropic 어댑터를 우선 구현한다. 다른 공급자 어댑터는 같은 인터페이스로 뒤에 붙인다.
 - Anthropic 최신 모델은 강제 `tool_choice`(any/tool)를 거부하므로 빌더 루프는 `tool_choice: auto`와 프롬프트 지시로 툴 사용을 유도한다.
-- design.md §13에 다른 값이 적혀 있으면 이 ADR을 대체 ADR로 갱신한다.
+- 기본값을 바꾸면 새 ADR로 대체한다. Anthropic API 제약 대응은 ADR 0003.

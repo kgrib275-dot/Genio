@@ -1,0 +1,21 @@
+{
+  "key": "tpl_inquiry_router",
+  "type": "template",
+  "name": "문의 분류 → 슬랙 전송",
+  "summary": "고객 문의를 결제/기술/기타로 나눠 담당 슬랙 채널로 보내요.",
+  "version": "1.0.0",
+  "publisher": "platform",
+  "price": 0,
+  "tags": [
+    "문의",
+    "분류",
+    "슬랙",
+    "고객지원"
+  ],
+  "requires": {
+    "items": [
+      "slack"
+    ]
+  },
+  "permissions": []
+}

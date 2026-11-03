@@ -1,0 +1,125 @@
+import Form from "@rjsf/core";
+import type { RJSFSchema } from "@rjsf/utils";
+import validator from "@rjsf/validator-ajv8";
+import { useMemo } from "react";
+import { nodeFields, nodeTemplates, nodeWidgets } from "@/components/canvas/formRegistry";
+import { referenceHints, toRjsfUiSchema } from "@/components/canvas/uiSchema";
+import type { NodeFormContext } from "@/components/canvas/widgets";
+import { Button } from "@/components/ui/button";
+import type { GraphNode, NodeType } from "@/lib/api/types";
+
+export interface NodeSettingsFormProps {
+  node: GraphNode;
+  spec: NodeType;
+  wsId: string;
+  onChange: (data: Record<string, unknown>) => void;
+  readOnly?: boolean;
+}
+
+/** NodeType.input_schema + ui_schema로 설정 폼을 자동으로 만든다. */
+export function NodeSettingsForm({ node, spec, wsId, onChange, readOnly }: NodeSettingsFormProps) {
+  const uiSchema = useMemo(() => toRjsfUiSchema(spec), [spec]);
+  const formContext: NodeFormContext = { wsId, formData: node.data };
+  return (
+    <Form
+      className="genio-form"
+      schema={spec.input_schema as RJSFSchema}
+      uiSchema={uiSchema}
+      formData={node.data}
+      validator={validator}
+      widgets={nodeWidgets}
+      fields={nodeFields}
+      templates={nodeTemplates}
+      formContext={formContext}
+      disabled={readOnly}
+      liveValidate={false}
+      showErrorList={false}
+      noHtml5Validate
+      onChange={(e) => onChange((e.formData ?? {}) as Record<string, unknown>)}
+    />
+  );
+}
+
+export function NodeSettingsPanel({
+  node,
+  spec,
+  wsId,
+  nodes,
+  errors,
+  onChange,
+  onDelete,
+  onClose,
+  readOnly,
+}: {
+  node: GraphNode;
+  spec: NodeType | undefined;
+  wsId: string;
+  nodes: GraphNode[];
+  errors?: string[];
+  onChange: (data: Record<string, unknown>) => void;
+  onDelete: () => void;
+  onClose: () => void;
+  readOnly?: boolean;
+}) {
+  const hints = referenceHints(nodes, node.id);
+  return (
+    <div className="flex h-full flex-col">
+      <div className="flex items-start justify-between border-b border-slate-200 px-4 py-3">
+        <div>
+          <p className="text-sm font-semibold">{spec?.label ?? node.type} 설정</p>
+          <p className="text-xs text-slate-400">노드 id: {node.id}</p>
+        </div>
+        <button
+          type="button"
+          onClick={onClose}
+          className="rounded p-1 text-slate-400 hover:bg-slate-100"
+          aria-label="설정 닫기"
+        >
+          ✕
+        </button>
+      </div>
+      <div className="flex-1 overflow-y-auto px-4 py-3">
+        {spec?.description && <p className="mb-3 text-xs text-slate-500">{spec.description}</p>}
+        {errors && errors.length > 0 && (
+          <div className="mb-3 rounded border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-800">
+            {errors.map((e, i) => (
+              <p key={i}>{e}</p>
+            ))}
+          </div>
+        )}
+        {spec ? (
+          <NodeSettingsForm
+            node={node}
+            spec={spec}
+            wsId={wsId}
+            onChange={onChange}
+            readOnly={readOnly}
+          />
+        ) : (
+          <p className="text-sm text-red-600">
+            이 노드 종류({node.type})를 찾을 수 없어요. 마켓에서 해당 아이템을 다시 설치하세요.
+          </p>
+        )}
+        {hints.length > 0 && (
+          <div className="mt-4 rounded bg-slate-50 px-3 py-2">
+            <p className="mb-1 text-xs font-medium text-slate-600">다른 노드 값 쓰기</p>
+            <div className="flex flex-wrap gap-1">
+              {hints.map((h) => (
+                <code key={h} className="rounded bg-white px-1.5 py-0.5 text-[11px] text-slate-700">
+                  {h}
+                </code>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+      {!readOnly && (
+        <div className="border-t border-slate-200 px-4 py-3">
+          <Button variant="outline" size="sm" className="text-red-600" onClick={onDelete}>
+            이 노드 삭제
+          </Button>
+        </div>
+      )}
+    </div>
+  );
+}

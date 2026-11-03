@@ -1,0 +1,95 @@
+import { Link, useParams } from "react-router-dom";
+import { PageContainer } from "@/app/Layout";
+import { JsonView } from "@/components/canvas/RunPanel";
+import { ErrorBox, Loading } from "@/components/ErrorBox";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardBody, CardHeader } from "@/components/ui/card";
+import { toast } from "@/components/ui/toast-store";
+import { ko } from "@/i18n/ko";
+import { useInstallMarketItem, useMarketItem } from "@/lib/api/resources";
+import { canManage, useSession } from "@/store/session";
+
+export default function MarketDetailPage() {
+  const { key = "" } = useParams();
+  const { workspaceId: ws, role } = useSession();
+  const item = useMarketItem(key, ws);
+  const install = useInstallMarketItem(ws);
+
+  return (
+    <PageContainer>
+      <Link to="/market" className="text-sm text-indigo-600 hover:underline">
+        ← 마켓
+      </Link>
+      {item.isLoading && <Loading />}
+      <ErrorBox error={item.error} />
+      {item.data && (
+        <div className="mt-4 grid gap-6 lg:grid-cols-[2fr_1fr]">
+          <Card>
+            <CardHeader
+              title={item.data.name}
+              description={item.data.summary}
+              action={
+                <Badge tone="indigo">{ko.marketTypes[item.data.type] ?? item.data.type}</Badge>
+              }
+            />
+            <CardBody>
+              <div className="whitespace-pre-wrap text-sm leading-relaxed text-slate-800">
+                {item.data.description_md || "설명이 없어요."}
+              </div>
+            </CardBody>
+          </Card>
+          <div className="space-y-4">
+            <Card>
+              <CardBody className="space-y-2 text-sm">
+                <p>
+                  가격:{" "}
+                  <b>
+                    {item.data.price > 0
+                      ? `${item.data.price.toLocaleString()}원 (모의 결제)`
+                      : "무료"}
+                  </b>
+                </p>
+                <p>제공: {item.data.publisher}</p>
+                <p>버전: {item.data.version}</p>
+                <p>설치 수: {item.data.installs}</p>
+                {item.data.tags.length > 0 && (
+                  <div className="flex flex-wrap gap-1">
+                    {item.data.tags.map((t) => (
+                      <Badge key={t}>{t}</Badge>
+                    ))}
+                  </div>
+                )}
+                <div className="pt-2">
+                  {item.data.installed ? (
+                    <Badge tone="green">이 워크스페이스에 설치됨</Badge>
+                  ) : canManage(role) ? (
+                    <Button
+                      disabled={install.isPending}
+                      onClick={() =>
+                        install.mutate(key, {
+                          onSuccess: () => toast.success("설치했어요. 이제 흐름에서 쓸 수 있어요."),
+                        })
+                      }
+                    >
+                      {install.isPending ? "설치 중…" : "설치하기"}
+                    </Button>
+                  ) : (
+                    <p className="text-xs text-slate-500">설치는 관리자만 할 수 있어요.</p>
+                  )}
+                </div>
+                <ErrorBox error={install.error} />
+              </CardBody>
+            </Card>
+            <Card>
+              <CardHeader title="구성 정보" description="개발자용 상세(manifest)" />
+              <CardBody>
+                <JsonView value={item.data.manifest} />
+              </CardBody>
+            </Card>
+          </div>
+        </div>
+      )}
+    </PageContainer>
+  );
+}

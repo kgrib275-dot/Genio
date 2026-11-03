@@ -1,0 +1,12 @@
+{
+  "key": "node_text_tools",
+  "type": "node",
+  "name": "글자 다듬기 노드",
+  "summary": "공백 정리, 대소문자 바꾸기, 글자 수 세기, 찾아 바꾸기를 하는 노드예요.",
+  "version": "1.0.0",
+  "publisher": "platform",
+  "price": 0,
+  "tags": ["텍스트", "글자", "정리", "노드"],
+  "node_type": "text_tools",
+  "permissions": []
+}

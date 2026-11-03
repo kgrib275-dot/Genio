@@ -1,0 +1,85 @@
+{
+  "chat_events": [
+    "session",
+    "status",
+    "answer",
+    "done"
+  ],
+  "graph": {
+    "edges": [
+      "n1->n3",
+      "n3->n4",
+      "n4->n2"
+    ],
+    "nodes": [
+      "n1:input",
+      "n2:output",
+      "n3:knowledge_search",
+      "n4:llm"
+    ]
+  },
+  "turns": [
+    {
+      "ask_user": null,
+      "events": [
+        "user_message",
+        "tool_call",
+        "tool_result",
+        "tool_call",
+        "tool_result",
+        "graph_patch",
+        "tool_call",
+        "tool_result",
+        "graph_patch",
+        "tool_call",
+        "tool_result",
+        "graph_patch",
+        "tool_call",
+        "tool_result",
+        "tool_call",
+        "tool_result",
+        "test_result",
+        "done"
+      ],
+      "market_suggestion": null,
+      "ops": [
+        "add_node",
+        "remove_edge",
+        "add_edge",
+        "add_edge",
+        "add_node",
+        "remove_edge",
+        "add_edge",
+        "add_edge",
+        "update_node"
+      ],
+      "test_status": "succeeded",
+      "tools": [
+        [
+          "list_available_nodes",
+          true
+        ],
+        [
+          "add_node",
+          true
+        ],
+        [
+          "add_node",
+          true
+        ],
+        [
+          "update_node",
+          true
+        ],
+        [
+          "validate",
+          true
+        ],
+        [
+          "run_test",
+          true
+        ]
+      ]
+    }
+  ]
+}

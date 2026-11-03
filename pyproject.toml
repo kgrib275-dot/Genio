@@ -11,7 +11,7 @@ src = ["apps", "packages"]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "B", "UP", "N", "S", "SIM", "RUF"]
-ignore = ["RUF001", "RUF002", "RUF003"]  # 한국어 문구의 전각 문자 허용
+ignore = ["RUF001", "RUF002", "RUF003", "E501"]  # 한국어 전각 문자 허용, 줄 길이는 formatter가 관리
 
 [tool.ruff.lint.per-file-ignores]
 "**/tests/**" = ["S101"]
@@ -25,11 +25,10 @@ explicit_package_bases = true
 plugins = ["pydantic.mypy"]
 
 [[tool.mypy.overrides]]
-module = ["celery", "celery.*"]
+module = ["celery", "celery.*", "simpleeval", "RestrictedPython", "RestrictedPython.*"]
 ignore_missing_imports = true
+follow_imports = "skip"
 
 [tool.pytest.ini_options]
 pythonpath = ["apps", "packages"]
 testpaths = ["apps/api/tests", "apps/worker/tests", "packages/nodes/tests"]
-asyncio_mode = "auto"
-asyncio_default_fixture_loop_scope = "function"

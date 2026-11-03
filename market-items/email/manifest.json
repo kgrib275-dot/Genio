@@ -1,0 +1,40 @@
+{
+  "key": "email",
+  "type": "connector",
+  "name": "Email (SMTP)",
+  "summary": "회사 메일 서버(SMTP)로 메일을 보내요.",
+  "version": "1.0.0",
+  "publisher": "platform",
+  "price": 0,
+  "tags": ["email", "mail", "메일", "이메일", "smtp", "발송"],
+  "smtp": true,
+  "requires": {
+    "credentials": [
+      {"key": "host", "label": "메일 서버 주소(예: smtp.gmail.com)", "secret": false, "required": true},
+      {"key": "port", "label": "포트(587 또는 465)", "secret": false, "required": true},
+      {"key": "username", "label": "로그인 아이디", "secret": false, "required": true},
+      {"key": "password", "label": "비밀번호(앱 비밀번호)", "secret": true, "required": true},
+      {"key": "sender", "label": "보내는 사람 주소", "secret": false, "required": true}
+    ]
+  },
+  "actions": [
+    {
+      "key": "send_email",
+      "label": "메일 보내기",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "to": {"type": "string", "title": "받는 사람(쉼표로 여러 명)"},
+          "subject": {"type": "string", "title": "제목"},
+          "body": {"type": "string", "title": "본문"}
+        },
+        "required": ["to", "subject", "body"]
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {"sent": {"type": "boolean"}, "to": {"type": "array"}}
+      }
+    }
+  ],
+  "permissions": []
+}

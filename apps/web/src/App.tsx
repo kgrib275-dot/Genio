@@ -1,23 +1,57 @@
-import { Route, Routes } from "react-router-dom";
-import { useHealth } from "@/lib/api/health";
+import { lazy, Suspense } from "react";
+import { Navigate, Route, Routes } from "react-router-dom";
+import { Layout } from "@/app/Layout";
+import { RequireAuth } from "@/app/RequireAuth";
+import { Loading } from "@/components/ErrorBox";
+import { Toaster } from "@/components/ui/toast";
+import LoginPage from "@/pages/auth/LoginPage";
+import SignupPage from "@/pages/auth/SignupPage";
 
-function Home() {
-  const { data, isError } = useHealth();
-  return (
-    <main className="mx-auto max-w-xl p-8">
-      <h1 className="text-2xl font-bold">제니오</h1>
-      <p className="mt-2 text-gray-600">말로 만드는 나만의 앱</p>
-      <p className="mt-6 text-sm" data-testid="server-status">
-        {isError ? "서버에 연결하지 못했어요." : data ? "서버 연결됨" : "서버 확인 중…"}
-      </p>
-    </main>
-  );
-}
+const InviteAcceptPage = lazy(() => import("@/pages/auth/InviteAcceptPage"));
+const DashboardPage = lazy(() => import("@/pages/dashboard/DashboardPage"));
+const BuilderPage = lazy(() => import("@/pages/apps/BuilderPage"));
+const AppSettingsPage = lazy(() => import("@/pages/apps/AppSettingsPage"));
+const AppRunsPage = lazy(() => import("@/pages/apps/AppRunsPage"));
+const RunDetailPage = lazy(() => import("@/pages/apps/RunDetailPage"));
+const KnowledgePage = lazy(() => import("@/pages/knowledge/KnowledgePage"));
+const ConnectorsPage = lazy(() => import("@/pages/connectors/ConnectorsPage"));
+const MarketPage = lazy(() => import("@/pages/market/MarketPage"));
+const MarketDetailPage = lazy(() => import("@/pages/market/MarketDetailPage"));
+const WorkspacePage = lazy(() => import("@/pages/workspace/WorkspacePage"));
+const SharePage = lazy(() => import("@/pages/share/SharePage"));
 
 export default function App() {
   return (
-    <Routes>
-      <Route path="/" element={<Home />} />
-    </Routes>
+    <>
+      <Suspense fallback={<Loading />}>
+        <Routes>
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/signup" element={<SignupPage />} />
+          <Route path="/invite/:token" element={<InviteAcceptPage />} />
+          <Route path="/share/:token" element={<SharePage />} />
+          <Route
+            element={
+              <RequireAuth>
+                <Layout />
+              </RequireAuth>
+            }
+          >
+            <Route index element={<DashboardPage />} />
+            <Route path="apps/:id" element={<Navigate to="builder" replace />} />
+            <Route path="apps/:id/builder" element={<BuilderPage />} />
+            <Route path="apps/:id/settings" element={<AppSettingsPage />} />
+            <Route path="apps/:id/runs" element={<AppRunsPage />} />
+            <Route path="runs/:id" element={<RunDetailPage />} />
+            <Route path="knowledge" element={<KnowledgePage />} />
+            <Route path="connectors" element={<ConnectorsPage />} />
+            <Route path="market" element={<MarketPage />} />
+            <Route path="market/:key" element={<MarketDetailPage />} />
+            <Route path="workspace" element={<WorkspacePage />} />
+          </Route>
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </Suspense>
+      <Toaster />
+    </>
   );
 }

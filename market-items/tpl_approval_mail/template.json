@@ -1,0 +1,126 @@
+{
+  "version": 1,
+  "nodes": [
+    {
+      "id": "n1",
+      "type": "input",
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "data": {
+        "label": "사용자 입력",
+        "fields": [
+          {
+            "key": "message",
+            "label": "요청 내용",
+            "type": "text",
+            "required": true
+          },
+          {
+            "key": "to",
+            "label": "받는 사람 메일",
+            "type": "text",
+            "required": true
+          }
+        ]
+      }
+    },
+    {
+      "id": "n2",
+      "type": "llm",
+      "position": {
+        "x": 300,
+        "y": 0
+      },
+      "data": {
+        "label": "메일 초안",
+        "provider": "default",
+        "temperature": 0.4,
+        "system": "요청 내용을 바탕으로 정중한 업무 메일을 쓰세요.",
+        "prompt": "{{n1.message}}",
+        "output_schema": {
+          "type": "object",
+          "properties": {
+            "subject": {
+              "type": "string"
+            },
+            "body": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "subject",
+            "body"
+          ]
+        }
+      }
+    },
+    {
+      "id": "n3",
+      "type": "approval",
+      "position": {
+        "x": 600,
+        "y": 0
+      },
+      "data": {
+        "label": "발송 승인",
+        "message": "다음 메일을 보내도 될까요?\n제목: {{n2.subject}}\n\n{{n2.body}}"
+      }
+    },
+    {
+      "id": "n4",
+      "type": "connector",
+      "position": {
+        "x": 900,
+        "y": 0
+      },
+      "data": {
+        "label": "메일 발송",
+        "connector": "email",
+        "credential_id": "{{credential:email}}",
+        "action": "send_email",
+        "params": {
+          "to": "{{n1.to}}",
+          "subject": "{{n2.subject}}",
+          "body": "{{n2.body}}"
+        }
+      }
+    },
+    {
+      "id": "n5",
+      "type": "output",
+      "position": {
+        "x": 1200,
+        "y": 0
+      },
+      "data": {
+        "label": "결과",
+        "template": "메일을 보냈어요: {{n2.subject}}"
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "e1",
+      "source": "n1",
+      "target": "n2"
+    },
+    {
+      "id": "e2",
+      "source": "n2",
+      "target": "n3"
+    },
+    {
+      "id": "e3",
+      "source": "n3",
+      "target": "n4"
+    },
+    {
+      "id": "e4",
+      "source": "n4",
+      "target": "n5"
+    }
+  ],
+  "variables": {}
+}

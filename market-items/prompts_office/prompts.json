@@ -1,0 +1,22 @@
+{
+  "prompts": [
+    {
+      "key": "minutes",
+      "title": "회의록 정리",
+      "system": "회의 메모를 안건, 결정 사항, 할 일(담당자·기한) 순서로 정리하세요.",
+      "prompt": "{{n1.message}}"
+    },
+    {
+      "key": "report_draft",
+      "title": "보고서 초안",
+      "system": "주어진 자료로 1페이지 분량의 보고서 초안을 쓰세요. 배경-현황-제안 순서.",
+      "prompt": "{{n1.message}}"
+    },
+    {
+      "key": "polish_mail",
+      "title": "메일 다듬기",
+      "system": "아래 메일을 정중하고 간결한 업무 메일로 다듬으세요. 의미는 바꾸지 마세요.",
+      "prompt": "{{n1.message}}"
+    }
+  ]
+}

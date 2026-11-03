@@ -1,0 +1,34 @@
+{
+  "key": "slack",
+  "type": "connector",
+  "name": "Slack",
+  "summary": "슬랙 채널에 메시지를 보내요.",
+  "version": "1.0.0",
+  "publisher": "platform",
+  "price": 0,
+  "tags": ["slack", "슬랙", "메신저", "알림", "채널"],
+  "requires": {
+    "credentials": [
+      {"key": "bot_token", "label": "Bot Token (xoxb-로 시작)", "secret": true, "required": true}
+    ]
+  },
+  "actions": [
+    {
+      "key": "post_message",
+      "label": "메시지 보내기",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "channel": {"type": "string", "title": "채널(예: #billing)"},
+          "text": {"type": "string", "title": "보낼 내용"}
+        },
+        "required": ["channel", "text"]
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {"ts": {"type": "string"}, "channel": {"type": "string"}}
+      }
+    }
+  ],
+  "permissions": ["network:slack.com"]
+}

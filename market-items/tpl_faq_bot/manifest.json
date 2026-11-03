@@ -1,0 +1,20 @@
+{
+  "key": "tpl_faq_bot",
+  "type": "template",
+  "name": "FAQ 챗봇(지식베이스)",
+  "summary": "올린 문서(사내 규정 등)에서 찾아 답하는 챗봇이에요.",
+  "version": "1.0.0",
+  "publisher": "platform",
+  "price": 0,
+  "tags": [
+    "FAQ",
+    "챗봇",
+    "지식베이스",
+    "규정",
+    "문서"
+  ],
+  "requires": {
+    "items": []
+  },
+  "permissions": []
+}

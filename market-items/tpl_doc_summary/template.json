@@ -1,0 +1,64 @@
+{
+  "version": 1,
+  "nodes": [
+    {
+      "id": "n1",
+      "type": "input",
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "data": {
+        "label": "사용자 입력",
+        "fields": [
+          {
+            "key": "message",
+            "label": "요약할 글",
+            "type": "text",
+            "required": true
+          }
+        ]
+      }
+    },
+    {
+      "id": "n2",
+      "type": "llm",
+      "position": {
+        "x": 300,
+        "y": 0
+      },
+      "data": {
+        "label": "요약",
+        "provider": "default",
+        "temperature": 0.3,
+        "system": "글을 한국어로 요약하세요. 형식: '핵심 요약' 3줄, '할 일' 글머리표 목록(없으면 '없음').",
+        "prompt": "{{n1.message}}"
+      }
+    },
+    {
+      "id": "n3",
+      "type": "output",
+      "position": {
+        "x": 600,
+        "y": 0
+      },
+      "data": {
+        "label": "요약 결과",
+        "template": "{{n2.text}}"
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "e1",
+      "source": "n1",
+      "target": "n2"
+    },
+    {
+      "id": "e2",
+      "source": "n2",
+      "target": "n3"
+    }
+  ],
+  "variables": {}
+}

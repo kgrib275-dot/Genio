@@ -1,0 +1,49 @@
+{
+  "key": "google_sheets",
+  "type": "connector",
+  "name": "Google Sheets",
+  "summary": "구글 시트의 표를 읽거나 행을 추가해요.",
+  "version": "1.0.0",
+  "publisher": "platform",
+  "price": 0,
+  "tags": ["google", "sheets", "구글시트", "스프레드시트", "표", "시트"],
+  "requires": {
+    "credentials": [
+      {"key": "access_token", "label": "OAuth 액세스 토큰(쓰기·비공개 시트)", "secret": true, "required": false},
+      {"key": "api_key", "label": "API 키(공개 시트 읽기만)", "secret": true, "required": false}
+    ]
+  },
+  "actions": [
+    {
+      "key": "read_range",
+      "label": "범위 읽기",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "spreadsheet_id": {"type": "string", "title": "시트 ID(주소의 /d/ 뒤 문자열)"},
+          "range": {"type": "string", "title": "범위(예: 시트1!A1:E50)"}
+        },
+        "required": ["spreadsheet_id", "range"]
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {"values": {"type": "array"}, "text": {"type": "string"}, "rows": {"type": "integer"}}
+      }
+    },
+    {
+      "key": "append_rows",
+      "label": "행 추가",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "spreadsheet_id": {"type": "string", "title": "시트 ID"},
+          "range": {"type": "string", "title": "범위(예: 시트1!A1)"},
+          "values": {"type": "array", "title": "추가할 행(2차원 배열)", "items": {"type": "array"}}
+        },
+        "required": ["spreadsheet_id", "range", "values"]
+      },
+      "output_schema": {"type": "object", "properties": {"updated_rows": {"type": "integer"}}}
+    }
+  ],
+  "permissions": ["network:sheets.googleapis.com"]
+}

@@ -1,0 +1,201 @@
+{
+  "graph": {
+    "edges": [
+      "n1->n3",
+      "n3->n4",
+      "n4(billing)->n5",
+      "n4(other)->n2",
+      "n4(tech)->n6",
+      "n5->n2",
+      "n6->n2"
+    ],
+    "nodes": [
+      "n1:input",
+      "n2:output",
+      "n3:llm",
+      "n4:condition",
+      "n5:connector",
+      "n6:connector"
+    ]
+  },
+  "turns": [
+    {
+      "ask_user": null,
+      "events": [
+        "user_message",
+        "tool_call",
+        "tool_result",
+        "tool_call",
+        "tool_result",
+        "market_suggestion",
+        "done"
+      ],
+      "market_suggestion": "slack",
+      "ops": [],
+      "test_status": null,
+      "tools": [
+        [
+          "list_available_nodes",
+          true
+        ],
+        [
+          "suggest_market_item",
+          true
+        ]
+      ]
+    },
+    {
+      "ask_user": {
+        "options": [
+          "#billing / #tech",
+          "#support 하나로"
+        ],
+        "question": "빌링·기술 문의를 각각 어느 채널로 보낼까요?"
+      },
+      "events": [
+        "user_message",
+        "tool_call",
+        "tool_result",
+        "tool_call",
+        "tool_result",
+        "graph_patch",
+        "tool_call",
+        "tool_result",
+        "graph_patch",
+        "tool_call",
+        "tool_result",
+        "graph_patch",
+        "tool_call",
+        "tool_result",
+        "graph_patch",
+        "tool_call",
+        "tool_result",
+        "graph_patch",
+        "tool_call",
+        "tool_result",
+        "graph_patch",
+        "tool_call",
+        "tool_result",
+        "graph_patch",
+        "tool_call",
+        "tool_result",
+        "graph_patch",
+        "tool_call",
+        "tool_result",
+        "graph_patch",
+        "tool_call",
+        "tool_result",
+        "ask_user",
+        "done"
+      ],
+      "market_suggestion": null,
+      "ops": [
+        "update_node",
+        "add_node",
+        "remove_edge",
+        "add_edge",
+        "add_edge",
+        "add_node",
+        "remove_edge",
+        "add_edge",
+        "add_node",
+        "add_edge",
+        "add_node",
+        "add_edge",
+        "add_edge",
+        "add_edge",
+        "add_edge",
+        "update_node"
+      ],
+      "test_status": null,
+      "tools": [
+        [
+          "list_available_nodes",
+          true
+        ],
+        [
+          "update_node",
+          true
+        ],
+        [
+          "add_node",
+          true
+        ],
+        [
+          "add_node",
+          true
+        ],
+        [
+          "add_node",
+          true
+        ],
+        [
+          "add_node",
+          true
+        ],
+        [
+          "connect",
+          true
+        ],
+        [
+          "connect",
+          true
+        ],
+        [
+          "connect",
+          true
+        ],
+        [
+          "update_node",
+          true
+        ],
+        [
+          "ask_user",
+          true
+        ]
+      ]
+    },
+    {
+      "ask_user": null,
+      "events": [
+        "user_message",
+        "tool_call",
+        "tool_result",
+        "graph_patch",
+        "tool_call",
+        "tool_result",
+        "graph_patch",
+        "tool_call",
+        "tool_result",
+        "tool_call",
+        "tool_result",
+        "test_result",
+        "done"
+      ],
+      "market_suggestion": null,
+      "ops": [
+        "update_node",
+        "update_node"
+      ],
+      "test_status": "succeeded",
+      "tools": [
+        [
+          "update_node",
+          true
+        ],
+        [
+          "update_node",
+          true
+        ],
+        [
+          "validate",
+          true
+        ],
+        [
+          "run_test",
+          true
+        ]
+      ]
+    }
+  ]
+}

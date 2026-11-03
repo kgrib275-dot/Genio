@@ -1,0 +1,70 @@
+{
+  "version": 1,
+  "nodes": [
+    {
+      "id": "n1",
+      "type": "input",
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "data": {
+        "label": "사용자 입력",
+        "fields": [
+          {
+            "key": "message",
+            "label": "오늘 한 일 메모",
+            "type": "text",
+            "required": true
+          },
+          {
+            "key": "author",
+            "label": "작성자",
+            "type": "text",
+            "required": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "n2",
+      "type": "llm",
+      "position": {
+        "x": 300,
+        "y": 0
+      },
+      "data": {
+        "label": "보고서 작성",
+        "provider": "default",
+        "temperature": 0.3,
+        "system": "업무 메모를 일일 보고서로 정리하세요. 항목: 완료, 진행 중, 이슈, 내일 할 일. 과장하지 말고 메모에 있는 내용만 쓰세요.",
+        "prompt": "작성자: {{n1.author}}\n메모:\n{{n1.message}}"
+      }
+    },
+    {
+      "id": "n3",
+      "type": "output",
+      "position": {
+        "x": 600,
+        "y": 0
+      },
+      "data": {
+        "label": "보고서",
+        "template": "{{n2.text}}"
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "e1",
+      "source": "n1",
+      "target": "n2"
+    },
+    {
+      "id": "e2",
+      "source": "n2",
+      "target": "n3"
+    }
+  ],
+  "variables": {}
+}

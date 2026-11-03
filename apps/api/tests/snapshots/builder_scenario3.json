@@ -1,0 +1,158 @@
+{
+  "final_status": "succeeded",
+  "graph": {
+    "edges": [
+      "n1->n3",
+      "n3->n4",
+      "n4->n5",
+      "n5->n6",
+      "n6->n2"
+    ],
+    "nodes": [
+      "n1:input",
+      "n2:output",
+      "n3:connector",
+      "n4:llm",
+      "n5:approval",
+      "n6:connector"
+    ]
+  },
+  "turns": [
+    {
+      "ask_user": null,
+      "events": [
+        "user_message",
+        "tool_call",
+        "tool_result",
+        "tool_call",
+        "tool_result",
+        "market_suggestion",
+        "done"
+      ],
+      "market_suggestion": "google_sheets",
+      "ops": [],
+      "test_status": null,
+      "tools": [
+        [
+          "list_available_nodes",
+          true
+        ],
+        [
+          "suggest_market_item",
+          true
+        ]
+      ]
+    },
+    {
+      "ask_user": null,
+      "events": [
+        "user_message",
+        "tool_call",
+        "tool_result",
+        "market_suggestion",
+        "done"
+      ],
+      "market_suggestion": "email",
+      "ops": [],
+      "test_status": null,
+      "tools": [
+        [
+          "suggest_market_item",
+          true
+        ]
+      ]
+    },
+    {
+      "ask_user": null,
+      "events": [
+        "user_message",
+        "tool_call",
+        "tool_result",
+        "tool_call",
+        "tool_result",
+        "graph_patch",
+        "tool_call",
+        "tool_result",
+        "graph_patch",
+        "tool_call",
+        "tool_result",
+        "graph_patch",
+        "tool_call",
+        "tool_result",
+        "graph_patch",
+        "tool_call",
+        "tool_result",
+        "graph_patch",
+        "tool_call",
+        "tool_result",
+        "graph_patch",
+        "tool_call",
+        "tool_result",
+        "tool_call",
+        "tool_result",
+        "test_result",
+        "done"
+      ],
+      "market_suggestion": null,
+      "ops": [
+        "update_node",
+        "add_node",
+        "remove_edge",
+        "add_edge",
+        "add_edge",
+        "add_node",
+        "remove_edge",
+        "add_edge",
+        "add_edge",
+        "add_node",
+        "remove_edge",
+        "add_edge",
+        "add_edge",
+        "add_node",
+        "remove_edge",
+        "add_edge",
+        "add_edge",
+        "update_node"
+      ],
+      "test_status": "waiting_approval",
+      "tools": [
+        [
+          "list_available_nodes",
+          true
+        ],
+        [
+          "update_node",
+          true
+        ],
+        [
+          "add_node",
+          true
+        ],
+        [
+          "add_node",
+          true
+        ],
+        [
+          "add_node",
+          true
+        ],
+        [
+          "add_node",
+          true
+        ],
+        [
+          "update_node",
+          true
+        ],
+        [
+          "validate",
+          true
+        ],
+        [
+          "run_test",
+          true
+        ]
+      ]
+    }
+  ]
+}

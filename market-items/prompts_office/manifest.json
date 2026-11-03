@@ -1,0 +1,16 @@
+{
+  "key": "prompts_office",
+  "type": "prompt_pack",
+  "name": "사무 문서 프롬프트 팩",
+  "summary": "회의록 정리, 보고서 초안, 메일 다듬기 프롬프트 모음.",
+  "version": "1.0.0",
+  "publisher": "platform",
+  "price": 1000,
+  "tags": [
+    "사무",
+    "보고서",
+    "메일",
+    "프롬프트"
+  ],
+  "permissions": []
+}
