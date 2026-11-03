@@ -19,7 +19,8 @@ DEFAULT_FEATURES: dict[str, Any] = {
     "annotation_reply": {"enabled": False, "score_threshold": 0.85},
     "speech": {"stt": False, "tts": False},
     "file_upload": {"enabled": False, "max_files": 3},
-    "memory": {"window": 6},
+    # v0.6: summary=True면 기억 창보다 오래된 대화를 AI가 요약해 함께 넘긴다
+    "memory": {"window": 6, "summary": False},
     # v0.4: 실패하면 실행할 앱(n8n Error Workflow). 같은 워크스페이스의 앱 id
     "on_failure": {"app_id": None},
     # v0.5: 상담원 전환(기능 정의서 S7). 이 말이 들어오거나 '상담원 연결'을 누르면 사람에게 넘긴다
@@ -60,6 +61,7 @@ def patch_features(saved: dict[str, Any] | None, patch: dict[str, Any]) -> dict[
         str(w) for w in current["moderation"]["keywords"] if str(w).strip()
     ][:200]
     current["memory"]["window"] = max(0, min(int(current["memory"]["window"] or 0), 20))
+    current["memory"]["summary"] = bool(current["memory"].get("summary"))
     current["file_upload"]["max_files"] = max(
         1, min(int(current["file_upload"]["max_files"] or 1), 10)
     )

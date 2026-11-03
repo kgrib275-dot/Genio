@@ -375,21 +375,35 @@ export function FeaturesForm({
         <FeatureRow
           icon={<History className="h-4 w-4" />}
           title="대화 기억"
-          description="최근 대화 몇 번을 AI에게 함께 보내요. 0이면 기억하지 않아요."
+          description="최근 대화 몇 번을 AI에게 함께 보내요. 0이면 기억하지 않아요. 요약을 켜면 그보다 오래된 대화는 AI가 짧게 요약해 함께 기억해요."
         >
-          <label className="flex items-center gap-3 text-xs text-slate-600">
-            <input
-              type="range"
-              min={0}
-              max={20}
-              aria-label="대화 기억 횟수"
-              className="flex-1 accent-indigo-600"
-              value={f.memory.window}
-              disabled={readOnly}
-              onChange={(e) => setF({ ...f, memory: { window: Number(e.target.value) } })}
-            />
-            <span className="w-12 text-right font-medium">{f.memory.window}번</span>
-          </label>
+          <div className="space-y-2">
+            <label className="flex items-center gap-3 text-xs text-slate-600">
+              <input
+                type="range"
+                min={0}
+                max={20}
+                aria-label="대화 기억 횟수"
+                className="flex-1 accent-indigo-600"
+                value={f.memory.window}
+                disabled={readOnly}
+                onChange={(e) =>
+                  setF({ ...f, memory: { ...f.memory, window: Number(e.target.value) } })
+                }
+              />
+              <span className="w-12 text-right font-medium">{f.memory.window}번</span>
+            </label>
+            <label className="flex items-center gap-2 text-sm">
+              <Toggle
+                checked={Boolean(f.memory.summary)}
+                label="오래된 대화 요약해서 기억"
+                disabled={readOnly || f.memory.window === 0}
+                onChange={(v) => setF({ ...f, memory: { ...f.memory, summary: v } })}
+              />
+              오래된 대화 요약해서 기억
+              <span className="text-xs text-slate-400">(AI 연결 필요, 대화 4개마다 요약)</span>
+            </label>
+          </div>
         </FeatureRow>
       </div>
     </Card>

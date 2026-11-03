@@ -4,8 +4,16 @@ from api.db import SessionLocal
 from api.engine.executor import execute_run
 from api.services.knowledge import process_document
 from api.services.limits import apply_retention, check_alerts
+from api.services.memory import summarize_conversation
 from api.services.triggers import dispatch_schedules
 from worker.celery_app import celery
+
+
+@celery.task(name="genio.summarize_conversation")  # type: ignore[untyped-decorator]
+def summarize_conversation_task(conversation_id: str) -> bool:
+    """v0.6: 기억 창보다 오래된 대화를 요약해 둔다(요약을 켠 앱만)."""
+    with SessionLocal() as db:
+        return summarize_conversation(db, conversation_id)
 
 
 @celery.task(name="genio.execute_run")  # type: ignore[untyped-decorator]

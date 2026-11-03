@@ -498,7 +498,8 @@ export interface AppFeatures {
   annotation_reply: { enabled: boolean; score_threshold: number };
   speech: { stt: boolean; tts: boolean };
   file_upload: { enabled: boolean; max_files: number };
-  memory: { window: number };
+  /** v0.6: summary=true면 기억 창보다 오래된 대화를 요약해 함께 넘긴다 */
+  memory: { window: number; summary?: boolean };
   /** v0.4: 실행이 실패하면 이 앱을 실행한다(n8n Error Workflow) */
   on_failure?: { app_id: string | null };
 }

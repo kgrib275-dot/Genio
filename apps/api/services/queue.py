@@ -11,6 +11,24 @@ from api.config import get_settings
 
 EXECUTE_RUN = "genio.execute_run"
 PROCESS_DOCUMENT = "genio.process_document"
+SUMMARIZE_CONVERSATION = "genio.summarize_conversation"
+
+
+def enqueue_summary(conversation_id: str) -> None:
+    """v0.6 대화 기억 요약(요약을 켠 앱만 실제로 AI를 부른다). 실패해도 대화에는 영향이 없다."""
+    if get_settings().genio_run_inline:
+        from api.db import SessionLocal
+        from api.services.memory import summarize_conversation
+
+        with SessionLocal() as db:
+            summarize_conversation(db, conversation_id)
+        return
+    try:
+        _client().send_task(SUMMARIZE_CONVERSATION, args=[conversation_id])
+    except Exception:  # 큐가 잠깐 안 돼도 답은 이미 저장됐다
+        import logging
+
+        logging.getLogger("genio.queue").warning("대화 요약 작업을 큐에 넣지 못함")
 
 
 @lru_cache

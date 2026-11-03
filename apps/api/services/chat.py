@@ -275,6 +275,9 @@ def _save_reply(db: Session, conv_id: str, text: str, started: float, **extra: A
     )
     db.add(m)
     db.commit()
+    from api.services.queue import enqueue_summary
+
+    enqueue_summary(conv_id)
     return m
 
 
@@ -400,7 +403,9 @@ def _start_run(
     file_field = next((f["key"] for f in fields if f["type"] == "file"), None)
     if files and file_field:
         run_input.setdefault(str(file_field), files[0] if len(files) == 1 else files)
-    run_input["history"] = "\n".join(f"{m.role}: {m.content}" for m in prior) if window else ""
+    from api.services.memory import history_text
+
+    run_input["history"] = history_text(conv, prior) if window else ""
     run_input["__conv"] = dict(conv.variables or {})
     run = Run(
         app_id=app.id,

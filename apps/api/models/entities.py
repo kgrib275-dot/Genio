@@ -212,6 +212,9 @@ class Conversation(Base):
     assigned_to: Mapped[str | None] = mapped_column(
         ForeignKey("users.id", name="conversations_assigned_to_fkey"), nullable=True
     )
+    # v0.6: 기억 창보다 오래된 대화의 요약과, 요약에 들어간 마지막 메시지 시각
+    summary: Mapped[str] = mapped_column(Text, default="", server_default="")
+    summary_upto: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = _created()
 
 
