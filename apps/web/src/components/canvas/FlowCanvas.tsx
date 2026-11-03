@@ -1,7 +1,6 @@
 import {
   Background,
   Controls,
-  MiniMap,
   ReactFlow,
   ReactFlowProvider,
   useReactFlow,
@@ -19,8 +18,8 @@ import type { NodeType } from "@/lib/api/types";
 import { useCanvas } from "@/store/canvas";
 
 const nodeTypes = { genio: NodeView };
-// 글자가 읽히는 정도(0.5배) 아래로는 줄이지 않는다. 흐름이 길면 옆으로 끌어서 본다.
-const FIT_OPTIONS = { padding: 0.15, maxZoom: 1.1, minZoom: 0.5 };
+// 글자가 읽히는 정도(0.7배) 아래로는 줄이지 않는다. 흐름이 길면 옆으로 끌어서 본다.
+const FIT_OPTIONS = { padding: 0.15, maxZoom: 1, minZoom: 0.7 };
 
 function Inner({ specs, readOnly }: { specs: NodeType[]; readOnly?: boolean }) {
   const graph = useCanvas((s) => s.graph);
@@ -145,7 +144,6 @@ function Inner({ specs, readOnly }: { specs: NodeType[]; readOnly?: boolean }) {
     >
       <Background gap={16} />
       <Controls showInteractive={false} />
-      <MiniMap pannable zoomable className="!bg-white" nodeColor="#94a3b8" />
     </ReactFlow>
   );
 }

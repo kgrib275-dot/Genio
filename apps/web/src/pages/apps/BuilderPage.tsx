@@ -1,3 +1,4 @@
+import { ChevronDown, ChevronUp, Play, Plus, Save, ShieldCheck, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import { BuilderChat } from "@/components/builder-chat/BuilderChat";
@@ -58,8 +59,8 @@ export default function BuilderPage() {
   const [testOpen, setTestOpen] = useState(false);
   const [run, setRun] = useState<Run | null>(null);
   const [running, setRunning] = useState(false);
-  const [showPalette, setShowPalette] = useState(true);
-  const [logOpen, setLogOpen] = useState(true);
+  const [showPalette, setShowPalette] = useState(false);
+  const [logOpen, setLogOpen] = useState(false);
   const loadedFor = useRef<string>("");
   const abortRef = useRef<AbortController | null>(null);
   const readOnly = !canEdit(role);
@@ -160,74 +161,82 @@ export default function BuilderPage() {
         icon={app.data.icon}
         right={
           <>
-            <span className="text-xs text-slate-400">
-              {saving ? "저장 중…" : dirty ? "바뀐 내용 있음" : "작업본 저장됨"}
+            <span className="mr-1 flex items-center gap-1.5 text-xs text-slate-400">
+              <span
+                className={`h-1.5 w-1.5 rounded-full ${saving ? "animate-pulse bg-amber-400" : dirty ? "bg-amber-400" : "bg-emerald-500"}`}
+              />
+              {saving ? "저장 중…" : dirty ? "바뀐 내용 있음" : "자동 저장됨"}
             </span>
             <Button size="sm" variant="outline" onClick={() => void onValidate()}>
-              검사
+              <ShieldCheck className="h-3.5 w-3.5" /> 검사
             </Button>
             {!readOnly && (
               <Button
                 size="sm"
-                variant="secondary"
+                variant="outline"
                 disabled={saveVersion.isPending}
                 onClick={() => void onSaveVersion()}
               >
-                버전 저장
+                <Save className="h-3.5 w-3.5" /> 버전 저장
               </Button>
             )}
             {!readOnly && (
               <Button size="sm" onClick={() => setTestOpen(true)}>
-                ▶ 테스트 실행
+                <Play className="h-3.5 w-3.5" /> 테스트 실행
               </Button>
             )}
           </>
         }
       />
       {generalErrors.length > 0 && (
-        <div className="border-b border-red-200 bg-red-50 px-4 py-1.5 text-xs text-red-800">
+        <div className="border-b border-red-200 bg-red-50 px-4 py-2 text-xs text-red-800">
           {generalErrors.join(" · ")}
         </div>
       )}
       <div className="flex min-h-0 flex-1">
         {!readOnly && (
-          <section className="w-[40%] min-w-[320px] max-w-[560px] border-r border-slate-200">
+          <section className="w-[380px] shrink-0 border-r border-slate-200">
             <BuilderChat appId={appId} />
           </section>
         )}
         <section className="flex min-w-0 flex-1 flex-col">
           <div className="relative flex min-h-0 flex-1">
-            {!readOnly && showPalette && (
-              <aside className="w-40 shrink-0 overflow-y-auto border-r border-slate-200 bg-slate-50">
-                <NodePalette
-                  types={specs}
-                  onAdd={(t) => {
-                    const n = graph.nodes.length;
-                    useCanvas
-                      .getState()
-                      .addNode(
-                        t.type,
-                        { x: 80 + (n % 4) * 260, y: 60 + Math.floor(n / 4) * 160 },
-                        defaultData(t),
-                      );
-                  }}
-                />
-              </aside>
-            )}
-            <div className="relative min-w-0 flex-1 bg-slate-100">
+            <div className="relative min-w-0 flex-1 bg-slate-50">
               {!readOnly && (
-                <button
-                  type="button"
-                  className="absolute left-2 top-2 z-10 rounded bg-white px-2 py-1 text-xs shadow"
-                  onClick={() => setShowPalette((v) => !v)}
-                >
-                  {showPalette ? "◀ 노드 목록 숨기기" : "▶ 노드 목록"}
-                </button>
+                <div className="absolute left-3 top-3 z-10">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="shadow-lift"
+                    onClick={() => setShowPalette((v) => !v)}
+                  >
+                    {showPalette ? <X className="h-3.5 w-3.5" /> : <Plus className="h-3.5 w-3.5" />}
+                    노드 추가
+                  </Button>
+                  {showPalette && (
+                    <div className="mt-2 w-72 rounded-xl border border-slate-200 bg-white shadow-lift">
+                      <NodePalette
+                        types={specs}
+                        onAdd={(t) => {
+                          const n = graph.nodes.length;
+                          useCanvas
+                            .getState()
+                            .addNode(
+                              t.type,
+                              { x: 80 + (n % 4) * 280, y: 60 + Math.floor(n / 4) * 170 },
+                              defaultData(t),
+                            );
+                          setShowPalette(false);
+                        }}
+                      />
+                    </div>
+                  )}
+                </div>
               )}
               <FlowCanvas specs={specs} readOnly={readOnly} />
             </div>
             {selected && (
-              <aside className="w-80 shrink-0 border-l border-slate-200 bg-white">
+              <aside className="w-[340px] shrink-0 border-l border-slate-200 bg-white">
                 <NodeSettingsPanel
                   node={selected}
                   spec={specs.find((s) => s.type === selected.type)}
@@ -246,13 +255,29 @@ export default function BuilderPage() {
             <button
               type="button"
               onClick={() => setLogOpen((v) => !v)}
-              className="flex w-full items-center justify-between px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50"
+              className="flex w-full items-center gap-2 px-4 py-2 text-xs font-medium text-slate-600 hover:bg-slate-50"
             >
               <span>실행 로그</span>
-              <span>{logOpen ? "▼" : "▲"}</span>
+              {run && (
+                <span className="text-slate-400">
+                  ·{" "}
+                  {{
+                    queued: "대기",
+                    running: "실행 중",
+                    succeeded: "성공",
+                    failed: "실패",
+                    waiting_approval: "승인 대기",
+                  }[run.status] ?? run.status}
+                </span>
+              )}
+              {logOpen ? (
+                <ChevronDown className="ml-auto h-4 w-4" />
+              ) : (
+                <ChevronUp className="ml-auto h-4 w-4" />
+              )}
             </button>
             {logOpen && (
-              <div className="max-h-56 overflow-y-auto">
+              <div className="max-h-64 overflow-y-auto border-t border-slate-100">
                 <RunPanel run={run} steps={stepList} nodes={graph.nodes} />
               </div>
             )}

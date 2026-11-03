@@ -4,7 +4,7 @@ import { cn } from "@/lib/cn";
 export function Card({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
   return (
     <div
-      className={cn("rounded-lg border border-slate-200 bg-white shadow-sm", className)}
+      className={cn("rounded-xl border border-slate-200/80 bg-white shadow-card", className)}
       {...props}
     />
   );
@@ -20,9 +20,9 @@ export function CardHeader({
   action?: ReactNode;
 }) {
   return (
-    <div className="flex items-start justify-between gap-4 border-b border-slate-100 px-5 py-4">
+    <div className="flex items-start justify-between gap-4 px-5 pb-3 pt-5">
       <div>
-        <h2 className="text-base font-semibold text-slate-900">{title}</h2>
+        <h2 className="text-[15px] font-semibold text-slate-900">{title}</h2>
         {description && <p className="mt-0.5 text-sm text-slate-500">{description}</p>}
       </div>
       {action}
@@ -31,7 +31,7 @@ export function CardHeader({
 }
 
 export function CardBody({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
-  return <div className={cn("px-5 py-4", className)} {...props} />;
+  return <div className={cn("px-5 pb-5 pt-1", className)} {...props} />;
 }
 
 export function PageHeader({
@@ -46,7 +46,7 @@ export function PageHeader({
   return (
     <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
       <div>
-        <h1 className="text-2xl font-bold text-slate-900">{title}</h1>
+        <h1 className="text-2xl font-bold tracking-tight text-slate-900">{title}</h1>
         {description && <p className="mt-1 text-sm text-slate-500">{description}</p>}
       </div>
       {action}
@@ -54,9 +54,10 @@ export function PageHeader({
   );
 }
 
-export function Empty({ children }: { children: ReactNode }) {
+export function Empty({ children, icon }: { children: ReactNode; icon?: ReactNode }) {
   return (
-    <div className="rounded-lg border border-dashed border-slate-300 px-6 py-10 text-center text-sm text-slate-500">
+    <div className="flex flex-col items-center gap-2 rounded-xl border border-dashed border-slate-300 bg-white/60 px-6 py-12 text-center text-sm text-slate-500">
+      {icon && <div className="text-slate-300">{icon}</div>}
       {children}
     </div>
   );

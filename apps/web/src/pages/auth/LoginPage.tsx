@@ -1,21 +1,15 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { ErrorBox } from "@/components/ErrorBox";
 import { Button } from "@/components/ui/button";
 import { Field, Input } from "@/components/ui/input";
+import { ko } from "@/i18n/ko";
 import { useDemoAccounts, useLogin } from "@/lib/api/auth";
-
-const ROLE_KO: Record<string, string> = {
-  owner: "소유자",
-  admin: "관리자",
-  builder: "빌더",
-  operator: "운영자",
-  member: "멤버",
-};
-// 한/영 키가 한글일 때 들어가는 글자(자모·완성형)
-const HANGUL = /[ᄀ-ᇿ㄰-㆏가-힣]/;
 import { safeNext } from "@/lib/nav";
 import { AuthShell } from "@/pages/auth/AuthShell";
+
+// 한/영 키가 한글일 때 들어가는 글자(자모·완성형)
+const HANGUL = /[ᄀ-ᇿ㄰-㆏가-힣]/;
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -24,6 +18,11 @@ export default function LoginPage() {
   const demo = useDemoAccounts();
   const navigate = useNavigate();
   const koreanInPassword = HANGUL.test(password);
+
+  // 비밀번호를 치는 동안 로그인 뒤 첫 화면 코드를 미리 받아 둔다
+  useEffect(() => {
+    void import("@/pages/dashboard/DashboardPage");
+  }, []);
   const [params] = useSearchParams();
 
   const submit = (e: FormEvent) => {
@@ -83,7 +82,7 @@ export default function LoginPage() {
                   setPassword(demo.data?.password ?? "");
                 }}
               >
-                {ROLE_KO[a.role] ?? a.role}
+                {ko.roles[a.role as keyof typeof ko.roles] ?? a.role}
               </Button>
             ))}
           </div>

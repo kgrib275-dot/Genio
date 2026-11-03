@@ -1,5 +1,7 @@
 import { Handle, Position, type Node, type NodeProps } from "@xyflow/react";
 import { StatusBadge } from "@/components/ui/badge";
+import { NodeIcon } from "@/components/canvas/NodeIcon";
+import { toneOf } from "@/components/canvas/nodeStyle";
 import { conditionHandles } from "@/components/canvas/nodeUtils";
 import type { GraphNode, NodeType, RunStep } from "@/lib/api/types";
 import { cn } from "@/lib/cn";
@@ -13,26 +15,6 @@ export interface GenioNodeData extends Record<string, unknown> {
 }
 
 export type GenioFlowNode = Node<GenioNodeData, "genio">;
-
-const CATEGORY_COLOR: Record<string, string> = {
-  기본: "border-l-slate-500",
-  AI: "border-l-violet-500",
-  흐름: "border-l-amber-500",
-  연동: "border-l-sky-500",
-  고급: "border-l-emerald-600",
-};
-
-const TYPE_ICON: Record<string, string> = {
-  input: "⌨️",
-  output: "📤",
-  llm: "✨",
-  condition: "🔀",
-  http: "🌐",
-  code: "🧩",
-  knowledge_search: "📚",
-  connector: "🔌",
-  approval: "✅",
-};
 
 function summary(node: GraphNode): string {
   const d = node.data;
@@ -65,32 +47,36 @@ export function NodeView({ data, selected }: NodeProps<GenioFlowNode>) {
     <div
       data-testid={`node-${node.id}`}
       className={cn(
-        "w-56 rounded-md border border-l-4 bg-white text-left shadow-sm transition-shadow",
-        CATEGORY_COLOR[spec?.category ?? ""] ?? "border-l-slate-400",
-        hasErrors ? "border-red-500 ring-2 ring-red-300" : "border-slate-200",
-        selected && !hasErrors && "ring-2 ring-indigo-400",
+        "relative w-60 overflow-hidden rounded-xl border bg-white text-left shadow-card transition-shadow hover:shadow-lift",
+        hasErrors ? "border-red-400 ring-2 ring-red-200" : "border-slate-200",
+        selected && !hasErrors && "border-indigo-400 ring-4 ring-indigo-500/15",
         highlighted && "genio-highlight",
       )}
     >
+      <span className={cn("absolute inset-y-0 left-0 w-1", toneOf(spec?.category).bar)} />
       {node.type !== "input" && (
-        <Handle type="target" position={Position.Left} className="!h-3 !w-3 !bg-slate-400" />
+        <Handle
+          type="target"
+          position={Position.Left}
+          className="!h-3 !w-3 !border-2 !border-white !bg-slate-400"
+        />
       )}
-      <div className="px-3 py-2">
-        <div className="flex items-center gap-1.5">
-          <span aria-hidden>{TYPE_ICON[node.type] ?? "🔧"}</span>
-          <span className="truncate text-sm font-semibold text-slate-900">{label}</span>
-          {step && (
-            <span className="ml-auto">
-              <StatusBadge status={step.status} />
-            </span>
-          )}
+      <div className="py-2.5 pl-4 pr-3">
+        <div className="flex items-center gap-2.5">
+          <NodeIcon type={node.type} category={spec?.category} />
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-[13px] font-semibold text-slate-900">{label}</p>
+            <p className="truncate text-[11px] text-slate-400">{spec?.label ?? node.type}</p>
+          </div>
+          {step && <StatusBadge status={step.status} />}
         </div>
-        <p className="mt-0.5 text-[11px] text-slate-400">
-          {node.id} · {spec?.label ?? node.type}
-        </p>
-        {summary(node) && <p className="mt-1 truncate text-xs text-slate-600">{summary(node)}</p>}
+        {summary(node) && (
+          <p className="mt-2 truncate rounded-md bg-slate-50 px-2 py-1 font-mono text-[11px] text-slate-500">
+            {summary(node)}
+          </p>
+        )}
         {hasErrors && (
-          <ul className="mt-1 space-y-0.5">
+          <ul className="mt-2 space-y-0.5">
             {errors?.map((e, i) => (
               <li key={i} className="text-[11px] leading-snug text-red-600">
                 {e}
@@ -101,14 +87,17 @@ export function NodeView({ data, selected }: NodeProps<GenioFlowNode>) {
         {isCondition && (
           <div className="mt-2 space-y-1">
             {handles.map((h) => (
-              <div key={h} className="relative pr-3 text-right text-[11px] text-amber-700">
+              <div
+                key={h}
+                className="relative rounded-md bg-amber-50 px-2 py-0.5 text-right text-[11px] font-medium text-amber-800"
+              >
                 {h}
                 <Handle
                   type="source"
                   id={h}
                   position={Position.Right}
-                  className="!h-2.5 !w-2.5 !bg-amber-500"
-                  style={{ top: "50%", right: -16 }}
+                  className="!h-2.5 !w-2.5 !border-2 !border-white !bg-amber-500"
+                  style={{ top: "50%", right: -14 }}
                 />
               </div>
             ))}
@@ -116,7 +105,11 @@ export function NodeView({ data, selected }: NodeProps<GenioFlowNode>) {
         )}
       </div>
       {!isCondition && node.type !== "output" && (
-        <Handle type="source" position={Position.Right} className="!h-3 !w-3 !bg-indigo-500" />
+        <Handle
+          type="source"
+          position={Position.Right}
+          className="!h-3 !w-3 !border-2 !border-white !bg-indigo-500"
+        />
       )}
     </div>
   );

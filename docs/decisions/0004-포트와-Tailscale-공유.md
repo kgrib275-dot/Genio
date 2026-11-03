@@ -23,3 +23,8 @@
 ## 영향
 - 공유받는 사람은 같은 tailnet에 있거나, Tailscale 관리 화면에서 이 기기를 공유(Share)받아야 한다.
 - 공유 해제: `tailscale serve --https=9443 off`
+
+## 추가 결정 (2026-11-03): genio 주소
+- 사용자 요청으로 주소에 Genio가 보이게 한다. 이 PC 이름을 바꾸면 기존 서비스 3개의 주소도 바뀌므로 바꾸지 않는다.
+- 대신 docker-compose에 Tailscale 컨테이너(`tailscale/tailscale`, hostname `genio`, userspace 모드)를 두고, 그 안의 serve가 `web:5190`으로 넘긴다. 주소: https://genio.tail6bd481.ts.net
+- 처음 한 번 tailnet 관리자 로그인 승인이 필요하다. 상태는 `tsstate` 볼륨에 남아 재시작해도 유지된다.

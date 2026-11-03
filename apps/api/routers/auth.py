@@ -12,7 +12,13 @@ from sqlalchemy.orm import Session
 from api.config import get_settings
 from api.core.audit import audit
 from api.core.errors import AppError, not_found
-from api.core.security import create_tokens, decode_token, hash_password, verify_password
+from api.core.security import (
+    create_tokens,
+    decode_token,
+    hash_password,
+    needs_rehash,
+    verify_password,
+)
 from api.deps import CurrentUser, DbDep
 from api.models import Invitation, Membership, Organization, User, Workspace
 from api.services.apps import slugify
@@ -85,6 +91,9 @@ def login(body: LoginIn, db: DbDep) -> dict[str, str]:
             "이메일 또는 비밀번호가 맞지 않아요.",
             "한/영 키가 한글로 되어 있지 않은지, 이메일에 빈칸이 없는지 확인하고 다시 시도하세요.",
         )
+    if needs_rehash(user.password_hash):
+        user.password_hash = hash_password(body.password)
+        db.commit()
     return create_tokens(user.id)
 
 

@@ -8,6 +8,8 @@ x-backend-env: &backend-env
   CELERY_RESULT_BACKEND: redis://redis:6379/2
   PYTHONPATH: /app/apps:/app/packages
   MARKET_ITEMS_DIR: /app/market-items
+  # Docker Desktop(Windows) 바인드 마운트는 변경 알림이 없어서 자동 재시작을 폴링으로 감시
+  WATCHFILES_FORCE_POLLING: "true"
 
 x-backend-common: &backend-common
   build:
@@ -79,21 +81,35 @@ services:
         condition: service_healthy
 
   web:
+    # 배포용 빌드를 nginx로 서빙(빠른 첫 화면). 개발 중 바로 반영하려면 apps/web에서 npm run dev(5190, API 8190 프록시).
     build:
       context: apps/web
       dockerfile: Dockerfile
-    environment:
-      VITE_API_PROXY: http://api:8000
-      VITE_USE_POLLING: "1"
     ports:
       - "127.0.0.1:5190:5190"
-    volumes:
-      - ./apps/web:/app
-      - web_node_modules:/app/node_modules
     depends_on:
       - api
     restart: unless-stopped
 
+  # Tailscale에 "genio"라는 기기로 올려 https://genio.<tailnet>.ts.net 주소로 공유(ADR 0004)
+  # 처음 한 번: docker compose logs tailscale 에 나오는 로그인 링크로 승인하거나 .env에 TS_AUTHKEY를 둔다.
+  tailscale:
+    image: tailscale/tailscale:v1.80.3
+    hostname: genio
+    environment:
+      TS_HOSTNAME: genio
+      TS_STATE_DIR: /var/lib/tailscale
+      TS_SERVE_CONFIG: /config/serve.json
+      TS_USERSPACE: "true"
+      TS_AUTHKEY: ${TS_AUTHKEY:-}
+      TS_AUTH_ONCE: "true"
+    volumes:
+      - tsstate:/var/lib/tailscale
+      - ./deploy/tailscale:/config:ro
+    depends_on:
+      - web
+    restart: unless-stopped
+
 volumes:
   pgdata:
-  web_node_modules:
+  tsstate:

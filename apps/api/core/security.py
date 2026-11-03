@@ -12,8 +12,21 @@ from api.config import get_settings
 ALGORITHM = "HS256"
 
 
+# bcrypt 강도. 10은 OWASP 최소 권장치이고, 12(기본)보다 약 4배 빨라 로그인이 빠르다.
+BCRYPT_ROUNDS = 10
+
+
 def hash_password(password: str) -> str:
-    return bcrypt.hashpw(password.encode("utf-8")[:72], bcrypt.gensalt()).decode("ascii")
+    salt = bcrypt.gensalt(rounds=BCRYPT_ROUNDS)
+    return bcrypt.hashpw(password.encode("utf-8")[:72], salt).decode("ascii")
+
+
+def needs_rehash(password_hash: str) -> bool:
+    """저장된 해시의 강도가 지금 설정과 다르면 True(로그인 성공 시 다시 저장)."""
+    try:
+        return int(password_hash.split("$")[2]) != BCRYPT_ROUNDS
+    except (IndexError, ValueError):
+        return True
 
 
 def verify_password(password: str, password_hash: str) -> bool:

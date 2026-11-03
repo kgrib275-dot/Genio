@@ -435,3 +435,26 @@ def test_demo_accounts_only_in_demo_mode(
     data = client.get("/api/v1/auth/demo-accounts").json()
     assert data["enabled"] and len(data["accounts"]) == 5
     assert data["password"] == DEMO_PASSWORD
+
+
+def test_old_password_hash_upgraded_on_login(client: TestClient, team: Team) -> None:
+    import bcrypt
+
+    from api.core.security import BCRYPT_ROUNDS
+    from api.db import SessionLocal
+    from api.models import User
+
+    with SessionLocal() as db:
+        u = db.get(User, team.users["admin"])
+        assert u is not None
+        u.password_hash = bcrypt.hashpw(b"password123!", bcrypt.gensalt(12)).decode()
+        db.commit()
+    assert (
+        client.post(
+            "/api/v1/auth/login", json={"email": "admin@test.local", "password": "password123!"}
+        ).status_code
+        == 200
+    )
+    with SessionLocal() as db:
+        u = db.get(User, team.users["admin"])
+        assert u is not None and u.password_hash.startswith(f"$2b${BCRYPT_ROUNDS}$")

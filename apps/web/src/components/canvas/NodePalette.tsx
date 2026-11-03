@@ -1,3 +1,6 @@
+import { Search } from "lucide-react";
+import { useState } from "react";
+import { NodeIcon } from "@/components/canvas/NodeIcon";
 import type { NodeType } from "@/lib/api/types";
 
 export const DRAG_TYPE = "application/genio-node";
@@ -9,39 +12,68 @@ export function NodePalette({
   types: NodeType[];
   onAdd: (type: NodeType) => void;
 }) {
+  const [q, setQ] = useState("");
+  const filtered = types.filter(
+    (t) => !q || t.label.includes(q) || t.description.includes(q) || t.type.includes(q),
+  );
   const groups = new Map<string, NodeType[]>();
-  for (const t of types) groups.set(t.category, [...(groups.get(t.category) ?? []), t]);
+  for (const t of filtered) groups.set(t.category, [...(groups.get(t.category) ?? []), t]);
   return (
-    <div className="space-y-3 p-3">
-      <p className="text-xs text-slate-500">끌어다 놓거나 눌러서 추가해요.</p>
-      {[...groups.entries()].map(([cat, list]) => (
-        <div key={cat}>
-          <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-            {cat}
-          </p>
-          <div className="space-y-1">
-            {list.map((t) => (
-              <button
-                key={t.type}
-                type="button"
-                draggable
-                onDragStart={(e) => {
-                  e.dataTransfer.setData(DRAG_TYPE, t.type);
-                  e.dataTransfer.effectAllowed = "move";
-                }}
-                onClick={() => onAdd(t)}
-                title={t.description}
-                className="w-full rounded border border-slate-200 bg-white px-2 py-1.5 text-left text-xs hover:border-indigo-300 hover:bg-indigo-50"
-              >
-                <span className="font-medium">{t.label}</span>
-                {t.source === "market" && (
-                  <span className="ml-1 text-[10px] text-indigo-500">마켓</span>
-                )}
-              </button>
-            ))}
-          </div>
+    <div className="flex max-h-[70vh] flex-col">
+      <div className="border-b border-slate-100 p-2">
+        <div className="flex items-center gap-2 rounded-lg bg-slate-100 px-2.5 py-1.5">
+          <Search className="h-3.5 w-3.5 text-slate-400" />
+          <input
+            autoFocus
+            aria-label="노드 검색"
+            placeholder="노드 검색"
+            className="w-full bg-transparent text-sm placeholder:text-slate-400 focus:outline-none"
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+          />
         </div>
-      ))}
+        <p className="mt-1.5 px-1 text-[11px] text-slate-400">
+          눌러서 추가하거나 캔버스로 끌어 놓으세요.
+        </p>
+      </div>
+      <div className="space-y-3 overflow-y-auto p-2">
+        {[...groups.entries()].map(([cat, list]) => (
+          <div key={cat}>
+            <p className="mb-1 px-1 text-[11px] font-semibold text-slate-400">{cat}</p>
+            <div className="space-y-0.5">
+              {list.map((t) => (
+                <button
+                  key={t.type}
+                  type="button"
+                  draggable
+                  onDragStart={(e) => {
+                    e.dataTransfer.setData(DRAG_TYPE, t.type);
+                    e.dataTransfer.effectAllowed = "move";
+                  }}
+                  onClick={() => onAdd(t)}
+                  className="flex w-full items-start gap-2.5 rounded-lg px-2 py-1.5 text-left hover:bg-slate-100"
+                >
+                  <NodeIcon type={t.type} category={t.category} size="sm" />
+                  <span className="min-w-0">
+                    <span className="block text-[13px] font-medium text-slate-800">
+                      {t.label}
+                      {t.source === "market" && (
+                        <span className="ml-1 text-[10px] font-normal text-pink-500">마켓</span>
+                      )}
+                    </span>
+                    <span className="line-clamp-2 block text-[11px] leading-snug text-slate-500">
+                      {t.description}
+                    </span>
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
+        ))}
+        {filtered.length === 0 && (
+          <p className="p-3 text-center text-xs text-slate-400">찾는 노드가 없어요.</p>
+        )}
+      </div>
     </div>
   );
 }

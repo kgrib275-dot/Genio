@@ -1,5 +1,8 @@
+import { twMerge } from "tailwind-merge";
+
+/** 클래스를 합친다. 뒤에 준 클래스가 앞의 같은 종류(w-, h-, p- 등)를 덮어쓴다. */
 export function cn(...parts: (string | false | null | undefined)[]): string {
-  return parts.filter(Boolean).join(" ");
+  return twMerge(parts.filter(Boolean).join(" "));
 }
 
 export function formatDate(iso: string | null | undefined): string {
@@ -27,4 +30,15 @@ export async function copyText(text: string): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+/** '3분 전' 같은 상대 시간 */
+export function timeAgo(iso: string | null | undefined): string {
+  if (!iso) return "";
+  const diff = (Date.now() - new Date(iso).getTime()) / 1000;
+  if (diff < 60) return "방금";
+  if (diff < 3600) return `${Math.floor(diff / 60)}분 전`;
+  if (diff < 86400) return `${Math.floor(diff / 3600)}시간 전`;
+  if (diff < 86400 * 7) return `${Math.floor(diff / 86400)}일 전`;
+  return new Date(iso).toLocaleDateString("ko-KR");
 }

@@ -1,3 +1,4 @@
+import { Avatar } from "@/components/AppIcon";
 import { useState, type FormEvent } from "react";
 import { PageContainer } from "@/app/Layout";
 import { JsonView } from "@/components/canvas/RunPanel";
@@ -60,6 +61,7 @@ function MembersTab({ ws, manage }: { ws: string; manage: boolean }) {
           <ul className="divide-y divide-slate-100">
             {(members.data ?? []).map((m) => (
               <li key={m.id} className="flex items-center gap-3 px-5 py-3 text-sm">
+                <Avatar name={m.name} />
                 <div className="min-w-0 flex-1">
                   <p className="font-medium">{m.name}</p>
                   <p className="truncate text-xs text-slate-500">{m.email}</p>
@@ -67,7 +69,7 @@ function MembersTab({ ws, manage }: { ws: string; manage: boolean }) {
                 {manage ? (
                   <Select
                     aria-label={`${m.name} 역할`}
-                    className="w-32"
+                    className="w-28 shrink-0"
                     value={m.role}
                     onChange={(e) =>
                       update.mutate(
