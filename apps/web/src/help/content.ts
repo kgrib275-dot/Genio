@@ -18,7 +18,7 @@ export const HELP_SECTIONS: HelpSection[] = [
   {
     id: "learn",
     title: "배우기·샘플",
-    summary: "샘플 10가지를 넣고 강좌를 따라 하며 챗봇과 흐름 만드는 법을 익혀요.",
+    summary: "샘플 11가지를 넣고 강좌를 따라 하며 챗봇과 흐름 만드는 법을 익혀요.",
     blocks: [
       {
         type: "steps",

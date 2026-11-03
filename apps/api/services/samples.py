@@ -1,6 +1,6 @@
-"""처음 쓰는 사람이 따라 해 볼 샘플 10가지('샘플 체험' 프로젝트). 배우기 강좌(화면 /learn)와 짝을 이룬다.
+"""처음 쓰는 사람이 따라 해 볼 샘플 11가지('샘플 체험' 프로젝트). 배우기 강좌(화면 /learn)와 짝을 이룬다.
 
-AI 키 없이 돌아가는 것 7개(모범 답변·승인·데이터 표·예약·외부에서 받기·외부 호출·코드)와
+AI 키 없이 돌아가는 것 8개(모범 답변·승인·데이터 표·예약·외부에서 받기·외부 호출·코드·병렬 갈래)와
 AI 키를 넣으면 돌아가는 것 3개(지식베이스 Q&A·문의 분류·회의록 요약)로 이뤄진다.
 한 워크스페이스에 한 번만 넣는다(workspace.settings["samples_version"]).
 """
@@ -31,7 +31,8 @@ from api.services.app_config import merged_features
 from api.services.queue import enqueue_document
 
 log = logging.getLogger("genio.samples")
-SAMPLES_VERSION = 1
+# 2: ⑪ 병렬 갈래 샘플(v0.6)
+SAMPLES_VERSION = 2
 PROJECT_NAME = "샘플 체험"
 
 
@@ -57,7 +58,8 @@ def _field(key: str, label: str, ftype: str = "text", required: bool = False) ->
 
 def status(db: Session, ws_id: str) -> dict[str, Any]:
     ws = db.get(Workspace, ws_id)
-    installed = bool(ws and (ws.settings or {}).get("samples_version"))
+    version = int((ws.settings or {}).get("samples_version") or 0) if ws else 0
+    installed = version >= SAMPLES_VERSION
     project = db.scalar(
         select(Project).where(Project.workspace_id == ws_id, Project.name == PROJECT_NAME)
     )
@@ -123,10 +125,12 @@ POLICY_DOCS = {
 
 
 def install(db: Session, ws_id: str, user_id: str) -> dict[str, Any]:
-    """샘플 10가지를 넣는다. 이미 넣었으면 409."""
+    """샘플 11가지를 넣는다. 예전 버전이 있으면 새 샘플만 더하고, 최신이면 409."""
     ws = db.get(Workspace, ws_id)
     if ws is None:
         raise AppError(404, "워크스페이스를 찾을 수 없어요.", "목록에서 다시 골라 주세요.")
+    if upgrade(db, ws_id, user_id):
+        return status(db, ws_id)
     if (ws.settings or {}).get("samples_version"):
         raise AppError(
             409,
@@ -136,7 +140,7 @@ def install(db: Session, ws_id: str, user_id: str) -> dict[str, Any]:
     project = Project(
         workspace_id=ws_id,
         name=PROJECT_NAME,
-        description="처음 쓰는 사람이 따라 해 보는 샘플 10가지. 배우기 메뉴의 강좌와 짝을 이뤄요.",
+        description="처음 쓰는 사람이 따라 해 보는 샘플 11가지. 배우기 메뉴의 강좌와 짝을 이뤄요.",
         color="amber",
         visibility="workspace",
         created_by=user_id,
@@ -1110,6 +1114,7 @@ def install(db: Session, ws_id: str, user_id: str) -> dict[str, Any]:
             created_by=user_id,
         )
     )
+    add_parallel_sample(db, ws_id, user_id, pid)
     ws.settings = {**(ws.settings or {}), "samples_version": SAMPLES_VERSION}
     db.commit()
     for d in docs:
@@ -1118,3 +1123,157 @@ def install(db: Session, ws_id: str, user_id: str) -> dict[str, Any]:
         except Exception:
             log.warning("샘플 문서 처리 예약 실패(doc=%s)", d.id)
     return status(db, ws_id)
+
+
+# ---------------- v0.6: ⑪ 병렬 갈래 ----------------
+PARALLEL_SAMPLE = "⑪ 출장 준비 한 번에(병렬 갈래)"
+
+
+def parallel_graph() -> dict[str, Any]:
+    """입력 → [환율 조회 | 돌아오는 날 계산 | 체크리스트] 동시에 → 합치기 → 결과."""
+    return _graph(
+        [
+            _n(
+                "n1",
+                "input",
+                0,
+                160,
+                {
+                    "label": "출장 정보",
+                    "fields": [
+                        _field("city", "도시", required=True),
+                        _field("currency", "통화(USD·EUR·JPY)", required=True),
+                        _field("start", "출발일(예: 2026-12-01)", required=True),
+                        _field("days", "며칠", "number", required=True),
+                    ],
+                },
+            ),
+            _n(
+                "fx",
+                "http",
+                340,
+                0,
+                {
+                    "label": "환율 가져오기",
+                    "method": "GET",
+                    "url": "https://api.frankfurter.dev/v1/latest?base={{n1.currency}}&symbols=KRW",
+                    "_on_error": "default",
+                    "_default": {"body": {"rates": {"KRW": "(못 가져옴)"}}},
+                },
+            ),
+            _n(
+                "back",
+                "date_time",
+                340,
+                160,
+                {
+                    "label": "돌아오는 날",
+                    "operation": "add",
+                    "value": "{{n1.start}}",
+                    "amount": "{{n1.days}}",
+                    "unit": "days",
+                    "format": "korean",
+                },
+            ),
+            _n(
+                "list",
+                "template",
+                340,
+                320,
+                {
+                    "label": "체크리스트",
+                    "template": "여권·충전기·{{n1.city}} 날씨에 맞는 옷·법인카드·출장 신청서",
+                },
+            ),
+            _n(
+                "join",
+                "template",
+                680,
+                160,
+                {
+                    "label": "합치기",
+                    "template": (
+                        "{{n1.city}} 출장 준비\n"
+                        "- 환율: 1 {{n1.currency}} = {{fx.body.rates.KRW}}원\n"
+                        "- 돌아오는 날: {{back.result}}\n"
+                        "- 챙길 것: {{list.output}}"
+                    ),
+                },
+            ),
+            _n("out", "output", 1000, 160, {"label": "결과", "template": "{{join.output}}"}),
+        ],
+        [
+            _e("n1", "fx"),
+            _e("n1", "back"),
+            _e("n1", "list"),
+            _e("fx", "join"),
+            _e("back", "join"),
+            _e("list", "join"),
+            _e("join", "out"),
+        ],
+    )
+
+
+def add_parallel_sample(db: Session, ws_id: str, user_id: str, project_id: str) -> App:
+    graph = parallel_graph()
+    a = App(
+        workspace_id=ws_id,
+        name=PARALLEL_SAMPLE,
+        slug=app_svc.slugify(PARALLEL_SAMPLE),
+        type="workflow",
+        description=(
+            "한 단계에서 세 갈래(환율 조회·날짜 계산·체크리스트)로 나가 동시에 실행하고, "
+            "합치는 단계가 세 갈래를 모두 기다렸다가 한 번에 정리해요. AI 키 없이 동작해요."
+        ),
+        icon="🧳",
+        status="draft",
+        created_by=user_id,
+        draft_graph=graph,
+        project_id=project_id,
+        features=merged_features({}),
+        test_inputs=[
+            {
+                "name": "도쿄 3일",
+                "input": {"city": "도쿄", "currency": "JPY", "start": "2026-12-01", "days": 3},
+            }
+        ],
+    )
+    db.add(a)
+    db.flush()
+    v = app_svc.save_version(db, a, graph, "샘플", user_id)
+    db.flush()
+    a.status = "published"
+    db.add(
+        Deployment(
+            app_id=a.id,
+            version_id=v.id,
+            channel="share_link",
+            public_token=random_token(18),
+            access="public",
+            allowed_roles=[],
+            allowed_users=[],
+            appearance={},
+        )
+    )
+    return a
+
+
+def upgrade(db: Session, ws_id: str, user_id: str) -> bool:
+    """예전 버전 샘플이 들어 있는 워크스페이스에 새 샘플만 더한다(⑪)."""
+    ws = db.get(Workspace, ws_id)
+    if ws is None:
+        return False
+    current = int((ws.settings or {}).get("samples_version") or 0)
+    if current == 0 or current >= SAMPLES_VERSION:
+        return False
+    project = db.scalar(
+        select(Project).where(Project.workspace_id == ws_id, Project.name == PROJECT_NAME)
+    )
+    if project is None:
+        return False
+    exists = db.scalar(select(App).where(App.project_id == project.id, App.name == PARALLEL_SAMPLE))
+    if exists is None:
+        add_parallel_sample(db, ws_id, user_id, project.id)
+    ws.settings = {**(ws.settings or {}), "samples_version": SAMPLES_VERSION}
+    db.commit()
+    return True

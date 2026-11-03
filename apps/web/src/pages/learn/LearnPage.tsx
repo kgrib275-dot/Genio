@@ -203,12 +203,16 @@ export default function LearnPage() {
           <PackagePlus className="h-8 w-8 shrink-0 text-amber-500" />
           <div className="min-w-0 flex-1 text-sm">
             <p className="font-semibold text-slate-900">
-              {installed ? "샘플 10가지가 들어 있어요" : "먼저 샘플 10가지를 넣어 주세요"}
+              {installed
+                ? "샘플 11가지가 들어 있어요"
+                : status.data?.apps.length
+                  ? "새 샘플이 생겼어요(⑪ 병렬 갈래)"
+                  : "먼저 샘플 11가지를 넣어 주세요"}
             </p>
             <p className="text-slate-500">
               {installed
                 ? "왼쪽 메뉴 프로젝트 > '샘플 체험'에 있어요. 마음껏 고쳐 보고, 망가지면 새 워크스페이스에 다시 넣으면 돼요."
-                : "앱 10개(7개는 AI 키 없이 동작), 데이터 표 3개, 사내 규정 지식베이스가 '샘플 체험' 프로젝트로 들어가요."}
+                : "앱 11개(8개는 AI 키 없이 동작), 데이터 표 3개, 사내 규정 지식베이스가 '샘플 체험' 프로젝트로 들어가요. 이미 넣었다면 새 샘플만 더해요."}
             </p>
             <p className="mt-1 text-xs text-slate-400">
               진도 {done.length}/{LESSONS.length}

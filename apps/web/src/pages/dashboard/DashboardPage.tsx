@@ -554,7 +554,7 @@ function LearnBanner() {
       <div className="min-w-0 flex-1 text-sm">
         <p className="font-semibold text-slate-900">처음이세요? 샘플로 10분 만에 배워 보세요</p>
         <p className="text-slate-600">
-          자주 묻는 질문 봇, 휴가 승인, 주문 접수 같은 샘플 10가지를 열어 따라 하는 강좌가 있어요.
+          자주 묻는 질문 봇, 휴가 승인, 주문 접수 같은 샘플 11가지를 열어 따라 하는 강좌가 있어요.
         </p>
       </div>
       <div className="flex shrink-0 gap-2">

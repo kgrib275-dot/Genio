@@ -1,4 +1,4 @@
-"""샘플 10가지: 넣기(한 번만), 권한, 그리고 AI 키 없이 도는 샘플은 실제로 끝까지 실행되는지."""
+"""샘플 11가지: 넣기(한 번만), 권한, 그리고 AI 키 없이 도는 샘플은 실제로 끝까지 실행되는지."""
 
 from typing import Any
 
@@ -30,7 +30,7 @@ def test_install_once_and_permissions(client: TestClient, team: Team) -> None:
         assert client.post(url, headers=team.h(role)).status_code == 403
     out = client.post(url, headers=team.h("builder"))
     assert out.status_code == 201
-    assert len(out.json()["apps"]) == 10
+    assert len(out.json()["apps"]) == 11
     again = client.post(url, headers=team.h("admin"))
     assert again.status_code == 409 and "샘플 체험" in again.json()["detail"]["hint"]
     tables = client.get(
@@ -91,3 +91,40 @@ def test_keyless_samples_run(
     assert d["status"] == "succeeded" and "잘 다녀오세요" in d["output"]["text"]
     # 문장 설명(S3)
     assert d["story"] and all(isinstance(x, str) for x in d["story"])
+
+
+def test_parallel_sample_and_upgrade(
+    client: TestClient, team: Team, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """v0.6 ⑪ 병렬 갈래 샘플: 세 갈래가 모두 합쳐지고, 예전(10가지) 워크스페이스에는 ⑪만 더해진다."""
+    from api.db import SessionLocal
+    from api.models import App, Workspace
+
+    url = f"/api/v1/workspaces/{team.ws}/samples"
+    client.post(url, headers=team.h("owner"))
+    # 예전 버전처럼 만든다: ⑪을 지우고 버전 1로
+    with SessionLocal() as db:
+        db.query(App).filter(App.name.startswith("⑪")).delete()
+        ws = db.get(Workspace, team.ws)
+        assert ws is not None
+        ws.settings = {**(ws.settings or {}), "samples_version": 1}
+        db.commit()
+    st = client.get(url, headers=team.h("member")).json()
+    assert st["installed"] is False and len(st["apps"]) == 10
+    up = client.post(url, headers=team.h("builder"))
+    assert up.status_code == 201 and len(up.json()["apps"]) == 11
+    assert client.post(url, headers=team.h("builder")).status_code == 409
+
+    def fake(method: str, url: str, **kw: Any) -> dict[str, Any]:
+        return {"status": 200, "headers": {}, "body": {"rates": {"KRW": 9.1}, "date": "2026-11-04"}}
+
+    monkeypatch.setattr(safe_http, "request", fake)
+    d = _run(
+        client,
+        team,
+        _apps(client, team)["⑪"]["id"],
+        {"city": "도쿄", "currency": "JPY", "start": "2026-12-01", "days": 3},
+    )
+    assert d["status"] == "succeeded", d["error"]
+    text = d["output"]["text"]
+    assert "1 JPY = 9.1원" in text and "2026년 12월 04일" in text and "여권" in text
