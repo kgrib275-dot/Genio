@@ -557,7 +557,7 @@ def test_admin_console(client: TestClient, team: Team) -> None:
     )
     sysset = client.patch(
         "/api/v1/admin/system",
-        json={"allow_signup": False, "show_demo_accounts": False},
+        json={"allow_signup": False},
         headers=team.h("builder"),
     ).json()
     assert sysset["allow_signup"] is False
@@ -568,7 +568,6 @@ def test_admin_console(client: TestClient, team: Team) -> None:
         ).status_code
         == 403
     )
-    assert client.get("/api/v1/auth/demo-accounts").json()["enabled"] is False
     logs = client.get(f"/api/v1/workspaces/{team.ws}/audit-logs", headers=team.h("admin")).json()
     actions = {entry["action"] for entry in logs}
     assert {

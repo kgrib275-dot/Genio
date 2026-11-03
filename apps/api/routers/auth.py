@@ -9,7 +9,6 @@ from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from api.config import get_settings
 from api.core.audit import audit
 from api.core.errors import AppError, not_found
 from api.core.security import (
@@ -23,7 +22,6 @@ from api.deps import CurrentUser, DbDep
 from api.models import Invitation, Membership, Organization, User, Workspace
 from api.services import system
 from api.services.apps import slugify
-from api.services.seed import DEMO_PASSWORD, DEMO_USERS
 
 router = APIRouter(tags=["auth"])
 
@@ -98,18 +96,6 @@ def login(body: LoginIn, db: DbDep) -> dict[str, str]:
         user.password_hash = hash_password(body.password)
         db.commit()
     return create_tokens(user.id)
-
-
-@router.get("/auth/demo-accounts")
-def demo_accounts(db: DbDep) -> dict[str, Any]:
-    """데모 모드이고 관리자가 숨기지 않았을 때만 로그인 화면에 보여 줄 공개 데모 계정."""
-    if not get_settings().genio_seed_demo or not system.get_system(db)["show_demo_accounts"]:
-        return {"enabled": False, "password": "", "accounts": []}
-    return {
-        "enabled": True,
-        "password": DEMO_PASSWORD,
-        "accounts": [{"email": e, "name": n, "role": r} for e, n, r in DEMO_USERS],
-    }
 
 
 @router.post("/auth/refresh")

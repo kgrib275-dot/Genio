@@ -1,16 +1,15 @@
-"""인스턴스 설정(회원가입 허용·데모 계정 표시)과 인스턴스 관리자 판별."""
+"""인스턴스 설정(회원가입 허용)과 인스턴스 관리자 판별."""
 
 from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from api.config import get_settings
 from api.models import Membership, Organization, SystemSetting, Workspace
 
 
 def defaults() -> dict[str, Any]:
-    return {"allow_signup": True, "show_demo_accounts": get_settings().genio_seed_demo}
+    return {"allow_signup": True}
 
 
 def get_system(db: Session) -> dict[str, Any]:

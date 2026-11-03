@@ -40,8 +40,17 @@ Viewers = Annotated[Ctx, Depends(require_role(VIEW_RUNS))]
 
 
 # ---------------- 멤버·초대 ----------------
-def _member(m: Membership, u: User) -> dict[str, Any]:
-    return {"id": m.id, "user_id": u.id, "email": u.email, "name": u.name, "role": m.role}
+def _member(m: Membership, u: User, only_here: bool | None = None) -> dict[str, Any]:
+    out: dict[str, Any] = {
+        "id": m.id,
+        "user_id": u.id,
+        "email": u.email,
+        "name": u.name,
+        "role": m.role,
+    }
+    if only_here is not None:
+        out["only_here"] = only_here
+    return out
 
 
 @router.get("/workspaces/{ws}/members")
@@ -51,9 +60,18 @@ def list_members(ws: str, ctx: Members) -> list[dict[str, Any]]:
         .join(User, User.id == Membership.user_id)
         .where(Membership.workspace_id == ws)
     ).all()
+    # 이 워크스페이스에만 속한 계정인지(관리자가 비밀번호를 재설정할 수 있는지)
+    shared = set(
+        ctx.db.scalars(
+            select(Membership.user_id).where(
+                Membership.user_id.in_([u.id for _, u in rows]), Membership.workspace_id != ws
+            )
+        )
+    )
     order = {"owner": 0, "admin": 1, "builder": 2, "operator": 3, "member": 4}
     return sorted(
-        (_member(m, u) for m, u in rows), key=lambda x: (order.get(x["role"], 9), x["email"])
+        (_member(m, u, u.id not in shared) for m, u in rows),
+        key=lambda x: (order.get(x["role"], 9), x["email"]),
     )
 
 

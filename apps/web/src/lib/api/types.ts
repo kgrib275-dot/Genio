@@ -109,6 +109,14 @@ export interface Member {
   email: string;
   name: string;
   role: Role;
+  /** 이 워크스페이스에만 속한 계정(관리자가 비밀번호를 재설정할 수 있음) */
+  only_here?: boolean;
+}
+
+export interface CreatedAccount {
+  member: Member;
+  /** 자동으로 만든 임시 비밀번호. 이번 한 번만 보여 준다(직접 정했으면 null). */
+  temporary_password: string | null;
 }
 
 export interface Invitation {
@@ -699,7 +707,6 @@ export interface WorkspaceInfo {
 export interface SystemSettings {
   is_instance_admin: boolean;
   allow_signup: boolean;
-  show_demo_accounts: boolean;
 }
 
 /** 프로젝트 현황판: 프로젝트(또는 '프로젝트 없음') 하나의 기간 통계 */

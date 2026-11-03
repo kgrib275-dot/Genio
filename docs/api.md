@@ -269,9 +269,17 @@ settings = {
 | POST | `/workspaces/{ws}/transfer-ownership` | owner | `{member_id}` | `{ok}` (나는 admin이 됨) |
 | DELETE | `/workspaces/{ws}/invitations/{id}` | owner, admin | | 204 |
 | GET | `/workspaces/{ws}/admin/api-keys` | owner, admin | | `[{id, app_id, app_name, name, prefix, created_at, last_used_at}]` |
-| GET | `/admin/system` | 로그인 | | `{is_instance_admin, allow_signup, show_demo_accounts}` |
-| PATCH | `/admin/system` | 인스턴스 관리자 | `{allow_signup?, show_demo_accounts?}` | 같은 형식 |
-`POST /auth/signup`은 `allow_signup=false`면 403. `GET /auth/demo-accounts`는 `show_demo_accounts=false`면 `enabled:false`.
+| GET | `/admin/system` | 로그인 | | `{is_instance_admin, allow_signup}` |
+| PATCH | `/admin/system` | 인스턴스 관리자 | `{allow_signup?}` | 같은 형식 |
+`POST /auth/signup`은 `allow_signup=false`면 403. 로그인 화면용 `GET /auth/demo-accounts`는 없앴다(역할별 계정·비밀번호를 공개하지 않음, ADR 0007).
+
+#### 계정 관리(관리 콘솔 > 멤버)
+| 메서드 | 경로 | 권한 | 요청 | 응답 |
+|---|---|---|---|---|
+| POST | `/workspaces/{ws}/admin/accounts` | owner, admin (owner 역할 계정은 owner만) | `{email, name, role?, password?(8자 이상)}` | 201 `{member, temporary_password}` — password를 안 주면 12자 임시 비밀번호를 만들어 이번 한 번만 돌려준다. 이미 가입된 이메일은 409(초대하기 안내) |
+| POST | `/workspaces/{ws}/members/{id}/reset-password` | owner, admin (owner·admin 계정은 owner만, 내 계정 불가) | | `{temporary_password}` — 다른 워크스페이스에도 속한 계정은 409 |
+
+`GET /workspaces/{ws}/members`의 각 멤버에 `only_here`(이 워크스페이스에만 속한 계정, 비밀번호 재설정 가능 여부)가 붙는다. 비밀번호는 활동 기록·로그에 남기지 않는다.
 
 ---
 

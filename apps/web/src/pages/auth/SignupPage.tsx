@@ -25,7 +25,7 @@ export default function SignupPage() {
   };
 
   return (
-    <AuthShell title="가입하기">
+    <AuthShell title="가입하기" subtitle="몇 가지만 적으면 바로 시작할 수 있어요.">
       <form onSubmit={submit} className="space-y-4">
         <Field label="이름" htmlFor="name">
           <Input id="name" required value={form.name} onChange={set("name")} />

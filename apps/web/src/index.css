@@ -137,3 +137,89 @@ html.font-large {
 .dark .genio-form textarea {
   background-color: rgb(var(--surface) / 1);
 }
+
+/* 로그인·가입 화면 움직임 */
+@keyframes genio-rise {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.genio-rise {
+  animation: genio-rise 0.45s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+@keyframes genio-shake {
+  10%,
+  90% {
+    transform: translateX(-2px);
+  }
+  20%,
+  80% {
+    transform: translateX(4px);
+  }
+  30%,
+  50%,
+  70% {
+    transform: translateX(-7px);
+  }
+  40%,
+  60% {
+    transform: translateX(7px);
+  }
+}
+.genio-shake {
+  animation: genio-shake 0.45s ease-in-out both;
+}
+@keyframes genio-blob {
+  0%,
+  100% {
+    transform: translate(0, 0) scale(1);
+  }
+  33% {
+    transform: translate(30px, -20px) scale(1.08);
+  }
+  66% {
+    transform: translate(-20px, 25px) scale(0.95);
+  }
+}
+.genio-blob {
+  animation: genio-blob 14s ease-in-out infinite;
+}
+.genio-blob-delay {
+  animation-delay: -7s;
+}
+@keyframes genio-caret {
+  50% {
+    opacity: 0;
+  }
+}
+.genio-caret {
+  animation: genio-caret 0.9s step-end infinite;
+}
+@keyframes genio-sheen {
+  from {
+    left: -50%;
+  }
+  to {
+    left: 130%;
+  }
+}
+.group:hover .genio-sheen {
+  animation: genio-sheen 0.8s ease-out;
+}
+.genio-sheen {
+  left: -50%;
+}
+@media (prefers-reduced-motion: reduce) {
+  .genio-rise,
+  .genio-shake,
+  .genio-blob,
+  .genio-caret,
+  .group:hover .genio-sheen {
+    animation: none;
+  }
+}

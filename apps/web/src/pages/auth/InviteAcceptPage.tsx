@@ -30,7 +30,7 @@ export default function InviteAcceptPage() {
   };
 
   return (
-    <AuthShell title="초대 받기">
+    <AuthShell title="초대 받기" subtitle="워크스페이스에 함께할 준비가 됐어요.">
       {info.isLoading && <Loading />}
       <ErrorBox error={info.error} />
       {info.data && (

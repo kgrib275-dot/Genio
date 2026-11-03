@@ -9,6 +9,7 @@ import type {
   AppExport,
   AppFeatures,
   AppStats,
+  CreatedAccount,
   ConversationMessage,
   ConversationSummary,
   EnvVar,
@@ -19,6 +20,7 @@ import type {
   NewApiKey,
   Rating,
   RetrievalMethod,
+  Role,
   SearchHitV2,
   StoredFile,
   SystemSettings,
@@ -343,11 +345,35 @@ export function useSystemSettings() {
 export function useUpdateSystemSettings() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (v: Partial<Pick<SystemSettings, "allow_signup" | "show_demo_accounts">>) =>
+    mutationFn: (v: Partial<Pick<SystemSettings, "allow_signup">>) =>
       api.patch<SystemSettings>("/admin/system", v),
     onSuccess: (data) => {
       qc.setQueryData(["system-settings"], data);
-      void qc.invalidateQueries({ queryKey: ["demo-accounts"] });
     },
+  });
+}
+
+export interface NewAccount {
+  email: string;
+  name: string;
+  role: Role;
+  password?: string;
+}
+
+export function useCreateAccount(ws: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (v: NewAccount) => api.post<CreatedAccount>(`/workspaces/${ws}/admin/accounts`, v),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ["members", ws] }),
+  });
+}
+
+export function useResetPassword(ws: string) {
+  return useMutation({
+    mutationFn: (memberId: string) =>
+      api.post<{ temporary_password: string }>(
+        `/workspaces/${ws}/members/${memberId}/reset-password`,
+        {},
+      ),
   });
 }

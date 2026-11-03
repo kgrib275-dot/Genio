@@ -31,4 +31,4 @@
 
 ## 추가 결정 (2026-11-03): genio 주소 인터넷 공개(Funnel)
 - 사용자 요청으로 핸드폰 등 tailnet 밖에서도 열리게 genio 기기에 Funnel을 켠다. genio는 별도 기기라 기존 서비스의 Funnel 포트와 겹치지 않는다.
-- 위험: 주소를 아는 누구나 접속 가능(회원가입 열림, 로그인 화면에 데모 계정 표시, 등록한 AI 키 비용). 끄려면 compose의 `tailscale funnel`을 `tailscale serve`로 바꾸고 다시 띄운다.
+- 위험: 주소를 아는 누구나 접속 가능(회원가입 열림, 등록한 AI 키 비용). 끄려면 compose의 `tailscale funnel`을 `tailscale serve`로 바꾸고 다시 띄운다.

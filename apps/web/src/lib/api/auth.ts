@@ -23,22 +23,6 @@ export function useLogin() {
   );
 }
 
-export interface DemoAccounts {
-  enabled: boolean;
-  password: string;
-  accounts: { email: string; name: string; role: string }[];
-}
-
-/** 데모 모드일 때 로그인 화면에 보여 줄 공개 데모 계정 */
-export function useDemoAccounts() {
-  return useQuery({
-    queryKey: ["demo-accounts"],
-    queryFn: () => api.get<DemoAccounts>("/auth/demo-accounts"),
-    staleTime: Infinity,
-    retry: false,
-  });
-}
-
 export function useSignup() {
   return useTokenMutation(
     (v: { email: string; password: string; name: string; workspace_name?: string }) =>

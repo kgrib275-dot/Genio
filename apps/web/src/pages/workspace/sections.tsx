@@ -1,5 +1,5 @@
 // 워크스페이스·관리 화면이 함께 쓰는 단락들. 권한에 따라 읽기 전용으로도 보여 준다.
-import { Crown, KeyRound, Trash2, UserMinus, X } from "lucide-react";
+import { Copy, Crown, KeyRound, RotateCcw, Trash2, UserMinus, UserPlus, X } from "lucide-react";
 import { useEffect, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { Avatar } from "@/components/AppIcon";
@@ -9,14 +9,17 @@ import { ErrorBox, Loading } from "@/components/ErrorBox";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody, CardHeader, Empty } from "@/components/ui/card";
+import { Dialog } from "@/components/ui/dialog";
 import { Field, Input, Select } from "@/components/ui/input";
 import { toast } from "@/components/ui/toast-store";
 import { ko } from "@/i18n/ko";
-import { ROLES, type ProviderKind, type Role } from "@/lib/api/types";
+import { ROLES, type Member, type ProviderKind, type Role } from "@/lib/api/types";
 import {
   useAdminApiKeys,
+  useCreateAccount,
   useDeleteApiKey,
   useRemoveMember,
+  useResetPassword,
   useRevokeInvitation,
   useSystemSettings,
   useTransferOwnership,
@@ -38,8 +41,192 @@ import {
 } from "@/lib/api/workspace";
 import { copyText, formatCost, formatDate } from "@/lib/cn";
 import { useSession } from "@/store/session";
+import { useMe } from "@/lib/api/auth";
 
 // ---------------- 멤버 ----------------
+function CreateAccountDialog({
+  ws,
+  open,
+  isOwner,
+  onClose,
+  onCreated,
+}: {
+  ws: string;
+  open: boolean;
+  isOwner: boolean;
+  onClose: () => void;
+  onCreated: (r: { name: string; email: string; password: string | null }) => void;
+}) {
+  const create = useCreateAccount(ws);
+  const [email, setEmail] = useState("");
+  const [name, setName] = useState("");
+  const [role, setRole] = useState<Role>("member");
+  const [mode, setMode] = useState<"auto" | "manual">("auto");
+  const [password, setPassword] = useState("");
+
+  useEffect(() => {
+    if (open) {
+      setEmail("");
+      setName("");
+      setRole("member");
+      setMode("auto");
+      setPassword("");
+      create.reset();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+
+  const submit = (e: FormEvent) => {
+    e.preventDefault();
+    create.mutate(
+      { email, name, role, ...(mode === "manual" ? { password } : {}) },
+      {
+        onSuccess: (r) =>
+          onCreated({ name: r.member.name, email: r.member.email, password: r.temporary_password }),
+      },
+    );
+  };
+
+  return (
+    <Dialog
+      open={open}
+      onClose={onClose}
+      title="계정 만들기"
+      footer={
+        <>
+          <Button variant="outline" onClick={onClose}>
+            취소
+          </Button>
+          <Button type="submit" form="create-account" disabled={create.isPending}>
+            {create.isPending ? "만드는 중…" : "만들기"}
+          </Button>
+        </>
+      }
+    >
+      <form id="create-account" onSubmit={submit} className="space-y-3">
+        <p className="text-sm text-slate-500">
+          이 워크스페이스에서만 쓰는 계정을 바로 만들어요. 만든 뒤 로그인 정보를 본인에게
+          전달하세요.
+        </p>
+        <Field label="이름" htmlFor="acc-name">
+          <Input id="acc-name" required value={name} onChange={(e) => setName(e.target.value)} />
+        </Field>
+        <Field label="이메일(로그인 아이디)" htmlFor="acc-email">
+          <Input
+            id="acc-email"
+            required
+            inputMode="email"
+            autoComplete="off"
+            placeholder="name@company.com"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+          />
+        </Field>
+        <Field label="역할" htmlFor="acc-role">
+          <Select id="acc-role" value={role} onChange={(e) => setRole(e.target.value as Role)}>
+            {ROLES.filter((r) => r !== "owner" || isOwner).map((r) => (
+              <option key={r} value={r}>
+                {ko.roles[r]}
+              </option>
+            ))}
+          </Select>
+        </Field>
+        <fieldset className="space-y-1.5">
+          <legend className="mb-1 text-xs font-medium text-slate-600">비밀번호</legend>
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="radio"
+              name="pw-mode"
+              checked={mode === "auto"}
+              onChange={() => setMode("auto")}
+              className="accent-indigo-600"
+            />
+            임시 비밀번호 자동으로 만들기(추천)
+          </label>
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="radio"
+              name="pw-mode"
+              checked={mode === "manual"}
+              onChange={() => setMode("manual")}
+              className="accent-indigo-600"
+            />
+            직접 정하기
+          </label>
+          {mode === "manual" && (
+            <Input
+              aria-label="비밀번호 직접 입력"
+              type="text"
+              minLength={8}
+              required
+              autoComplete="new-password"
+              placeholder="8자 이상"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+            />
+          )}
+        </fieldset>
+        <ErrorBox error={create.error} />
+      </form>
+    </Dialog>
+  );
+}
+
+/** 새로 만든 임시 비밀번호를 한 번만 보여 준다. */
+function IssuedPasswordDialog({
+  issued,
+  onClose,
+}: {
+  issued: { name: string; email: string; password: string } | null;
+  onClose: () => void;
+}) {
+  const text = issued
+    ? `제니오 로그인 정보\n주소: ${window.location.origin}/login\n이메일: ${issued.email}\n임시 비밀번호: ${issued.password}\n로그인한 뒤 내 설정에서 비밀번호를 바꿔 주세요.`
+    : "";
+  return (
+    <Dialog
+      open={issued !== null}
+      onClose={onClose}
+      title="임시 비밀번호"
+      footer={<Button onClick={onClose}>확인했어요</Button>}
+    >
+      {issued && (
+        <div className="space-y-3">
+          <p className="text-sm text-slate-600">
+            <b>{issued.name}</b>님의 임시 비밀번호예요. 이 창을 닫으면 다시 볼 수 없어요.
+          </p>
+          <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 p-3">
+            <code className="flex-1 select-all break-all font-mono text-lg font-semibold tracking-wider text-slate-900">
+              {issued.password}
+            </code>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={async () => {
+                if (await copyText(issued.password)) toast.success(ko.common.copied);
+              }}
+            >
+              <Copy className="h-3.5 w-3.5" /> 복사
+            </Button>
+          </div>
+          <Button
+            variant="outline"
+            className="w-full"
+            onClick={async () => {
+              if (await copyText(text)) toast.success("로그인 안내문을 복사했어요.");
+            }}
+          >
+            로그인 안내문 복사(주소·이메일·비밀번호)
+          </Button>
+          <p className="text-xs text-slate-500">
+            로그인한 뒤 <b>내 설정</b>에서 비밀번호를 바꾸도록 안내하세요.
+          </p>
+        </div>
+      )}
+    </Dialog>
+  );
+}
+
 export function MembersSection({ ws, manage }: { ws: string; manage: boolean }) {
   const myRole = useSession((s) => s.role);
   const members = useMembers(ws);
@@ -53,6 +240,18 @@ export function MembersSection({ ws, manage }: { ws: string; manage: boolean }) 
   const [role, setRole] = useState<Role>("member");
   const [lastUrl, setLastUrl] = useState("");
   const isOwner = myRole === "owner";
+  const me = useMe();
+  const reset = useResetPassword(ws);
+  const [creating, setCreating] = useState(false);
+  const [issued, setIssued] = useState<{ name: string; email: string; password: string } | null>(
+    null,
+  );
+  // 비밀번호 재설정: 내 계정 아님, 이 워크스페이스에만 속함, 소유자·관리자 계정은 소유자만
+  const canReset = (m: Member) =>
+    manage &&
+    m.user_id !== me.data?.id &&
+    m.only_here !== false &&
+    (isOwner || (m.role !== "owner" && m.role !== "admin"));
 
   const submit = (e: FormEvent) => {
     e.preventDefault();
@@ -71,10 +270,22 @@ export function MembersSection({ ws, manage }: { ws: string; manage: boolean }) 
   return (
     <div className="grid gap-6 lg:grid-cols-[3fr_2fr]">
       <Card className="min-w-0">
-        <CardHeader title="멤버" description={`${members.data?.length ?? 0}명`} />
+        <CardHeader
+          title="멤버"
+          description={`${members.data?.length ?? 0}명`}
+          action={
+            manage ? (
+              <Button size="sm" onClick={() => setCreating(true)}>
+                <UserPlus className="h-4 w-4" /> 계정 만들기
+              </Button>
+            ) : undefined
+          }
+        />
         <CardBody className="p-0">
           {members.isLoading && <Loading />}
-          <ErrorBox error={members.error ?? update.error ?? remove.error ?? transfer.error} />
+          <ErrorBox
+            error={members.error ?? update.error ?? remove.error ?? transfer.error ?? reset.error}
+          />
           <ul className="divide-y divide-slate-100 border-t border-slate-100">
             {(members.data ?? []).map((m) => (
               <li
@@ -109,6 +320,32 @@ export function MembersSection({ ws, manage }: { ws: string; manage: boolean }) 
                     {m.role === "owner" && <Crown className="h-3 w-3" />}
                     {ko.roles[m.role]}
                   </Badge>
+                )}
+                {canReset(m) && (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    aria-label={`${m.name} 비밀번호 재설정`}
+                    title="비밀번호 재설정"
+                    disabled={reset.isPending}
+                    onClick={() => {
+                      if (
+                        window.confirm(
+                          `${m.name}님의 비밀번호를 새 임시 비밀번호로 바꿀까요? 지금 비밀번호는 더 이상 쓸 수 없어요.`,
+                        )
+                      )
+                        reset.mutate(m.id, {
+                          onSuccess: (r) =>
+                            setIssued({
+                              name: m.name,
+                              email: m.email,
+                              password: r.temporary_password,
+                            }),
+                        });
+                    }}
+                  >
+                    <RotateCcw className="h-3.5 w-3.5" />
+                  </Button>
                 )}
                 {manage && m.role !== "owner" && (
                   <span className="flex gap-0.5">
@@ -154,6 +391,18 @@ export function MembersSection({ ws, manage }: { ws: string; manage: boolean }) 
           </ul>
         </CardBody>
       </Card>
+      <CreateAccountDialog
+        ws={ws}
+        open={creating}
+        isOwner={isOwner}
+        onClose={() => setCreating(false)}
+        onCreated={(r) => {
+          setCreating(false);
+          if (r.password) setIssued({ ...r, password: r.password });
+          else toast.success(`${r.name}님 계정을 만들었어요.`);
+        }}
+      />
+      <IssuedPasswordDialog issued={issued} onClose={() => setIssued(null)} />
       {manage && (
         <Card className="min-w-0">
           <CardHeader
@@ -726,18 +975,6 @@ export function SystemSection({ ws }: { ws: string }) {
                   checked={sys.data.allow_signup}
                   disabled={!canSys || updateSys.isPending}
                   onChange={(v) => updateSys.mutate({ allow_signup: v })}
-                />
-              </div>
-              <div className="flex items-start gap-3">
-                <div className="flex-1">
-                  <p className="text-sm font-medium">로그인 화면에 데모 계정 보이기</p>
-                  <p className="text-xs text-slate-500">데모 계정 버튼과 비밀번호를 보여 줘요.</p>
-                </div>
-                <Switch
-                  label="데모 계정 보이기"
-                  checked={sys.data.show_demo_accounts}
-                  disabled={!canSys || updateSys.isPending}
-                  onChange={(v) => updateSys.mutate({ show_demo_accounts: v })}
                 />
               </div>
             </>

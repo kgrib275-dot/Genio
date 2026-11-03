@@ -424,17 +424,9 @@ def test_login_trims_email_and_hints_ime(client: TestClient, team: Team) -> None
     assert bad.status_code == 401 and "한/영" in bad.json()["detail"]["hint"]
 
 
-def test_demo_accounts_only_in_demo_mode(
-    client: TestClient, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    from api.config import get_settings
-    from api.services.seed import DEMO_PASSWORD
-
-    assert client.get("/api/v1/auth/demo-accounts").json()["enabled"] is False
-    monkeypatch.setattr(get_settings(), "genio_seed_demo", True)
-    data = client.get("/api/v1/auth/demo-accounts").json()
-    assert data["enabled"] and len(data["accounts"]) == 5
-    assert data["password"] == DEMO_PASSWORD
+def test_demo_accounts_not_public(client: TestClient) -> None:
+    """로그인 화면에 역할별 데모 계정·비밀번호를 공개하지 않는다(관리 콘솔에서 계정 관리)."""
+    assert client.get("/api/v1/auth/demo-accounts").status_code in (404, 405)
 
 
 def test_old_password_hash_upgraded_on_login(client: TestClient, team: Team) -> None:
