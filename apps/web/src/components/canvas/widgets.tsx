@@ -1,4 +1,5 @@
 // 노드 설정 폼의 사용자 정의 위젯(설계서 §9: JSON Schema → 폼 자동 생성)
+import { useIsDark } from "@/store/theme";
 import { lazy, Suspense, useEffect, useState } from "react";
 import type { FieldProps, IconButtonProps, WidgetProps } from "@rjsf/utils";
 import { useConnectorDefinitions, useCredentials, useKnowledgeBases } from "@/lib/api/resources";
@@ -31,12 +32,14 @@ export function TextareaWidget(props: WidgetProps) {
 }
 
 export function CodeWidget(props: WidgetProps) {
+  const dark = useIsDark();
   return (
     <div className="overflow-hidden rounded-md border border-slate-300">
       <Suspense fallback={<TextareaWidget {...props} />}>
         <MonacoEditor
           height="220px"
           defaultLanguage="python"
+          theme={dark ? "vs-dark" : "light"}
           value={(props.value as string | undefined) ?? ""}
           onChange={(v) => props.onChange(v ?? "")}
           options={{ minimap: { enabled: false }, fontSize: 12, scrollBeyondLastLine: false }}

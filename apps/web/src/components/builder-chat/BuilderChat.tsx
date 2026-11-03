@@ -27,6 +27,7 @@ import {
   type TurnRecord,
 } from "@/lib/api/types";
 import { cn } from "@/lib/cn";
+import { isSendKey, sendHint, useEnterToSend } from "@/lib/composer";
 import { touchedNodeIds, useCanvas } from "@/store/canvas";
 import { takePendingPrompt } from "@/store/pendingPrompt";
 import { canManage, useSession } from "@/store/session";
@@ -100,6 +101,7 @@ export function BuilderChatView({
   const [draft, setDraft] = useState<DraftTurn | null>(null);
   const [busy, setBusy] = useState(false);
   const [input, setInput] = useState("");
+  const enterToSend = useEnterToSend();
   const [streamError, setStreamError] = useState<unknown>(null);
   const install = useInstallMarketItem(wsId);
   const qc = useQueryClient();
@@ -308,8 +310,9 @@ export function BuilderChatView({
             placeholder={busy ? "빌더가 작업 중이에요…" : "더 바꾸고 싶은 걸 말해 주세요"}
             value={input}
             onChange={(e) => setInput(e.target.value)}
+            title={sendHint(enterToSend)}
             onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+              if (isSendKey(e, enterToSend)) {
                 e.preventDefault();
                 submit(e);
               }

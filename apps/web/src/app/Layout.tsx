@@ -1,12 +1,17 @@
 import {
   BookMarked,
   BookOpen,
+  ChevronDown,
+  ChevronRight,
   LayoutGrid,
+  Lock,
   LogOut,
   Menu,
   PanelLeftClose,
   PanelLeftOpen,
   Plug,
+  Plus,
+  Settings,
   Shield,
   Store,
   Users,
@@ -14,15 +19,19 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { useEffect, useState } from "react";
-import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
+import { Link, NavLink, Outlet, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { Avatar } from "@/components/AppIcon";
 import { ErrorBox, Loading } from "@/components/ErrorBox";
+import { ProjectDialog, ProjectDot } from "@/components/projects/ProjectDialog";
 import { ko } from "@/i18n/ko";
 import { useMe } from "@/lib/api/auth";
 import { signOut } from "@/lib/api/client";
 import type { Me, Role } from "@/lib/api/types";
+import { useProjects } from "@/lib/api/v3";
 import { cn } from "@/lib/cn";
+import { rememberEnterToSend } from "@/lib/composer";
 import { canManage, useSession } from "@/store/session";
+import { applyFontSize, applyTheme } from "@/store/theme";
 
 interface NavItem {
   to: string;
@@ -143,6 +152,7 @@ function SidebarBody({
 
       <nav className={cn("flex-1 space-y-0.5 overflow-y-auto", compact ? "px-2" : "px-3")}>
         <NavItems items={NAV} compact={compact} role={role} onNavigate={onNavigate} />
+        {!compact && <ProjectsSection myUserId={me?.id} onNavigate={onNavigate} />}
       </nav>
 
       <div className={cn("space-y-0.5 pb-2", compact ? "px-2" : "px-3")}>
@@ -174,14 +184,35 @@ function SidebarBody({
           compact ? "flex-col px-2" : "px-4",
         )}
       >
-        <Avatar name={me?.name ?? ""} />
+        <Link
+          to="/settings"
+          onClick={onNavigate}
+          title="내 설정"
+          className={cn(
+            "flex min-w-0 items-center gap-2.5 rounded-lg hover:bg-slate-100",
+            compact ? "p-0.5" : "-m-1 flex-1 p-1",
+          )}
+        >
+          <Avatar name={me?.name ?? ""} />
+          {!compact && (
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-medium">{me?.name}</p>
+              <p className="truncate text-[11px] text-slate-500">
+                {current ? ko.roles[current.role] : ""} · {me?.email}
+              </p>
+            </div>
+          )}
+        </Link>
         {!compact && (
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-medium">{me?.name}</p>
-            <p className="truncate text-[11px] text-slate-500">
-              {current ? ko.roles[current.role] : ""} · {me?.email}
-            </p>
-          </div>
+          <Link
+            to="/settings"
+            onClick={onNavigate}
+            title="내 설정"
+            aria-label="내 설정"
+            className="rounded-md p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+          >
+            <Settings className="h-4 w-4" />
+          </Link>
         )}
         <button
           type="button"
@@ -197,6 +228,93 @@ function SidebarBody({
         </button>
       </div>
     </>
+  );
+}
+
+const PROJECTS_OPEN_KEY = "genio.sidebar.projects";
+
+function ProjectsSection({ myUserId, onNavigate }: { myUserId?: string; onNavigate?: () => void }) {
+  const { workspaceId } = useSession();
+  const projects = useProjects(workspaceId);
+  const navigate = useNavigate();
+  const { pathname } = useLocation();
+  const [params] = useSearchParams();
+  const active = pathname === "/" ? params.get("project") : null;
+  const [open, setOpen] = useState(() => {
+    try {
+      return window.localStorage.getItem(PROJECTS_OPEN_KEY) !== "0";
+    } catch {
+      return true;
+    }
+  });
+  const [creating, setCreating] = useState(false);
+
+  function toggle() {
+    setOpen((v) => {
+      try {
+        window.localStorage.setItem(PROJECTS_OPEN_KEY, v ? "0" : "1");
+      } catch {
+        // 기억하지 못해도 동작에는 문제없다
+      }
+      return !v;
+    });
+  }
+
+  const list = projects.data ?? [];
+  return (
+    <div className="pt-4">
+      <button
+        type="button"
+        onClick={toggle}
+        aria-expanded={open}
+        className="flex w-full items-center gap-1 rounded-md px-3 py-1 text-[11px] font-semibold text-slate-400 hover:text-slate-600"
+      >
+        {open ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+        프로젝트
+        {list.length > 0 && <span className="ml-auto font-normal">{list.length}</span>}
+      </button>
+      {open && (
+        <div className="mt-0.5 space-y-0.5">
+          {list.map((p) => (
+            <Link
+              key={p.id}
+              to={`/?project=${p.id}`}
+              onClick={onNavigate}
+              title={p.description || p.name}
+              className={cn(
+                "flex items-center gap-2.5 rounded-lg px-3 py-1.5 text-sm transition-colors",
+                active === p.id
+                  ? "bg-indigo-50 font-semibold text-indigo-700"
+                  : "text-slate-600 hover:bg-slate-100 hover:text-slate-900",
+              )}
+            >
+              <ProjectDot color={p.color} className="mx-1" />
+              <span className="min-w-0 flex-1 truncate">{p.name}</span>
+              {p.visibility === "private" && (
+                <Lock className="h-3 w-3 shrink-0 text-slate-400" aria-label="비공개" />
+              )}
+            </Link>
+          ))}
+          <button
+            type="button"
+            onClick={() => setCreating(true)}
+            className="flex w-full items-center gap-2.5 rounded-lg px-3 py-1.5 text-sm text-slate-500 hover:bg-slate-100 hover:text-slate-900"
+          >
+            <Plus className="h-[18px] w-[18px]" /> 새 프로젝트
+          </button>
+        </div>
+      )}
+      <ProjectDialog
+        ws={workspaceId}
+        open={creating}
+        onClose={() => setCreating(false)}
+        myUserId={myUserId}
+        onSaved={(p) => {
+          onNavigate?.();
+          navigate(`/?project=${p.id}`);
+        }}
+      />
+    </div>
   );
 }
 
@@ -217,10 +335,27 @@ export function Layout() {
     const current = list.find((w) => w.id === workspaceId);
     if (current) {
       if (useSession.getState().role !== current.role) setWorkspace(current.id, current.role);
-    } else if (list[0]) {
-      setWorkspace(list[0].id, list[0].role);
+    } else {
+      // 고른 워크스페이스가 없으면 '내 설정'의 기본 워크스페이스를 먼저 쓴다
+      const pref = me.data?.preferences?.default_workspace_id;
+      const pick = list.find((w) => w.id === pref) ?? list[0];
+      if (pick) setWorkspace(pick.id, pick.role);
     }
   }, [me.data, workspaceId, setWorkspace]);
+
+  // 서버에 저장된 테마·글자 크기를 이 기기에도 맞춘다
+  const prefTheme = me.data?.preferences?.theme;
+  const prefFont = me.data?.preferences?.font_size;
+  useEffect(() => {
+    if (prefTheme) applyTheme(prefTheme);
+  }, [prefTheme]);
+  useEffect(() => {
+    if (prefFont) applyFontSize(prefFont);
+  }, [prefFont]);
+  const prefEnter = me.data?.preferences?.enter_to_send;
+  useEffect(() => {
+    if (typeof prefEnter === "boolean") rememberEnterToSend(prefEnter);
+  }, [prefEnter]);
 
   // 대시보드가 뜬 뒤 한가할 때 무거운 화면(빌더 등) 코드를 미리 받아 두면, 눌렀을 때 바로 열린다.
   useEffect(() => {

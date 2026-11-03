@@ -16,10 +16,14 @@ import type {
   VersionSummary,
 } from "@/lib/api/types";
 
-export function useApps(ws: string) {
+/** project: 프로젝트 id, "none"(프로젝트 없음), 비우면 전체 */
+export function useApps(ws: string, project?: string) {
   return useQuery({
-    queryKey: ["apps", ws],
-    queryFn: () => api.get<App[]>(`/workspaces/${ws}/apps`),
+    queryKey: ["apps", ws, project ?? ""],
+    queryFn: () =>
+      api.get<App[]>(
+        `/workspaces/${ws}/apps${project ? `?project=${encodeURIComponent(project)}` : ""}`,
+      ),
     enabled: Boolean(ws),
   });
 }
@@ -41,19 +45,25 @@ export function useCreateApp(ws: string) {
       description?: string;
       icon?: string;
       template_key?: string;
+      project_id?: string;
     }) => api.post<AppDetail>(`/workspaces/${ws}/apps`, v),
-    onSuccess: () => void qc.invalidateQueries({ queryKey: ["apps", ws] }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["apps", ws] });
+      void qc.invalidateQueries({ queryKey: ["projects", ws] });
+    },
   });
 }
 
 export function useUpdateApp(appId: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (v: Partial<Pick<App, "name" | "description" | "icon" | "type">>) =>
-      api.patch<AppDetail>(`/apps/${appId}`, v),
+    mutationFn: (
+      v: Partial<Pick<App, "name" | "description" | "icon" | "type">> & { project_id?: string },
+    ) => api.patch<AppDetail>(`/apps/${appId}`, v),
     onSuccess: (data) => {
       qc.setQueryData(["app", appId], data);
       void qc.invalidateQueries({ queryKey: ["apps"] });
+      void qc.invalidateQueries({ queryKey: ["projects"] });
     },
   });
 }

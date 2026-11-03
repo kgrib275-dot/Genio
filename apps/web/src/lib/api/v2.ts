@@ -192,12 +192,21 @@ export function useDeleteApiKey(appId?: string) {
 export function useUpdateKnowledgeBase(ws: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (v: { id: string; name?: string; settings?: Partial<KbSettings> }) =>
+    mutationFn: (v: {
+      id: string;
+      name?: string;
+      settings?: Partial<KbSettings>;
+      project_id?: string;
+    }) =>
       api.patch<KnowledgeBaseV2>(`/knowledge-bases/${v.id}`, {
         name: v.name,
         settings: v.settings,
+        project_id: v.project_id,
       }),
-    onSuccess: () => void qc.invalidateQueries({ queryKey: ["kbs", ws] }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["kbs", ws] });
+      void qc.invalidateQueries({ queryKey: ["projects", ws] });
+    },
   });
 }
 

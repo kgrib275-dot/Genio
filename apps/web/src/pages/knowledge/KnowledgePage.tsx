@@ -41,6 +41,8 @@ import {
   MetadataDialog,
   UrlImportDialog,
 } from "@/pages/knowledge/KbDialogs";
+import { ProjectDot } from "@/components/projects/ProjectDialog";
+import { useProjects } from "@/lib/api/v3";
 import { canEdit, useSession } from "@/store/session";
 
 const METHOD_LABEL: Record<RetrievalMethod, string> = {
@@ -345,11 +347,20 @@ function KbDetail({ ws, kb, editable }: { ws: string; kb: KnowledgeBaseV2; edita
 
 export default function KnowledgePage() {
   const { workspaceId: ws, role } = useSession();
-  const kbs = useKnowledgeBases(ws);
+  const projects = useProjects(ws);
+  const projectList = projects.data ?? [];
+  const [projectFilter, setProjectFilter] = useState("");
+  const kbs = useKnowledgeBases(ws, projectFilter || undefined);
   const create = useCreateKnowledgeBase(ws);
   const del = useDeleteKnowledgeBase(ws);
   const [selected, setSelected] = useState<string>("");
   const [name, setName] = useState("");
+  const [newProject, setNewProject] = useState("");
+  const projectById = new Map(projectList.map((p) => [p.id, p]));
+  // 프로젝트로 걸러 보는 중이면 새 지식베이스도 그 프로젝트에 만든다
+  useEffect(() => {
+    setNewProject(projectFilter && projectFilter !== "none" ? projectFilter : "");
+  }, [projectFilter]);
   const editable = canEdit(role);
 
   useEffect(() => {
@@ -376,7 +387,7 @@ export default function KnowledgePage() {
                 e.preventDefault();
                 if (!name.trim()) return;
                 create.mutate(
-                  { name },
+                  { name, project_id: newProject || undefined },
                   {
                     onSuccess: (k) => {
                       setName("");
@@ -399,8 +410,39 @@ export default function KnowledgePage() {
                   </Button>
                 </div>
               </Field>
+              {projectList.length > 0 && (
+                <Select
+                  aria-label="새 지식베이스를 넣을 프로젝트"
+                  value={newProject}
+                  onChange={(e) => setNewProject(e.target.value)}
+                >
+                  <option value="">프로젝트 없음</option>
+                  {projectList.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name}에 만들기
+                    </option>
+                  ))}
+                </Select>
+              )}
               <ErrorBox error={create.error} />
             </form>
+          )}
+          {(projectList.length > 0 || projectFilter) && (
+            <Field label="프로젝트로 보기" htmlFor="kb-project-filter">
+              <Select
+                id="kb-project-filter"
+                value={projectFilter}
+                onChange={(e) => setProjectFilter(e.target.value)}
+              >
+                <option value="">전체</option>
+                <option value="none">프로젝트 없음</option>
+                {projectList.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                  </option>
+                ))}
+              </Select>
+            </Field>
           )}
           {kbs.isLoading && <Loading />}
           <ul className="flex gap-1 overflow-x-auto pb-1 md:block md:space-y-1 md:overflow-visible">
@@ -416,6 +458,12 @@ export default function KnowledgePage() {
                       : "hover:bg-slate-100",
                   )}
                 >
+                  {k.project_id && projectById.get(k.project_id) && (
+                    <ProjectDot
+                      color={projectById.get(k.project_id)?.color ?? "slate"}
+                      className="mr-1.5 h-2 w-2 align-middle"
+                    />
+                  )}
                   {k.name}
                   <span className="ml-1 text-xs text-slate-400">({k.document_count})</span>
                   <span className="hidden text-[11px] text-slate-400 md:block">
@@ -443,7 +491,13 @@ export default function KnowledgePage() {
           {kb ? (
             <KbDetail key={kb.id} ws={ws} kb={kb} editable={editable} />
           ) : (
-            kbs.data && <Empty>지식베이스를 만들고 문서를 올려 보세요.</Empty>
+            kbs.data && (
+              <Empty>
+                {projectFilter
+                  ? "여기에는 아직 지식베이스가 없어요."
+                  : "지식베이스를 만들고 문서를 올려 보세요."}
+              </Empty>
+            )
           )}
         </div>
       </div>

@@ -1,3 +1,4 @@
+import { useIsDark } from "@/store/theme";
 import {
   Background,
   Controls,
@@ -30,6 +31,7 @@ function Inner({ specs, readOnly }: { specs: NodeType[]; readOnly?: boolean }) {
   const { screenToFlowPosition, fitView, getNodes, getNodesBounds, getViewport, setViewport } =
     useReactFlow();
 
+  const dark = useIsDark();
   const specMap = useMemo(() => new Map(specs.map((s) => [s.type, s])), [specs]);
 
   // fitView 속성은 첫 렌더에만 적용된다. 흐름을 불러오거나 빌더가 노드를 더하고 빼면
@@ -123,6 +125,7 @@ function Inner({ specs, readOnly }: { specs: NodeType[]; readOnly?: boolean }) {
 
   return (
     <ReactFlow
+      colorMode={dark ? "dark" : "light"}
       nodes={nodes}
       edges={edges}
       nodeTypes={nodeTypes}

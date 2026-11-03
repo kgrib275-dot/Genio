@@ -15,6 +15,7 @@ import {
   useUpdateDocument,
   useUpdateKnowledgeBase,
 } from "@/lib/api/v2";
+import { useProjects } from "@/lib/api/v3";
 import { cn } from "@/lib/cn";
 
 export function KbSettingsDialog({
@@ -30,6 +31,8 @@ export function KbSettingsDialog({
 }) {
   const update = useUpdateKnowledgeBase(ws);
   const [name, setName] = useState(kb.name);
+  const [projectId, setProjectId] = useState(kb.project_id ?? "");
+  const projects = useProjects(open ? ws : "");
   const [s, setS] = useState<KbSettings>(() => normalizeKbSettings(kb.settings));
   const r = s.retrieval;
   const num = (v: string, min: number, max: number, fallback: number) =>
@@ -50,7 +53,7 @@ export function KbSettingsDialog({
             disabled={update.isPending || !name.trim()}
             onClick={() =>
               update.mutate(
-                { id: kb.id, name, settings: s },
+                { id: kb.id, name, settings: s, project_id: projectId },
                 {
                   onSuccess: () => {
                     toast.success(
@@ -70,6 +73,20 @@ export function KbSettingsDialog({
       <div className="space-y-5 text-sm">
         <Field label="이름" htmlFor="kb-set-name">
           <Input id="kb-set-name" value={name} onChange={(e) => setName(e.target.value)} />
+        </Field>
+        <Field label="프로젝트" htmlFor="kb-set-project">
+          <Select
+            id="kb-set-project"
+            value={projectId}
+            onChange={(e) => setProjectId(e.target.value)}
+          >
+            <option value="">프로젝트 없음</option>
+            {(projects.data ?? []).map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}
+              </option>
+            ))}
+          </Select>
         </Field>
         <fieldset className="space-y-3">
           <legend className="mb-2 text-sm font-semibold text-slate-800">조각 나누기</legend>

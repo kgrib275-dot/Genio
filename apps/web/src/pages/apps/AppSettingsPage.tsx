@@ -29,6 +29,7 @@ import {
 } from "@/lib/api/types";
 import { exportApp, useDuplicateApp, useRestoreVersion } from "@/lib/api/v2";
 import { copyText, downloadJson, formatDate } from "@/lib/cn";
+import { useProjects } from "@/lib/api/v3";
 import { canEdit, useSession } from "@/store/session";
 import { AppNav } from "@/pages/apps/AppNav";
 
@@ -292,11 +293,14 @@ function AppInfoCard({ appId, editable }: { appId: string; editable: boolean }) 
   const del = useDeleteApp();
   const duplicate = useDuplicateApp();
   const navigate = useNavigate();
+  const ws = useSession((s) => s.workspaceId);
+  const projects = useProjects(ws);
   const [form, setForm] = useState({
     name: "",
     description: "",
     icon: "",
     type: "chat" as AppType,
+    project_id: "",
   });
 
   useEffect(() => {
@@ -306,6 +310,7 @@ function AppInfoCard({ appId, editable }: { appId: string; editable: boolean }) 
         description: app.data.description,
         icon: app.data.icon,
         type: app.data.type,
+        project_id: app.data.project_id ?? "",
       });
   }, [app.data]);
 
@@ -348,6 +353,25 @@ function AppInfoCard({ appId, editable }: { appId: string; editable: boolean }) 
               {(Object.keys(ko.appTypes) as AppType[]).map((t) => (
                 <option key={t} value={t}>
                   {ko.appTypes[t]}
+                </option>
+              ))}
+            </Select>
+          </Field>
+          <Field
+            label="프로젝트"
+            htmlFor="info-project"
+            hint="저장하면 앱이 고른 프로젝트로 옮겨져요."
+          >
+            <Select
+              id="info-project"
+              disabled={!editable}
+              value={form.project_id}
+              onChange={(e) => setForm({ ...form, project_id: e.target.value })}
+            >
+              <option value="">프로젝트 없음</option>
+              {(projects.data ?? []).map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
                 </option>
               ))}
             </Select>

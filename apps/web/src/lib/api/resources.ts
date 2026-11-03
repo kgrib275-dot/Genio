@@ -17,10 +17,13 @@ import type {
 } from "@/lib/api/types";
 
 // ---------- 지식베이스 ----------
-export function useKnowledgeBases(ws: string) {
+export function useKnowledgeBases(ws: string, project?: string) {
   return useQuery({
-    queryKey: ["kbs", ws],
-    queryFn: () => api.get<KnowledgeBase[]>(`/workspaces/${ws}/knowledge-bases`),
+    queryKey: ["kbs", ws, project ?? ""],
+    queryFn: () =>
+      api.get<KnowledgeBase[]>(
+        `/workspaces/${ws}/knowledge-bases${project ? `?project=${encodeURIComponent(project)}` : ""}`,
+      ),
     enabled: Boolean(ws),
   });
 }
@@ -28,9 +31,12 @@ export function useKnowledgeBases(ws: string) {
 export function useCreateKnowledgeBase(ws: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (v: { name: string; chunk_size?: number }) =>
+    mutationFn: (v: { name: string; chunk_size?: number; project_id?: string }) =>
       api.post<KnowledgeBase>(`/workspaces/${ws}/knowledge-bases`, v),
-    onSuccess: () => void qc.invalidateQueries({ queryKey: ["kbs", ws] }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["kbs", ws] });
+      void qc.invalidateQueries({ queryKey: ["projects", ws] });
+    },
   });
 }
 

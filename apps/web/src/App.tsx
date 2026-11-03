@@ -25,6 +25,7 @@ const AppMonitorPage = lazy(() => import("@/pages/apps/AppMonitorPage"));
 const AppApiPage = lazy(() => import("@/pages/apps/AppApiPage"));
 const AdminPage = lazy(() => import("@/pages/admin/AdminPage"));
 const HelpPage = lazy(() => import("@/pages/help/HelpPage"));
+const SettingsPage = lazy(() => import("@/pages/settings/SettingsPage"));
 
 export default function App() {
   return (
@@ -59,6 +60,7 @@ export default function App() {
             <Route path="workspace" element={<WorkspacePage />} />
             <Route path="admin" element={<AdminPage />} />
             <Route path="help" element={<HelpPage />} />
+            <Route path="settings" element={<SettingsPage />} />
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

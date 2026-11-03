@@ -4,7 +4,12 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter } from "react-router-dom";
 import App from "@/App";
 import { ApiError } from "@/lib/api/client";
+import { applyFontSize, applyTheme, storedFontSize, storedTheme } from "@/store/theme";
 import "@/index.css";
+
+// 저장해 둔 테마를 바로 적용하고, 시스템 모드면 OS 설정 변화를 따라가게 한다
+applyTheme(storedTheme());
+applyFontSize(storedFontSize());
 
 const queryClient = new QueryClient({
   defaultOptions: {

@@ -1,24 +1,39 @@
-import { ArrowRight, LayoutTemplate, Plus, Sparkles, Upload, Wand2 } from "lucide-react";
-import { useRef, useState, type FormEvent } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import {
+  ArrowRight,
+  FolderInput,
+  LayoutTemplate,
+  Lock,
+  MoreHorizontal,
+  Plus,
+  Settings2,
+  Sparkles,
+  Upload,
+  Users,
+  Wand2,
+} from "lucide-react";
+import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { PageContainer } from "@/app/Layout";
-import { AppIcon } from "@/components/AppIcon";
+import { AppIcon, Avatar } from "@/components/AppIcon";
+import { ProjectDialog, ProjectDot } from "@/components/projects/ProjectDialog";
 import { ErrorBox, Loading } from "@/components/ErrorBox";
-import { StatusBadge } from "@/components/ui/badge";
+import { Badge, StatusBadge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, Empty } from "@/components/ui/card";
 import { Dialog } from "@/components/ui/dialog";
 import { Field, Input, Select, Textarea } from "@/components/ui/input";
 import { ko } from "@/i18n/ko";
-import { useApps, useCreateApp } from "@/lib/api/apps";
+import { useApps, useCreateApp, useUpdateApp } from "@/lib/api/apps";
+import { useMe } from "@/lib/api/auth";
 import { useTemplates } from "@/lib/api/resources";
-import { ApiError } from "@/lib/api/client";
-import type { AppExport, AppType } from "@/lib/api/types";
+import { ApiError, api } from "@/lib/api/client";
+import type { App, AppExport, AppType, Project } from "@/lib/api/types";
 import { useImportApp } from "@/lib/api/v2";
+import { useProjects } from "@/lib/api/v3";
 import { HelpButton } from "@/help/HelpButton";
 import { toast } from "@/components/ui/toast-store";
 import { useWorkspaceRuns } from "@/lib/api/workspace";
-import { timeAgo } from "@/lib/cn";
+import { cn, timeAgo } from "@/lib/cn";
 import { canEdit, canViewRuns, useSession } from "@/store/session";
 import { setPendingPrompt } from "@/store/pendingPrompt";
 
@@ -38,7 +53,7 @@ function appNameFrom(prompt: string): string {
 }
 
 /** 맨 위: 말로 앱 만들기 */
-function PromptHero() {
+function PromptHero({ projectId }: { projectId?: string }) {
   const ws = useSession((s) => s.workspaceId);
   const create = useCreateApp(ws);
   const navigate = useNavigate();
@@ -48,7 +63,7 @@ function PromptHero() {
     const p = prompt.trim();
     if (!p || create.isPending) return;
     create.mutate(
-      { name: appNameFrom(p), type: "chat", description: p, icon: "" },
+      { name: appNameFrom(p), type: "chat", description: p, icon: "", project_id: projectId },
       {
         onSuccess: (app) => {
           setPendingPrompt(app.id, p);
@@ -114,7 +129,7 @@ function PromptHero() {
   );
 }
 
-function TemplateRow() {
+function TemplateRow({ projectId }: { projectId?: string }) {
   const ws = useSession((s) => s.workspaceId);
   const templates = useTemplates(ws);
   const create = useCreateApp(ws);
@@ -141,6 +156,7 @@ function TemplateRow() {
                   description: t.summary,
                   icon: "",
                   template_key: t.key,
+                  project_id: projectId,
                 },
                 { onSuccess: (app) => navigate(`/apps/${app.id}/builder`) },
               )
@@ -158,7 +174,7 @@ function TemplateRow() {
 }
 
 /** 내보낸 앱 파일(JSON)을 올려 새 앱으로 가져온다. */
-function ImportAppButton() {
+function ImportAppButton({ projectId }: { projectId?: string }) {
   const ws = useSession((s) => s.workspaceId);
   const importApp = useImportApp(ws);
   const navigate = useNavigate();
@@ -189,7 +205,15 @@ function ImportAppButton() {
             return;
           }
           importApp.mutate(data, {
-            onSuccess: (app) => {
+            onSuccess: async (app) => {
+              // 가져오기 API는 프로젝트를 받지 않아서, 고른 프로젝트로 바로 옮긴다
+              if (projectId) {
+                try {
+                  await api.patch(`/apps/${app.id}`, { project_id: projectId });
+                } catch (err) {
+                  toast.error(err);
+                }
+              }
               toast.success("앱을 가져왔어요.");
               navigate(`/apps/${app.id}/builder`);
             },
@@ -209,7 +233,15 @@ function ImportAppButton() {
   );
 }
 
-function BlankAppDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
+function BlankAppDialog({
+  open,
+  onClose,
+  projectId,
+}: {
+  open: boolean;
+  onClose: () => void;
+  projectId?: string;
+}) {
   const ws = useSession((s) => s.workspaceId);
   const create = useCreateApp(ws);
   const navigate = useNavigate();
@@ -218,7 +250,7 @@ function BlankAppDialog({ open, onClose }: { open: boolean; onClose: () => void 
   const submit = (e: FormEvent) => {
     e.preventDefault();
     create.mutate(
-      { ...form, icon: "" },
+      { ...form, icon: "", project_id: projectId },
       {
         onSuccess: (app) => {
           onClose();
@@ -280,23 +312,270 @@ function BlankAppDialog({ open, onClose }: { open: boolean; onClose: () => void 
   );
 }
 
+/** 위쪽 칩: 전체 / 프로젝트 없음 / 각 프로젝트 */
+function ProjectChips({
+  projects,
+  value,
+  onChange,
+  onCreate,
+}: {
+  projects: Project[];
+  value: string;
+  onChange: (v: string) => void;
+  onCreate?: () => void;
+}) {
+  const chip = (key: string, label: ReactNode, title?: string) => (
+    <button
+      key={key || "all"}
+      type="button"
+      title={title}
+      aria-pressed={value === key}
+      onClick={() => onChange(key)}
+      className={cn(
+        "inline-flex h-8 max-w-[14rem] shrink-0 items-center gap-1.5 rounded-full border px-3 text-[13px] transition-colors",
+        value === key
+          ? "border-indigo-300 bg-indigo-50 font-semibold text-indigo-700"
+          : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:text-slate-900",
+      )}
+    >
+      {label}
+    </button>
+  );
+  return (
+    <div
+      role="toolbar"
+      aria-label="프로젝트로 거르기"
+      className="-mx-4 mb-4 flex gap-2 overflow-x-auto px-4 pb-1 sm:mx-0 sm:flex-wrap sm:px-0"
+    >
+      {chip("", "전체")}
+      {chip("none", "프로젝트 없음")}
+      {projects.map((p) =>
+        chip(
+          p.id,
+          <>
+            <ProjectDot color={p.color} />
+            <span className="truncate">{p.name}</span>
+            {p.visibility === "private" && <Lock className="h-3 w-3 shrink-0 text-slate-400" />}
+          </>,
+          p.name,
+        ),
+      )}
+      {onCreate && (
+        <button
+          type="button"
+          onClick={onCreate}
+          className="inline-flex h-8 shrink-0 items-center gap-1 rounded-full border border-dashed border-slate-300 px-3 text-[13px] text-slate-500 hover:border-indigo-300 hover:text-indigo-700"
+        >
+          <Plus className="h-3.5 w-3.5" /> 새 프로젝트
+        </button>
+      )}
+    </div>
+  );
+}
+
+function ProjectHeader({ project, onEdit }: { project: Project; onEdit: () => void }) {
+  return (
+    <Card className="mb-4 flex flex-wrap items-start gap-3 p-4">
+      <ProjectDot color={project.color} className="mt-1.5 h-3 w-3" />
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-center gap-2">
+          <h2 className="truncate text-base font-bold text-slate-900">{project.name}</h2>
+          {project.visibility === "private" ? (
+            <Badge tone="amber">
+              <Lock className="h-3 w-3" /> 나와 고른 사람만
+            </Badge>
+          ) : (
+            <Badge tone="blue">
+              <Users className="h-3 w-3" /> 워크스페이스 전체
+            </Badge>
+          )}
+        </div>
+        {project.description && (
+          <p className="mt-1 text-sm text-slate-500">{project.description}</p>
+        )}
+        <p className="mt-1 text-xs text-slate-400">
+          앱 {project.app_count}개 · 지식 {project.knowledge_base_count}개 · 만든 사람{" "}
+          {project.created_by_name}
+        </p>
+      </div>
+      <div className="flex items-center gap-3">
+        {project.visibility === "private" && project.members.length > 0 && (
+          <div className="flex -space-x-2" aria-label="함께 보는 사람">
+            {project.members.slice(0, 5).map((m) => (
+              <span
+                key={m.user_id}
+                title={m.name}
+                className="rounded-full ring-2 ring-[color:rgb(var(--surface))]"
+              >
+                <Avatar name={m.name} />
+              </span>
+            ))}
+            {project.members.length > 5 && (
+              <span className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-100 text-xs text-slate-600 ring-2 ring-[color:rgb(var(--surface))]">
+                +{project.members.length - 5}
+              </span>
+            )}
+          </div>
+        )}
+        {project.can_manage && (
+          <Button size="sm" variant="outline" onClick={onEdit}>
+            <Settings2 className="h-4 w-4" /> 프로젝트 설정
+          </Button>
+        )}
+      </div>
+    </Card>
+  );
+}
+
+/** 앱을 다른 프로젝트로 옮기는 대화상자 */
+export function MoveProjectDialog({
+  app,
+  projects,
+  onClose,
+}: {
+  app: App | null;
+  projects: Project[];
+  onClose: () => void;
+}) {
+  const update = useUpdateApp(app?.id ?? "");
+  const [target, setTarget] = useState("");
+  useEffect(() => setTarget(app?.project_id ?? ""), [app]);
+  if (!app) return null;
+  const save = () =>
+    update.mutate(
+      { project_id: target },
+      {
+        onSuccess: () => {
+          toast.success("앱을 옮겼어요.");
+          onClose();
+        },
+        onError: (e) => toast.error(e),
+      },
+    );
+  return (
+    <Dialog
+      open
+      onClose={onClose}
+      title="프로젝트 이동"
+      footer={
+        <>
+          <Button variant="ghost" onClick={onClose}>
+            {ko.common.cancel}
+          </Button>
+          <Button onClick={save} disabled={update.isPending || target === (app.project_id ?? "")}>
+            옮기기
+          </Button>
+        </>
+      }
+    >
+      <Field label={`‘${app.name}’을(를) 옮길 곳`} htmlFor="move-project">
+        <Select id="move-project" value={target} onChange={(e) => setTarget(e.target.value)}>
+          <option value="">프로젝트 없음</option>
+          {projects.map((p) => (
+            <option key={p.id} value={p.id}>
+              {p.name}
+            </option>
+          ))}
+        </Select>
+      </Field>
+    </Dialog>
+  );
+}
+
+function CardMenu({ onMove }: { onMove: () => void }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const close = (e: MouseEvent) => {
+      if (!ref.current?.contains(e.target as Node)) setOpen(false);
+    };
+    window.addEventListener("mousedown", close);
+    return () => window.removeEventListener("mousedown", close);
+  }, [open]);
+  return (
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        aria-label="앱 메뉴"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        onClick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          setOpen((v) => !v);
+        }}
+        className="rounded-md p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+      >
+        <MoreHorizontal className="h-4 w-4" />
+      </button>
+      {open && (
+        <div
+          role="menu"
+          className="absolute right-0 top-8 z-20 w-40 rounded-lg border border-slate-200 bg-white py-1 shadow-lift"
+        >
+          <button
+            type="button"
+            role="menuitem"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              setOpen(false);
+              onMove();
+            }}
+            className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-50"
+          >
+            <FolderInput className="h-4 w-4 text-slate-400" /> 프로젝트 이동
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function DashboardPage() {
   const { workspaceId: ws, role } = useSession();
-  const apps = useApps(ws);
+  const [params, setParams] = useSearchParams();
+  const filter = params.get("project") ?? "";
+  const me = useMe();
+  const projects = useProjects(ws);
+  const projectList = projects.data ?? [];
+  const current = projectList.find((p) => p.id === filter) ?? null;
+  // 지금 보고 있는 프로젝트. 여기서 새로 만드는 앱은 이 프로젝트에 들어간다
+  const projectId = filter && filter !== "none" ? filter : undefined;
+  const apps = useApps(ws, filter || undefined);
   const runs = useWorkspaceRuns(ws, {}, canViewRuns(role));
   const [open, setOpen] = useState(false);
+  const [projectDialog, setProjectDialog] = useState<"new" | "edit" | null>(null);
+  const [moving, setMoving] = useState<App | null>(null);
   const editable = canEdit(role);
   const appList = apps.data ?? [];
+  const byId = new Map(projectList.map((p) => [p.id, p]));
+  const setFilter = (v: string) => {
+    const next = new URLSearchParams(params);
+    if (v) next.set("project", v);
+    else next.delete("project");
+    setParams(next, { replace: true });
+  };
 
   return (
     <PageContainer>
-      {editable && <PromptHero />}
-      {editable && <TemplateRow />}
+      {editable && <PromptHero projectId={projectId} />}
+      {editable && <TemplateRow projectId={projectId} />}
 
       <section className="mt-10">
+        {(projectList.length > 0 || filter) && (
+          <ProjectChips
+            projects={projectList}
+            value={filter}
+            onChange={setFilter}
+            onCreate={editable ? () => setProjectDialog("new") : undefined}
+          />
+        )}
+        {current && <ProjectHeader project={current} onEdit={() => setProjectDialog("edit")} />}
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
           <h3 className="flex items-center gap-1 text-lg font-bold tracking-tight">
-            {editable ? "내 앱" : "사용할 수 있는 앱"}
+            {current ? "프로젝트 앱" : editable ? "내 앱" : "사용할 수 있는 앱"}
             {appList.length > 0 && (
               <span className="ml-1 text-sm font-medium text-slate-400">{appList.length}</span>
             )}
@@ -304,7 +583,7 @@ export default function DashboardPage() {
           </h3>
           {editable && (
             <div className="flex gap-2">
-              <ImportAppButton />
+              <ImportAppButton projectId={projectId} />
               <Button size="sm" variant="outline" onClick={() => setOpen(true)}>
                 <Plus className="h-4 w-4" /> 빈 앱
               </Button>
@@ -315,13 +594,18 @@ export default function DashboardPage() {
         <ErrorBox error={apps.error} />
         {apps.data && appList.length === 0 && (
           <Empty>
-            {editable
-              ? "아직 앱이 없어요. 위에 만들고 싶은 것을 적어 보세요."
-              : "아직 사용할 수 있는 앱이 없어요. 관리자가 앱을 배포하면 여기에 보여요."}
+            {filter
+              ? editable
+                ? "여기에는 아직 앱이 없어요. 위에 만들고 싶은 것을 적으면 이곳에 만들어져요."
+                : "여기에는 아직 앱이 없어요."
+              : editable
+                ? "아직 앱이 없어요. 위에 만들고 싶은 것을 적어 보세요."
+                : "아직 사용할 수 있는 앱이 없어요. 관리자가 앱을 배포하면 여기에 보여요."}
           </Empty>
         )}
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {appList.map((app) => {
+            const proj = !filter && app.project_id ? byId.get(app.project_id) : undefined;
             const body = (
               <Card className="group h-full p-4 transition-all hover:-translate-y-0.5 hover:border-indigo-200 hover:shadow-lift">
                 <div className="flex items-start gap-3">
@@ -335,7 +619,14 @@ export default function DashboardPage() {
                     </p>
                   </div>
                   <StatusBadge status={app.status} />
+                  {editable && <CardMenu onMove={() => setMoving(app)} />}
                 </div>
+                {proj && (
+                  <span className="mt-3 inline-flex max-w-full items-center gap-1.5 rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-600">
+                    <ProjectDot color={proj.color} className="h-2 w-2" />
+                    <span className="truncate">{proj.name}</span>
+                  </span>
+                )}
                 {app.description && (
                   <p className="mt-3 line-clamp-2 text-[13px] leading-relaxed text-slate-500">
                     {app.description}
@@ -389,7 +680,17 @@ export default function DashboardPage() {
           </Card>
         </section>
       )}
-      <BlankAppDialog open={open} onClose={() => setOpen(false)} />
+      <BlankAppDialog open={open} onClose={() => setOpen(false)} projectId={projectId} />
+      <ProjectDialog
+        ws={ws}
+        open={projectDialog !== null}
+        onClose={() => setProjectDialog(null)}
+        project={projectDialog === "edit" ? current : null}
+        myUserId={me.data?.id}
+        onSaved={(p) => setFilter(p.id)}
+        onDeleted={() => setFilter("")}
+      />
+      <MoveProjectDialog app={moving} projects={projectList} onClose={() => setMoving(null)} />
     </PageContainer>
   );
 }

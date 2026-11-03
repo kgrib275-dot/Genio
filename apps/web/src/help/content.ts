@@ -274,6 +274,60 @@ export const HELP_SECTIONS: HelpSection[] = [
     ],
   },
   {
+    id: "projects",
+    title: "프로젝트",
+    summary: "앱과 지식을 프로젝트로 묶어 나만의 작업 공간처럼 정리해요.",
+    blocks: [
+      {
+        type: "p",
+        text: "**프로젝트**는 관련된 앱과 지식을 한데 모아 두는 폴더예요. 왼쪽 메뉴의 **프로젝트** 아래에서 고르면 대시보드에 그 프로젝트의 앱만 보여요.",
+      },
+      {
+        type: "steps",
+        items: [
+          "왼쪽 메뉴에서 **+ 새 프로젝트**를 눌러 이름과 색을 정해요.",
+          "**누가 볼 수 있나요?**에서 **워크스페이스 전체** 또는 **나와 고른 사람만**을 골라요.",
+          "프로젝트를 고른 상태에서 앱을 만들면 그 프로젝트 안에 만들어져요.",
+          "이미 만든 앱은 카드의 **⋯ > 프로젝트 이동** 또는 앱 설정에서 옮길 수 있어요.",
+        ],
+      },
+      {
+        type: "list",
+        items: [
+          "대시보드 위쪽 칩으로 **전체 / 프로젝트 없음 / 각 프로젝트**를 오가며 볼 수 있어요.",
+          "**나와 고른 사람만** 프로젝트는 만든 사람, 고른 구성원, 소유자·관리자만 볼 수 있어요.",
+          "프로젝트를 지워도 앱과 지식은 남아요. **프로젝트 없음**으로 옮겨져요.",
+          "지식 화면에서도 프로젝트로 걸러 보고, 지식을 만들 때 프로젝트를 고를 수 있어요.",
+        ],
+      },
+    ],
+  },
+  {
+    id: "mysettings",
+    title: "내 설정",
+    summary: "이름, 화면 테마, 글자 크기, 기본 워크스페이스, 비밀번호를 바꿔요.",
+    blocks: [
+      {
+        type: "p",
+        text: "왼쪽 메뉴 아래쪽의 **내 이름**이나 톱니바퀴를 누르면 **내 설정**이 열려요. 여기서 바꾼 값은 내 계정에만 적용돼요.",
+      },
+      {
+        type: "list",
+        items: [
+          "**테마**: 밝게, 어둡게, 시스템(기기 설정을 따라감) 중에서 골라요. 바로 적용돼요.",
+          "**글자 크기**: **크게**를 고르면 모든 화면 글자가 조금 커져요.",
+          "**기본 워크스페이스**: 처음 들어왔을 때 먼저 열 워크스페이스예요.",
+          "**Enter로 보내기**: 끄면 Enter는 줄바꿈, **Ctrl+Enter**(Mac은 ⌘+Enter)가 보내기예요.",
+          "**비밀번호 바꾸기**: 지금 비밀번호를 확인한 뒤 새 비밀번호로 바꿔요.",
+        ],
+      },
+      {
+        type: "tip",
+        text: "이메일 주소는 로그인 아이디라서 여기서 바꿀 수 없어요.",
+      },
+    ],
+  },
+  {
     id: "faq",
     title: "자주 묻는 질문",
     summary: "자주 막히는 상황과 해결 방법이에요.",
@@ -306,7 +360,9 @@ export type HelpPageKey =
   | "market"
   | "workspace"
   | "admin"
-  | "share";
+  | "share"
+  | "mysettings"
+  | "projects";
 
 /** 화면별로 '?' 버튼이 보여 줄 단락 */
 export const PAGE_HELP: Record<HelpPageKey, string> = {
@@ -324,6 +380,8 @@ export const PAGE_HELP: Record<HelpPageKey, string> = {
   workspace: "admin",
   admin: "admin",
   share: "share",
+  mysettings: "mysettings",
+  projects: "projects",
 };
 
 export function helpSection(id: string): HelpSection {

@@ -21,6 +21,7 @@ import { Input } from "@/components/ui/input";
 import { HelpButton } from "@/help/HelpButton";
 import { ko } from "@/i18n/ko";
 import { errorLines } from "@/lib/api/client";
+import { isSendKey, sendHint, useEnterToSend } from "@/lib/composer";
 import { sendPublicChat, usePublicApp } from "@/lib/api/resources";
 import type { Citation, PublicAppV2, Rating, StoredFile } from "@/lib/api/types";
 import { sendPublicFeedback, uploadPublicFile } from "@/lib/api/v2";
@@ -112,6 +113,7 @@ export default function SharePage() {
   const [params] = useSearchParams();
   const embed = params.get("embed") === "1";
   const loggedIn = useLoggedIn();
+  const enterToSend = useEnterToSend();
   const app = usePublicApp(token);
   const [lines, setLines] = useState<ChatLine[]>([]);
   const [message, setMessage] = useState("");
@@ -573,8 +575,9 @@ export default function SharePage() {
                   className="max-h-32 min-h-[36px] flex-1 resize-none border-0 bg-transparent py-2 text-[15px] placeholder:text-slate-400 focus:outline-none sm:text-sm"
                   value={message}
                   onChange={(e) => setMessage(e.target.value)}
+                  title={sendHint(enterToSend)}
                   onKeyDown={(e) => {
-                    if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+                    if (isSendKey(e, enterToSend)) {
                       e.preventDefault();
                       void send(message);
                     }

@@ -109,10 +109,14 @@ class ImportIn(BaseModel):
     app: dict[str, Any]
     graph: dict[str, Any]
     env_vars: list[dict[str, Any]] = Field(default_factory=list)
+    project_id: str | None = None
 
 
 @router.post("/workspaces/{ws}/apps/import", status_code=201)
 def import_app(ws: str, body: ImportIn, ctx: WsBuilders) -> dict[str, Any]:
+    from api.routers.projects import check_project_target
+
+    check_project_target(ctx, ws, body.project_id)
     try:
         graph = Graph.model_validate(body.graph).dump()
     except ValueError as exc:
@@ -137,6 +141,7 @@ def import_app(ws: str, body: ImportIn, ctx: WsBuilders) -> dict[str, Any]:
         draft_graph=graph,
         features=patch_features({}, dict(meta.get("features") or {})),
         env_vars=store_env_vars(body.env_vars, []),
+        project_id=body.project_id or None,
     )
     ctx.db.add(app)
     ctx.db.flush()

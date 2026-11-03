@@ -63,11 +63,44 @@ export interface WorkspaceRef {
   role: Role;
 }
 
+export interface Preferences {
+  theme: "light" | "dark" | "system";
+  font_size: "normal" | "large";
+  default_workspace_id: string | null;
+  enter_to_send: boolean;
+}
+
+export const DEFAULT_PREFERENCES: Preferences = {
+  theme: "system",
+  font_size: "normal",
+  default_workspace_id: null,
+  enter_to_send: true,
+};
+
 export interface Me {
   id: string;
   email: string;
   name: string;
   workspaces: WorkspaceRef[];
+  preferences?: Partial<Preferences>;
+}
+
+export type ProjectColor = "indigo" | "sky" | "emerald" | "amber" | "rose" | "violet" | "slate";
+
+export interface Project {
+  id: string;
+  workspace_id: string;
+  name: string;
+  description: string;
+  color: ProjectColor;
+  visibility: "workspace" | "private";
+  created_by: string | null;
+  created_by_name: string;
+  created_at: string;
+  app_count: number;
+  knowledge_base_count: number;
+  members: { user_id: string; name: string; email: string }[];
+  can_manage: boolean;
 }
 
 export interface Member {
@@ -167,6 +200,7 @@ export interface App {
   created_by: string | null;
   updated_at: string;
   latest_version: number | null;
+  project_id?: string | null;
 }
 
 export interface AppDetail extends App {
@@ -297,6 +331,7 @@ export interface KnowledgeBase {
   chunk_size: number;
   created_at: string;
   document_count: number;
+  project_id?: string | null;
 }
 
 export interface KbDocument {

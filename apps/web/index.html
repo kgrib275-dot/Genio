@@ -13,6 +13,20 @@
       onload="this.media = 'all'"
     />
     <title>Genio</title>
+    <script>
+      // 테마·글자 크기를 화면이 그려지기 전에 적용(깜빡임 방지). 값은 store/theme.ts와 같다.
+      (function () {
+        try {
+          var t = localStorage.getItem("genio.theme") || "system";
+          var dark =
+            t === "dark" ||
+            (t === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches);
+          if (dark) document.documentElement.classList.add("dark");
+          if (localStorage.getItem("genio.fontSize") === "large")
+            document.documentElement.classList.add("font-large");
+        } catch (e) {}
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

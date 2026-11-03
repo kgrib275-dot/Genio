@@ -53,9 +53,18 @@ vi.mock("@/lib/api/builder", async (orig) => {
   };
 });
 
-function renderChat() {
+function renderChat(enterToSend?: boolean) {
+  const qc = new QueryClient();
+  if (enterToSend !== undefined)
+    qc.setQueryData(["me"], {
+      id: "u1",
+      email: "a@b.c",
+      name: "A",
+      workspaces: [],
+      preferences: { enter_to_send: enterToSend },
+    });
   return render(
-    <QueryClientProvider client={new QueryClient()}>
+    <QueryClientProvider client={qc}>
       <MemoryRouter>
         <BuilderChatView sessionId="s1" history={[]} wsId="ws1" />
       </MemoryRouter>
@@ -89,5 +98,28 @@ describe("BuilderChatView", () => {
     await waitFor(() =>
       expect(sent.map((s) => s.content)).toEqual(["문의를 분류해 줘", "#billing"]),
     );
+  });
+
+  it("Enter로 보내기가 꺼져 있으면 Enter는 줄바꿈, Ctrl+Enter가 보내기다", async () => {
+    renderChat(false);
+    const box = screen.getByLabelText("빌더에게 보낼 메시지");
+    fireEvent.change(box, { target: { value: "첫 줄" } });
+    const enter = fireEvent.keyDown(box, { key: "Enter" });
+    // 기본 동작(줄바꿈)을 막지 않고, 보내지도 않는다
+    expect(enter).toBe(true);
+    expect(sent).toHaveLength(0);
+
+    fireEvent.keyDown(box, { key: "Enter", ctrlKey: true });
+    await waitFor(() => expect(sent.map((s) => s.content)).toEqual(["첫 줄"]));
+  });
+
+  it("기본값(켜짐)에서는 Enter로 보내고 Shift+Enter는 줄바꿈이다", async () => {
+    renderChat(true);
+    const box = screen.getByLabelText("빌더에게 보낼 메시지");
+    fireEvent.change(box, { target: { value: "보내기" } });
+    expect(fireEvent.keyDown(box, { key: "Enter", shiftKey: true })).toBe(true);
+    expect(sent).toHaveLength(0);
+    expect(fireEvent.keyDown(box, { key: "Enter" })).toBe(false);
+    await waitFor(() => expect(sent.map((s) => s.content)).toEqual(["보내기"]));
   });
 });

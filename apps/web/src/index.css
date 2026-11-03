@@ -1,3 +1,4 @@
+@import "./theme.css";
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -11,6 +12,62 @@ body,
 body {
   @apply bg-slate-50 font-sans text-slate-900 antialiased;
   letter-spacing: -0.01em;
+}
+
+/* 글자 크기(내 설정): 모든 크기가 rem 기준이라 html 크기만 바꾼다 */
+html.font-large {
+  font-size: 17.5px;
+}
+
+/* 다크 모드: 흰 바탕(카드·입력칸)은 어두운 면으로. text-white(버튼 글자)는 그대로 둔다 */
+.dark .bg-white {
+  background-color: rgb(var(--surface) / 1);
+}
+.dark .bg-white\/80 {
+  background-color: rgb(var(--surface) / 0.8);
+}
+.dark .bg-white\/60 {
+  background-color: rgb(var(--surface) / 0.6);
+}
+.dark .hover\:bg-white:hover,
+.dark .disabled\:hover\:bg-white:disabled:hover {
+  background-color: rgb(var(--surface) / 1);
+}
+@media (min-width: 1024px) {
+  .dark .lg\:bg-white {
+    background-color: rgb(var(--surface) / 1);
+  }
+}
+.dark .via-white {
+  --tw-gradient-stops:
+    var(--tw-gradient-from), rgb(var(--surface) / 1) var(--tw-gradient-via-position),
+    var(--tw-gradient-to);
+}
+.dark .shadow-card,
+.dark .shadow-lift {
+  --tw-shadow-color: rgb(0 0 0 / 0.4);
+}
+.dark select option {
+  background-color: rgb(var(--surface));
+  color: rgb(var(--slate-900));
+}
+.dark ::placeholder {
+  color: rgb(var(--slate-400));
+}
+/* React Flow 캔버스(colorMode="dark"와 함께) */
+.dark .react-flow {
+  --xy-background-color: rgb(var(--slate-50));
+  --xy-background-pattern-color: rgb(var(--slate-200));
+  --xy-edge-stroke: rgb(var(--slate-400));
+  --xy-controls-button-background-color: rgb(var(--surface));
+  --xy-controls-button-border-color: rgb(var(--slate-200));
+  --xy-controls-button-color: rgb(var(--slate-700));
+}
+.dark .react-flow__edge-textbg {
+  fill: rgb(var(--surface));
+}
+.dark .react-flow__edge-text {
+  fill: rgb(var(--slate-600));
 }
 
 /* 빌더 patch로 바뀐 노드 2초 하이라이트 */
@@ -69,4 +126,14 @@ body {
 .genio-form .error-detail,
 .genio-form .text-danger {
   @apply text-xs text-red-600;
+}
+
+/* 다크 모드: 노드 설정 폼(@apply로 칠한 흰 바탕) */
+.dark .genio-form input[type="text"],
+.dark .genio-form input[type="number"],
+.dark .genio-form input[type="email"],
+.dark .genio-form input:not([type]),
+.dark .genio-form select,
+.dark .genio-form textarea {
+  background-color: rgb(var(--surface) / 1);
 }
