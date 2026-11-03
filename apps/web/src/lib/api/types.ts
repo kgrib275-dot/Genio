@@ -625,7 +625,7 @@ export interface NewApiKey extends ApiKey {
   key: string;
 }
 
-export type ChunkMode = "general" | "parent_child";
+export type ChunkMode = "general" | "parent_child" | "qa";
 export type RetrievalMethod = "vector" | "keyword" | "hybrid";
 
 export interface KbSettings {
@@ -634,6 +634,10 @@ export interface KbSettings {
   chunk_size: number;
   chunk_overlap: number;
   child_chunk_size: number;
+  /** v0.6 질문·답 형식: AI가 조각마다 만들 쌍 수(1~10) */
+  qa_pairs_per_chunk: number;
+  /** v0.6 문서 처리 순서 */
+  pipeline: PipelineStep[];
   retrieval: {
     method: RetrievalMethod;
     top_k: number;
@@ -649,6 +653,8 @@ export const DEFAULT_KB_SETTINGS: KbSettings = {
   chunk_size: 800,
   chunk_overlap: 100,
   child_chunk_size: 200,
+  qa_pairs_per_chunk: 3,
+  pipeline: [],
   retrieval: { method: "vector", top_k: 4, score_threshold: 0, vector_weight: 0.7, rerank: false },
 };
 
@@ -667,7 +673,7 @@ export interface KnowledgeBaseV2 extends KnowledgeBase {
 
 export interface KbDocumentV2 extends KbDocument {
   metadata?: Record<string, string> | null;
-  source?: "upload" | "url";
+  source?: "upload" | "url" | "qa_table";
   url?: string | null;
 }
 
@@ -682,6 +688,50 @@ export interface KbChunk {
 
 export interface SearchHitV2 extends SearchHit {
   metadata?: Record<string, string> | null;
+  /** v0.6 질문·답 조각이면 찾은 질문과 그 답 */
+  question?: string;
+  answer?: string;
+}
+
+// ---------------- v0.6 문서 처리 순서·질문·답 ----------------
+export type PipelineStepType = "extract" | "clean" | "split" | "metadata" | "store";
+
+export interface PipelineStep {
+  type: PipelineStepType;
+  enabled: boolean;
+  collapse_spaces?: boolean;
+  mask_urls?: boolean;
+  mask_emails?: boolean;
+  remove_repeated_lines?: boolean;
+  remove_patterns?: string[];
+  fixed?: Record<string, string>;
+  filename_pattern?: string;
+}
+
+export interface PipelinePreviewChunk {
+  index: number;
+  content: string;
+  parent_content: string | null;
+  question?: string;
+  answer?: string;
+  char_count: number;
+}
+
+export interface PipelinePreview {
+  total: number;
+  chunks: PipelinePreviewChunk[];
+  metadata: Record<string, string>;
+  log: string[];
+  text_preview: string;
+  chunk_mode: ChunkMode;
+}
+
+export interface QaColumns {
+  columns: string[];
+  question_column: string | null;
+  answer_column: string | null;
+  sample: string[][];
+  row_count: number;
 }
 
 export interface Citation {

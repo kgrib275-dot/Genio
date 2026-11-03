@@ -4,7 +4,7 @@ import json
 import re
 from typing import Annotated, Any, Literal
 
-from fastapi import APIRouter, Depends, File, Response, UploadFile
+from fastapi import APIRouter, Depends, File, Form, Response, UploadFile
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 
@@ -16,6 +16,7 @@ from api.engine import safe_http
 from api.llm.catalog import catalog
 from api.models import Chunk, Document, KnowledgeBase
 from api.routers.projects import check_project_target
+from api.services import kb_pipeline as pipe
 from api.services import knowledge as svc
 from api.services.projects import hidden_project_ids
 from api.services.queue import enqueue_document
@@ -261,7 +262,10 @@ def update_kb(kb_id: str, body: KbPatch, ctx: KbBuilders) -> dict[str, Any]:
     if body.name:
         kb.name = body.name
     if body.settings is not None:
-        svc.patch_kb_settings(kb, body.settings)
+        try:
+            svc.patch_kb_settings(kb, body.settings)
+        except pipe.PipelineError as exc:
+            raise AppError(422, exc.message, exc.hint) from exc
     if body.project_id is not None:
         check_project_target(ctx, kb.workspace_id, body.project_id)
         kb.project_id = body.project_id or None
@@ -417,3 +421,183 @@ def update_chunk(chunk_id: str, body: ChunkPatch, ctx: ChunkBuilders) -> dict[st
             raise AppError(400, "조각을 다시 임베딩하지 못했어요.", str(exc)) from exc
     ctx.db.commit()
     return _chunk(c)
+
+
+# ---------------- v0.6 질문·답 형식과 문서 처리 순서 ----------------
+MAX_TABLE_BYTES = 5 * 1024 * 1024
+PREVIEW_CHUNKS = 50
+
+
+async def _read_table_file(file: UploadFile) -> tuple[str, bytes]:
+    filename = file.filename or "qa.csv"
+    if not pipe.is_table(filename):
+        raise AppError(
+            415,
+            "질문·답 표는 CSV나 XLSX 파일만 올릴 수 있어요.",
+            "엑셀에서 CSV로 저장해 올려 주세요.",
+        )
+    content = await file.read(MAX_TABLE_BYTES + 1)
+    if len(content) > MAX_TABLE_BYTES:
+        raise AppError(413, "표 파일이 너무 커요(최대 5MB).", "파일을 나눠서 올려 주세요.")
+    return filename, content
+
+
+@router.post("/knowledge-bases/{kb_id}/qa/columns")
+async def qa_columns(
+    kb_id: str, ctx: KbBuilders, file: Annotated[UploadFile, File()]
+) -> dict[str, Any]:
+    """질문·답 표의 열 이름과 앞 몇 줄(어느 열이 질문·답인지 고르기 전에)."""
+    del kb_id, ctx
+    filename, content = await _read_table_file(file)
+    try:
+        return pipe.table_columns(content, filename)
+    except pipe.PipelineError as exc:
+        raise AppError(422, exc.message, exc.hint) from exc
+
+
+@router.post("/knowledge-bases/{kb_id}/documents/qa")
+async def import_qa_table(
+    kb_id: str,
+    ctx: KbBuilders,
+    file: Annotated[UploadFile, File()],
+    question_column: Annotated[str | None, Form(max_length=200)] = None,
+    answer_column: Annotated[str | None, Form(max_length=200)] = None,
+) -> dict[str, Any]:
+    """질문·답 표 가져오기: 한 줄이 조각 하나(질문으로 찾고 답을 돌려줌)."""
+    filename, content = await _read_table_file(file)
+    try:
+        pairs = pipe.qa_pairs_from_table(content, filename, question_column, answer_column)
+        header = pipe.read_table(content, filename)[0]
+    except pipe.PipelineError as exc:
+        raise AppError(422, exc.message, exc.hint) from exc
+    gq, ga = pipe.guess_columns(header)
+    doc = Document(
+        kb_id=kb_id,
+        filename=filename,
+        mime="text/csv" if filename.lower().endswith(".csv") else svc.XLSX_MIME,
+        size=len(content),
+        status="uploaded",
+        content=content,
+        source=pipe.QA_SOURCE,
+        doc_metadata={
+            pipe.QA_Q_KEY: question_column or gq or "",
+            pipe.QA_A_KEY: answer_column or ga or "",
+        },
+    )
+    ctx.db.add(doc)
+    audit(
+        ctx.db,
+        workspace_id=ctx.workspace_id,
+        user_id=ctx.user.id,
+        action="kb.document_qa_import",
+        target_type="document",
+        target_id=doc.id,
+        meta={"filename": filename, "rows": len(pairs)},
+    )
+    ctx.db.commit()
+    enqueue_document(doc.id)
+    ctx.db.refresh(doc)
+    count = ctx.db.scalar(select(func.count(Chunk.id)).where(Chunk.document_id == doc.id)) or 0
+    return _doc(doc, count)
+
+
+def _bad_settings() -> AppError:
+    return AppError(422, "설정 형식이 올바르지 않아요.", "화면을 새로고침한 뒤 다시 해 보세요.")
+
+
+@router.post("/knowledge-bases/{kb_id}/preview")
+async def preview_pipeline(
+    kb_id: str,
+    ctx: KbBuilders,
+    file: Annotated[UploadFile | None, File()] = None,
+    document_id: Annotated[str | None, Form(max_length=64)] = None,
+    settings: Annotated[str | None, Form(max_length=20000)] = None,
+) -> dict[str, Any]:
+    """문서 처리 순서를 저장하지 않고 돌려 본다(올린 파일 또는 이미 있는 문서)."""
+    kb = ctx.db.get(KnowledgeBase, kb_id)
+    if kb is None:
+        raise not_found("지식베이스")
+    try:
+        patch = json.loads(settings) if settings else {}
+    except ValueError as exc:
+        raise _bad_settings() from exc
+    if not isinstance(patch, dict):
+        raise _bad_settings()
+    try:
+        cfg = svc.merged_settings(kb, patch)
+    except pipe.PipelineError as exc:
+        raise AppError(422, exc.message, exc.hint) from exc
+    source = "upload"
+    doc_meta: dict[str, Any] = {}
+    if file is not None:
+        filename = file.filename or "document"
+        mime = file.content_type or "application/octet-stream"
+        if svc.kind_of(filename, mime) is None and not pipe.is_table(filename):
+            raise AppError(
+                415,
+                "PDF·DOCX·PPTX·XLSX·HTML·TXT·MD·CSV 파일만 미리 볼 수 있어요.",
+                "파일 형식을 바꿔서 다시 올려 주세요.",
+            )
+        content = await file.read(svc.MAX_UPLOAD_BYTES + 1)
+        if len(content) > svc.MAX_UPLOAD_BYTES:
+            raise AppError(413, "파일이 너무 커요(최대 20MB).", "파일을 나눠서 올려 주세요.")
+        if filename.lower().endswith(".csv"):
+            source = pipe.QA_SOURCE
+    elif document_id:
+        doc = ctx.db.get(Document, document_id)
+        if doc is None or doc.kb_id != kb_id:
+            raise not_found("문서")
+        filename, mime, content = doc.filename, doc.mime, doc.content or b""
+        source, doc_meta = doc.source, dict(doc.doc_metadata or {})
+    else:
+        raise AppError(422, "미리 볼 문서가 없어요.", "파일을 올리거나 문서를 하나 골라 주세요.")
+    try:
+        result = pipe.run_pipeline(
+            ctx.db,
+            ctx.workspace_id,
+            cfg,
+            filename=filename,
+            mime=mime,
+            content=content,
+            source=source,
+            doc_metadata=doc_meta,
+            preview=True,
+        )
+    except pipe.PipelineError as exc:
+        raise AppError(422, exc.message, exc.hint) from exc
+    except ValueError as exc:
+        raise AppError(422, str(exc), "다른 파일로 다시 해 보세요.") from exc
+    finally:
+        ctx.db.rollback()  # 미리 보기는 아무것도 저장하지 않는다
+    return {
+        "total": len(result.pieces),
+        "chunks": [
+            {"index": i, **p.as_dict(), "char_count": len(p.content)}
+            for i, p in enumerate(result.pieces[:PREVIEW_CHUNKS])
+        ],
+        "metadata": result.metadata,
+        "log": result.log,
+        "text_preview": result.text[:2000],
+        "chunk_mode": cfg["chunk_mode"],
+    }
+
+
+@router.post("/knowledge-bases/{kb_id}/reprocess")
+def reprocess_kb(kb_id: str, ctx: KbBuilders) -> dict[str, Any]:
+    """모든 문서를 지금 처리 순서로 다시 나눈다(워커에서)."""
+    docs = list(ctx.db.scalars(select(Document).where(Document.kb_id == kb_id)))
+    for d in docs:
+        d.status = "uploaded"
+    audit(
+        ctx.db,
+        workspace_id=ctx.workspace_id,
+        user_id=ctx.user.id,
+        action="kb.reprocess",
+        target_type="knowledge_base",
+        target_id=kb_id,
+        meta={"documents": len(docs)},
+    )
+    ctx.db.commit()
+    for d in docs:
+        enqueue_document(d.id)
+    return {"queued": len(docs)}
