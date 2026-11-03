@@ -39,6 +39,10 @@ class Settings(BaseSettings):
     genio_node_timeout_seconds: float = 60.0
     genio_run_timeout_seconds: float = 600.0
     genio_public_rate_limit_per_minute: int = 30
+    # API 프로세스 하나의 작업 스레드 수와 DB 연결 수(프로세스 수는 GENIO_API_WORKERS, compose)
+    genio_api_threads: int = 200
+    genio_db_pool_size: int = 10
+    genio_db_max_overflow: int = 10
     # 사설망 호출 허용(테스트 전용). 운영에서는 항상 false.
     genio_allow_private_network: bool = False
 

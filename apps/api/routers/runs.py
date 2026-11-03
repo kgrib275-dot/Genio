@@ -82,26 +82,38 @@ def _stream(run_id: str) -> Iterator[str]:
     started = time.time()
     try:
         while time.time() - started < STREAM_MAX_SECONDS:
+            frames: list[str] = []
+            ended = False
             with SessionLocal() as db:
                 run = db.get(Run, run_id)
                 if run is None:
-                    yield sse_frame(
-                        "error",
-                        {"message": "실행 기록을 찾을 수 없어요.", "hint": "목록에서 다시 여세요."},
+                    frames.append(
+                        sse_frame(
+                            "error",
+                            {
+                                "message": "실행 기록을 찾을 수 없어요.",
+                                "hint": "목록에서 다시 여세요.",
+                            },
+                        )
                     )
-                    return
-                rd = run_dict(run)
-                if run.status != last_status:
-                    last_status = run.status
-                    yield sse_frame("run", rd)
-                for s in _steps(db, run_id):
-                    sig = (s.status, s.finished_at)
-                    if seen_steps.get(s.id) != sig:
-                        seen_steps[s.id] = sig
-                        yield sse_frame("step", step_dict(s))
-                if run.status in END_STATES:
-                    yield sse_frame("end", rd)
-                    return
+                    ended = True
+                else:
+                    rd = run_dict(run)
+                    if run.status != last_status:
+                        last_status = run.status
+                        frames.append(sse_frame("run", rd))
+                    for s in _steps(db, run_id):
+                        sig = (s.status, s.finished_at)
+                        if seen_steps.get(s.id) != sig:
+                            seen_steps[s.id] = sig
+                            frames.append(sse_frame("step", step_dict(s)))
+                    if run.status in END_STATES:
+                        frames.append(sse_frame("end", rd))
+                        ended = True
+            # 세션을 닫은 뒤에 보낸다(받는 쪽이 느려도 DB 연결을 붙잡지 않게)
+            yield from frames
+            if ended:
+                return
             if sub is not None:
                 sub.get_message(timeout=1.0)
             else:

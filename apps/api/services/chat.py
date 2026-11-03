@@ -155,6 +155,7 @@ def citations_from_steps(db: Session, run_id: str) -> list[dict[str, Any]]:
 def follow_up_questions(db: Session, workspace_id: str, question: str, answer: str) -> list[str]:
     try:
         llm = resolve_llm(db, workspace_id, "default")
+        db.rollback()  # 연결 반납: 아래 AI 호출 동안 DB 연결을 붙잡지 않는다
         res = llm.adapter.complete(
             model=llm.model,
             system="사용자가 이어서 물어볼 만한 짧은 질문 3개를 한국어로 만드세요. 각 질문은 25자 이내.",
@@ -226,104 +227,31 @@ def run_chat(
     trigger: str = "chat",
     draft_graph: dict[str, Any] | None = None,
 ) -> Iterator[Event]:
-    """이벤트를 차례로 돌려준다. 호출자는 SSE로 보내거나(공개 챗) 모아서 JSON으로 돌려준다(서비스 API)."""
+    """이벤트를 차례로 돌려준다. 호출자는 SSE로 보내거나(공개 챗) 모아서 JSON으로 돌려준다(서비스 API).
+
+    DB 세션 안에서는 읽고 저장만 한다. 이벤트를 내보내는 동안(받는 쪽이 느릴 수 있음)과
+    AI 호출 동안에는 DB 연결을 붙잡지 않는다(동시 사용자 한계, docs/loadtest-2026-11-03.md).
+    """
     started = time.time()
+    early: list[Event] | None = None  # 흐름을 돌리지 않고 바로 끝나는 경우
+    run_id = ""
+    stream_deltas = False
     with SessionLocal() as db:
         app = db.get(App, req_app_id)
         version = db.get(WorkflowVersion, version_id) if version_id else None
         conv = db.get(Conversation, conv_id)
         graph = version.graph if version is not None else draft_graph
         if app is None or graph is None or conv is None:
-            yield ("error", {"message": "앱을 찾을 수 없어요.", "hint": "링크를 확인하세요."})
-            return
-        features = merged_features(app.features)
-        fields = input_fields(graph)
-        mod = features["moderation"]
-
-        conv_key = conv.id
-
-        def save(text: str, **extra: Any) -> Message:
-            m = Message(
-                conversation_id=conv_key,
-                role="assistant",
-                content=text,
-                latency_ms=int((time.time() - started) * 1000),
-                **extra,
-            )
-            db.add(m)
-            db.commit()
-            return m
-
-        # 1) 입력 검열
-        if mod["enabled"] and moderated(message, mod["keywords"]):
-            m = save(mod["preset_reply"], moderated=True)
-            yield ("moderated", {"text": m.content, "message_id": m.id})
-            yield (
-                "done",
-                {
-                    "session_id": conv.external_session_id,
-                    "run_id": None,
-                    "status": "moderated",
-                    "message_id": m.id,
-                },
-            )
-            return
-
-        # 2) 주석 답변
-        ann_cfg = features["annotation_reply"]
-        if ann_cfg["enabled"] and message:
-            hit = match_annotation(db, app.id, message, float(ann_cfg["score_threshold"]))
-            if hit is not None:
-                ann, _score = hit
-                ann.hit_count = (ann.hit_count or 0) + 1
-                m = save(ann.answer, annotation_id=ann.id)
-                yield (
-                    "annotated",
-                    {"text": ann.answer, "annotation_id": ann.id, "message_id": m.id},
+            early = [("error", {"message": "앱을 찾을 수 없어요.", "hint": "링크를 확인하세요."})]
+        else:
+            early = _answer_without_run(db, app, conv, message, started)
+            if early is None:
+                run_id, stream_deltas = _start_run(
+                    db, app, version, conv, graph, inputs, message, files, trigger, user_id
                 )
-                yield (
-                    "done",
-                    {
-                        "session_id": conv.external_session_id,
-                        "run_id": None,
-                        "status": "annotated",
-                        "message_id": m.id,
-                    },
-                )
-                return
-
-        # 3) 흐름 실행
-        window = int(features["memory"]["window"])
-        prior = list(
-            db.scalars(
-                select(Message)
-                .where(Message.conversation_id == conv.id)
-                .order_by(Message.created_at.desc())
-                .limit(window * 2 + 1)
-            )
-        )[::-1][:-1]
-        run_input: dict[str, Any] = dict(inputs)
-        if fields and message:
-            run_input.setdefault(str(fields[0]["key"]), message)
-        file_field = next((f["key"] for f in fields if f["type"] == "file"), None)
-        if files and file_field:
-            run_input.setdefault(str(file_field), files[0] if len(files) == 1 else files)
-        run_input["history"] = "\n".join(f"{m.role}: {m.content}" for m in prior) if window else ""
-        run_input["__conv"] = dict(conv.variables or {})
-        run = Run(
-            app_id=app.id,
-            version_id=version.id if version is not None else None,
-            # 작업본(대화로 시험하기)은 그래프를 그대로 붙여 둔다
-            graph_snapshot=None if version is not None else graph,
-            trigger=trigger,
-            input=run_input,
-            created_by=user_id,
-        )
-        db.add(run)
-        db.commit()
-        run_id = run.id
-        # 출력 검열을 켠 앱은 검열 전 글이 보이지 않도록 조각을 보내지 않는다
-        stream_deltas = not (mod["enabled"] and mod["check_output"])
+    if early is not None:
+        yield from early
+        return
     yield ("status", {"message": "답을 만들고 있어요"})
     # 구독을 먼저 해야 실행이 바로 끝나도 조각을 놓치지 않는다
     source = open_delta_source(run_id) if stream_deltas else _NoDeltas()
@@ -333,6 +261,111 @@ def run_chat(
         )
     finally:
         source.close()
+
+
+def _save_reply(db: Session, conv_id: str, text: str, started: float, **extra: Any) -> Message:
+    m = Message(
+        conversation_id=conv_id,
+        role="assistant",
+        content=text,
+        latency_ms=int((time.time() - started) * 1000),
+        **extra,
+    )
+    db.add(m)
+    db.commit()
+    return m
+
+
+def _answer_without_run(
+    db: Session, app: App, conv: Conversation, message: str, started: float
+) -> list[Event] | None:
+    """입력 검열·주석 답변으로 바로 답할 수 있으면 보낼 이벤트를, 아니면 None."""
+    features = merged_features(app.features)
+    mod = features["moderation"]
+    # 1) 입력 검열
+    if mod["enabled"] and moderated(message, mod["keywords"]):
+        m = _save_reply(db, conv.id, mod["preset_reply"], started, moderated=True)
+        return [
+            ("moderated", {"text": m.content, "message_id": m.id}),
+            (
+                "done",
+                {
+                    "session_id": conv.external_session_id,
+                    "run_id": None,
+                    "status": "moderated",
+                    "message_id": m.id,
+                },
+            ),
+        ]
+    # 2) 주석 답변
+    ann_cfg = features["annotation_reply"]
+    if ann_cfg["enabled"] and message:
+        hit = match_annotation(db, app.id, message, float(ann_cfg["score_threshold"]))
+        if hit is not None:
+            ann, _score = hit
+            ann.hit_count = (ann.hit_count or 0) + 1
+            m = _save_reply(db, conv.id, ann.answer, started, annotation_id=ann.id)
+            return [
+                ("annotated", {"text": ann.answer, "annotation_id": ann.id, "message_id": m.id}),
+                (
+                    "done",
+                    {
+                        "session_id": conv.external_session_id,
+                        "run_id": None,
+                        "status": "annotated",
+                        "message_id": m.id,
+                    },
+                ),
+            ]
+    return None
+
+
+def _start_run(
+    db: Session,
+    app: App,
+    version: WorkflowVersion | None,
+    conv: Conversation,
+    graph: dict[str, Any],
+    inputs: dict[str, Any],
+    message: str,
+    files: list[str],
+    trigger: str,
+    user_id: str | None,
+) -> tuple[str, bool]:
+    """3) 대화 기록을 붙여 실행을 만든다. (run_id, 답 조각을 보낼지) 반환."""
+    features = merged_features(app.features)
+    fields = input_fields(graph)
+    window = int(features["memory"]["window"])
+    prior = list(
+        db.scalars(
+            select(Message)
+            .where(Message.conversation_id == conv.id)
+            .order_by(Message.created_at.desc())
+            .limit(window * 2 + 1)
+        )
+    )[::-1][:-1]
+    run_input: dict[str, Any] = dict(inputs)
+    if fields and message:
+        run_input.setdefault(str(fields[0]["key"]), message)
+    file_field = next((f["key"] for f in fields if f["type"] == "file"), None)
+    if files and file_field:
+        run_input.setdefault(str(file_field), files[0] if len(files) == 1 else files)
+    run_input["history"] = "\n".join(f"{m.role}: {m.content}" for m in prior) if window else ""
+    run_input["__conv"] = dict(conv.variables or {})
+    run = Run(
+        app_id=app.id,
+        version_id=version.id if version is not None else None,
+        # 작업본(대화로 시험하기)은 그래프를 그대로 붙여 둔다
+        graph_snapshot=None if version is not None else graph,
+        trigger=trigger,
+        input=run_input,
+        created_by=user_id,
+    )
+    db.add(run)
+    db.commit()
+    mod = features["moderation"]
+    # 출력 검열을 켠 앱은 검열 전 글이 보이지 않도록 조각을 보내지 않는다
+    return run.id, not (mod["enabled"] and mod["check_output"])
 
 
 def _wait_for_answer(
@@ -362,78 +395,21 @@ def _wait_for_answer(
             yield ("delta", {"text": str(d.get("text", "")), "node_id": node_id})
         wait = POLL_SECONDS
         with SessionLocal() as db:
-            r = db.get(Run, run_id)
-            status = r.status if r else "failed"
-            app = db.get(App, req_app_id)
-            conv = db.get(Conversation, conv_id)
-            if app is None or conv is None:
-                yield (
-                    "error",
-                    {"message": "앱이나 대화가 사라졌어요.", "hint": "화면을 새로고침하세요."},
-                )
-                return
-            if r is not None and status in ("succeeded", "failed", "waiting_approval"):
-                features = merged_features(app.features)
-                if isinstance((r.output or {}).get("conv"), dict):
-                    conv.variables = dict(r.output["conv"])  # type: ignore[index]
-                if status == "succeeded":
-                    answer = str((r.output or {}).get("text", "")) or "(답이 비어 있어요)"
-                elif status == "waiting_approval":
-                    answer = "담당자의 승인을 기다리고 있어요. 승인되면 처리돼요."
-                else:
-                    answer = ""
-                if not answer:
-                    db.commit()
-                    yield (
-                        "error",
-                        {
-                            "message": "답을 만들지 못했어요.",
-                            "hint": "잠시 후 다시 물어보거나 앱 관리자에게 알려 주세요.",
-                        },
-                    )
-                    break
-                mod = features["moderation"]
-                was_moderated = bool(
-                    mod["enabled"] and mod["check_output"] and moderated(answer, mod["keywords"])
-                )
-                if was_moderated:
-                    answer = mod["preset_reply"]
-                cites = (
-                    citations_from_steps(db, run_id)
-                    if features["citations"]["enabled"] and not was_moderated
-                    else []
-                )
-                m = Message(
-                    conversation_id=conv.id,
-                    role="assistant",
-                    content=answer,
-                    run_id=run_id,
-                    moderated=was_moderated,
-                    citations=cites or None,
-                    latency_ms=int((time.time() - started) * 1000),
-                )
-                db.add(m)
-                db.commit()
-                yield (
-                    "moderated" if was_moderated else "answer",
-                    {"text": answer, "message_id": m.id},
-                )
-                if cites:
-                    yield ("citations", cites)
-                if features["follow_up"]["enabled"] and status == "succeeded" and not was_moderated:
-                    qs = follow_up_questions(db, app.workspace_id, message, answer)
-                    if qs:
-                        yield ("suggestions", qs)
-                yield (
-                    "done",
-                    {
-                        "session_id": conv.external_session_id,
-                        "run_id": run_id,
-                        "status": status,
-                        "message_id": m.id,
-                    },
-                )
-                return
+            outcome = _check_run(db, run_id, conv_id, req_app_id, started)
+        if outcome is None:
+            continue  # 아직 실행 중
+        status, events_out, follow, done = outcome
+        yield from events_out
+        if follow is not None:
+            # 이어질 질문은 AI 호출이라 몇 초 걸린다. DB 연결 없이 한다.
+            with SessionLocal() as fdb:
+                qs = follow_up_questions(fdb, follow[0], message, follow[1])
+            if qs:
+                yield ("suggestions", qs)
+        if done is not None:
+            yield done
+            return
+        break  # 답을 만들지 못함 → 아래에서 done
     else:
         yield (
             "error",
@@ -443,3 +419,87 @@ def _wait_for_answer(
         conv = db.get(Conversation, conv_id)
         sid = conv.external_session_id if conv else None
     yield ("done", {"session_id": sid, "run_id": run_id, "status": status, "message_id": None})
+
+
+def _check_run(
+    db: Session, run_id: str, conv_id: str, req_app_id: str, started: float
+) -> tuple[str, list[Event], tuple[str, str] | None, Event | None] | None:
+    """실행이 끝났으면 답을 저장하고 (상태, 보낼 이벤트, 이어질 질문 재료, done)을, 아니면 None."""
+    r = db.get(Run, run_id)
+    status = r.status if r else "failed"
+    app = db.get(App, req_app_id)
+    conv = db.get(Conversation, conv_id)
+    if app is None or conv is None:
+        return (
+            status,
+            [("error", {"message": "앱이나 대화가 사라졌어요.", "hint": "화면을 새로고침하세요."})],
+            None,
+            None,
+        )
+    if r is None or status not in ("succeeded", "failed", "waiting_approval"):
+        return None
+    features = merged_features(app.features)
+    if isinstance((r.output or {}).get("conv"), dict):
+        conv.variables = dict(r.output["conv"])  # type: ignore[index]
+    if status == "succeeded":
+        answer = str((r.output or {}).get("text", "")) or "(답이 비어 있어요)"
+    elif status == "waiting_approval":
+        answer = "담당자의 승인을 기다리고 있어요. 승인되면 처리돼요."
+    else:
+        answer = ""
+    if not answer:
+        db.commit()
+        return (
+            status,
+            [
+                (
+                    "error",
+                    {
+                        "message": "답을 만들지 못했어요.",
+                        "hint": "잠시 후 다시 물어보거나 앱 관리자에게 알려 주세요.",
+                    },
+                )
+            ],
+            None,
+            None,
+        )
+    mod = features["moderation"]
+    was_moderated = bool(
+        mod["enabled"] and mod["check_output"] and moderated(answer, mod["keywords"])
+    )
+    if was_moderated:
+        answer = mod["preset_reply"]
+    cites = (
+        citations_from_steps(db, run_id)
+        if features["citations"]["enabled"] and not was_moderated
+        else []
+    )
+    m = _save_reply(
+        db,
+        conv.id,
+        answer,
+        started,
+        run_id=run_id,
+        moderated=was_moderated,
+        citations=cites or None,
+    )
+    events_out: list[Event] = [
+        ("moderated" if was_moderated else "answer", {"text": answer, "message_id": m.id})
+    ]
+    if cites:
+        events_out.append(("citations", cites))
+    follow = (
+        (app.workspace_id, answer)
+        if features["follow_up"]["enabled"] and status == "succeeded" and not was_moderated
+        else None
+    )
+    done: Event = (
+        "done",
+        {
+            "session_id": conv.external_session_id,
+            "run_id": run_id,
+            "status": status,
+            "message_id": m.id,
+        },
+    )
+    return status, events_out, follow, done

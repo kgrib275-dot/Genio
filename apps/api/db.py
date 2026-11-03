@@ -36,7 +36,14 @@ def make_engine(url: str) -> Engine:
             cur.close()
 
         return eng
-    return create_engine(url, pool_pre_ping=True, pool_size=10, max_overflow=10)
+    s = get_settings()
+    return create_engine(
+        url,
+        pool_pre_ping=True,
+        pool_size=s.genio_db_pool_size,
+        max_overflow=s.genio_db_max_overflow,
+        pool_timeout=15,
+    )
 
 
 engine: Engine = make_engine(get_settings().database_url)

@@ -103,3 +103,12 @@ alembic -c apps/api/alembic.ini check      # 모델과 DB가 같은지
 | 문서가 '실패' | 문서 행의 사유 확인(대부분 OpenAI 연결 없음) |
 | 실행이 '대기 중'에서 안 움직임 | `docker compose logs worker` |
 | 공유 주소가 안 열림 | `tailscale serve status`, 상대가 tailnet에 있는지 |
+
+## 동시 사용자·서버 설정 (부하 시험 2026-11-03)
+- API는 운영 설정으로 뜬다: `uvicorn --workers ${GENIO_API_WORKERS:-4}`, 코드 자동 재시작 없음. **API 코드를 고친 뒤에는 `docker compose restart api worker`** 로 반영한다.
+- 코드를 고치며 바로바로 보고 싶을 때(개발): `docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d api` (프로세스 1개 + 자동 재시작).
+- requirements*.txt를 바꾸면 이미지를 다시 만든다: `docker compose up -d --build api worker`.
+- 조정 값(.env): `GENIO_API_WORKERS`(프로세스 수, CPU 코어 수 정도), `GENIO_API_THREADS`(프로세스당 작업 스레드, 기본 200), `GENIO_DB_POOL_SIZE`·`GENIO_DB_MAX_OVERFLOW`(프로세스당 DB 연결, 기본 10+10). PostgreSQL `max_connections=200`(compose).
+  프로세스 수 x (풀+여분) + 워커가 200을 넘지 않게 한다.
+- 요청 DB 세션은 엔드포인트 함수가 끝나면 바로 닫힌다(`DbDep`, scope=function). 응답을 스트리밍하는 동안 DB 연결을 붙잡지 않게 하려는 것이다. 스트리밍 코드 안에서 DB가 필요하면 `with SessionLocal()`로 짧게 열고, 세션 안에서 yield하지 않는다.
+- 결과: docs/loadtest-2026-11-03.md

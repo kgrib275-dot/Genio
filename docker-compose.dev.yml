@@ -1,0 +1,8 @@
+# 개발용: API 코드를 고치면 바로 다시 시작한다(프로세스 1개).
+# 사용: docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d api
+# 운영(기본)은 docker-compose.yml만 쓴다(프로세스 여러 개, 자동 재시작 없음).
+services:
+  api:
+    command: >
+      sh -c "alembic -c apps/api/alembic.ini upgrade head &&
+             exec uvicorn api.main:app --host 0.0.0.0 --port 8000 --reload --reload-dir /app/apps/api --reload-dir /app/packages"

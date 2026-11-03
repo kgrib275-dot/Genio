@@ -42,7 +42,9 @@ DEPLOY_APPS: tuple[Role, ...] = ("owner", "admin", "builder")
 VIEW_RUNS: tuple[Role, ...] = ("owner", "admin", "builder", "operator")
 ANY_MEMBER: tuple[Role, ...] = ROLES
 
-DbDep = Annotated[Session, Depends(get_db)]
+# scope="function": 엔드포인트 함수가 끝나면 바로 세션을 닫아 연결을 돌려준다.
+# 공개 챗·실행 이벤트처럼 응답을 오래 스트리밍해도 DB 연결을 붙잡지 않는다(부하 시험 2026-11-03).
+DbDep = Annotated[Session, Depends(get_db, scope="function")]
 
 
 def _bearer(request: Request) -> str | None:
