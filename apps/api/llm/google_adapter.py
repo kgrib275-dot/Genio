@@ -13,6 +13,7 @@ from api.llm.base import (
     json_instruction,
     parse_json_object,
 )
+from api.llm.vision import ImageInput, google_parts
 from nodes import LlmResult
 
 DEFAULT_BASE = "https://generativelanguage.googleapis.com/v1beta"
@@ -64,9 +65,12 @@ class GoogleAdapter:
         temperature: float | None,
         json_schema: dict[str, Any] | None,
         on_delta: OnText | None = None,
+        images: list[ImageInput] | None = None,
     ) -> LlmResult:
         sys_prompt = system + (json_instruction(json_schema) if json_schema else "")
-        body: dict[str, Any] = {"contents": [{"role": "user", "parts": [{"text": prompt}]}]}
+        body: dict[str, Any] = {
+            "contents": [{"role": "user", "parts": google_parts(prompt, images or [])}]
+        }
         if sys_prompt.strip():
             body["systemInstruction"] = {"parts": [{"text": sys_prompt}]}
         gen: dict[str, Any] = {}

@@ -15,6 +15,7 @@ from api.llm.base import (
     json_instruction,
     parse_json_object,
 )
+from api.llm.vision import ImageInput, openai_user_content
 from nodes import LlmResult
 
 AZURE_API_VERSION = "2024-10-21"
@@ -97,12 +98,13 @@ class OpenAIAdapter:
         temperature: float | None,
         json_schema: dict[str, Any] | None,
         on_delta: OnText | None = None,
+        images: list[ImageInput] | None = None,
     ) -> LlmResult:
         sys_prompt = system + (json_instruction(json_schema) if json_schema else "")
         msgs: list[dict[str, Any]] = []
         if sys_prompt.strip():
             msgs.append({"role": "system", "content": sys_prompt})
-        msgs.append({"role": "user", "content": prompt})
+        msgs.append({"role": "user", "content": openai_user_content(prompt, images or [])})
         params: dict[str, Any] = {"model": model, "messages": msgs}
         if temperature is not None:
             params["temperature"] = temperature

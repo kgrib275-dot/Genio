@@ -505,3 +505,13 @@ Project = {id, workspace_id, name, description, color: indigo|sky|emerald|amber|
 
 ### `POST /knowledge-bases/{kb_id}/reprocess`
 지식베이스의 모든 문서를 지금 설정으로 다시 나눈다(워커). 응답은 `{queued}`이다.
+
+## v0.6 AI 공급자·비전
+| 메서드 | 경로 | 역할 | 설명 |
+|---|---|---|---|
+| GET | `/llm/providers` | 로그인한 모든 사용자 | AI 공급자 목록: `key`, `name`, `group`(기본·국내·해외·오픈 모델 호스팅·직접 입력), `base_url`, `default_model`, `models[]`(`model`, `label`, `vision`, `json`), `note`, `native`, `needs_base_url`, `embedding`, `vision` |
+
+- `POST /workspaces/{ws}/llm-providers`의 `provider`는 위 목록의 `key`(22곳). 기본 5종(openai·anthropic·google·azure·openai-compatible) 외에는 OpenAI 호환 preset이라 `base_url`을 비우면 목록의 기본 주소를 쓴다. 목록에 없는 key는 422(두 줄 오류). 주소는 http(s)만.
+- `/llm/catalog`에 preset 모델이 더해진다(단가를 모르는 모델은 0 → 비용 미집계).
+- AI 단계(`llm`) `images`: 문자열 목록(최대 4). 값은 올린 파일 id(입력 단계 `type: "file"` 항목, `{{n1.photo}}`) 또는 공개 http(s) 이미지 주소. 엔진이 읽어 형식(PNG·JPG·GIF·WEBP, 앞 바이트로 판별)·크기(장당 5MB)를 검사하고 공급자 형식(OpenAI `image_url` data URL, Anthropic `image` base64, Gemini `inline_data`)으로 보낸다. 주소는 서버가 받으며 사설망·localhost 차단 규칙이 그대로 적용된다.
+- 챗 첨부: 파일 올리기를 켠 챗 앱에서 사진을 첨부하면 입력 단계의 파일 항목으로 들어가고, AI 단계 `images`로 넘기면 AI가 사진을 본다(화면은 첨부 전 미리 보기를 보여 줌).

@@ -11,9 +11,11 @@ from api.llm.anthropic_adapter import AnthropicAdapter
 from api.llm.base import ChatAdapter, LlmError
 from api.llm.google_adapter import GoogleAdapter
 from api.llm.openai_adapter import OpenAIAdapter
+from api.llm.presets import COMPAT_KEYS, PRESETS, preset_base_url
 from api.models import LlmProvider, Workspace
 
-PROVIDERS = ("openai", "anthropic", "google", "openai-compatible", "azure")
+# 기본 5종 + OpenAI 호환 공급자 preset(v0.6, llm/presets.py)
+PROVIDERS = tuple(PRESETS)
 EMBEDDING_PROVIDERS = ("openai", "openai-compatible", "azure")
 
 
@@ -35,9 +37,12 @@ def default_factory(provider: str, api_key: str, base_url: str | None) -> ChatAd
         return GoogleAdapter(api_key, base_url)
     if provider in ("openai", "openai-compatible", "azure"):
         return OpenAIAdapter(api_key, base_url, provider=provider)
+    if provider in COMPAT_KEYS:
+        # 미리 설정한 OpenAI 호환 공급자: 주소를 따로 넣지 않았으면 기본 주소를 쓴다
+        return OpenAIAdapter(api_key, base_url or preset_base_url(provider), provider=provider)
     raise LlmError(
         f"'{provider}' 공급자는 지원하지 않아요.",
-        "openai, anthropic, google, openai-compatible, azure 중에서 고르세요.",
+        "워크스페이스 설정 > AI 연결의 공급자 목록에서 다시 고르세요.",
     )
 
 

@@ -10,9 +10,12 @@ import json
 import re
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any, Protocol
+from typing import TYPE_CHECKING, Any, Protocol
 
 from nodes import LlmResult
+
+if TYPE_CHECKING:
+    from api.llm.vision import ImageInput
 
 
 class LlmError(Exception):
@@ -68,9 +71,11 @@ class ChatAdapter(Protocol):
         temperature: float | None,
         json_schema: dict[str, Any] | None,
         on_delta: OnText | None = None,
+        images: "list[ImageInput] | None" = None,
     ) -> LlmResult: ...
 
     # on_delta: 답이 만들어지는 대로 글 조각을 받는다(v0.4 답변 실시간 표시).
+    # images: 함께 보낼 이미지(v0.6 비전). 어댑터가 공급자 형식으로 바꾼다.
 
     def chat(
         self,

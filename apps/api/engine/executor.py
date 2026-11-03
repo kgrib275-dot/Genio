@@ -79,7 +79,9 @@ class RunServices:
         temperature: float | None,
         json_schema: dict[str, Any] | None,
         stream: bool = False,
+        images: list[str] | None = None,
     ) -> LlmResult:
+        pictures = self.load_images(images or [])
         sink = self.on_delta
         node_id = self.current_node
         on_delta = (
@@ -89,6 +91,7 @@ class RunServices:
         )
         try:
             llm = resolve_llm(self.db, self.workspace_id, provider, model)
+            extra: dict[str, Any] = {"images": pictures} if pictures else {}
             result = llm.adapter.complete(
                 model=llm.model,
                 system=guarded(system),
@@ -96,12 +99,38 @@ class RunServices:
                 temperature=temperature,
                 json_schema=json_schema,
                 on_delta=on_delta,
+                **extra,
             )
         except LlmError as exc:
             raise NodeError(f"{exc.message} {exc.hint}", retryable=exc.retryable) from None
         result.model = result.model or llm.model
         self.usage.append((result.model, result.input_tokens, result.output_tokens))
         return result
+
+    def load_images(self, refs: list[str]) -> list[Any]:
+        """AI 단계 이미지(v0.6): 파일 id·https 주소를 읽어 검사한다(형식·크기·개수)."""
+        from api.llm.vision import MAX_IMAGE_BYTES, MAX_IMAGES, ImageError, check_image
+
+        refs = [r.strip() for r in refs if isinstance(r, str) and r.strip()]
+        if not refs:
+            return []
+        if len(refs) > MAX_IMAGES:
+            raise NodeError(
+                f"이미지는 한 번에 {MAX_IMAGES}장까지 보낼 수 있어요(지금 {len(refs)}장). "
+                "꼭 필요한 이미지만 남겨 주세요."
+            )
+        out = []
+        for ref in refs:
+            try:
+                if ref.lower().startswith(("https://", "http://")):
+                    name = ref.rsplit("/", 1)[-1][:80]
+                    data = safe_http.fetch_bytes(ref, max_bytes=MAX_IMAGE_BYTES)
+                else:
+                    name, _mime, data = self.read_file(file_id=ref)
+                out.append(check_image(data, name))
+            except ImageError as exc:
+                raise NodeError(f"{exc.message} {exc.hint}") from None
+        return out
 
     def http_request(
         self,

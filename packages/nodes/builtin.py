@@ -102,6 +102,10 @@ def _run_llm(data: dict[str, Any], ctx: NodeContext) -> NodeResult:
         "json_schema": schema,
         "stream": schema is None,
     }
+    images = _image_refs(data.get("images"), ctx)
+    if images:
+        kwargs["images"] = images
+        ctx.log(f"이미지 {len(images)}장을 함께 보내요.")
     result = ctx.services.llm_complete(**kwargs)
     usage: dict[str, Any] = {
         "input_tokens": result.input_tokens,
@@ -122,6 +126,22 @@ def _run_llm(data: dict[str, Any], ctx: NodeContext) -> NodeResult:
         output.update(result.data)
     usage["model"] = result.model
     return NodeResult(output=output, usage=usage)
+
+
+def _image_refs(raw: Any, ctx: NodeContext) -> list[str]:
+    """이미지 칸(v0.6 비전): 값 끌어오기를 풀고, 파일 여러 개(목록)는 펼친다. 빈 값은 뺀다."""
+    if raw in (None, "", []):
+        return []
+    items = raw if isinstance(raw, list) else [raw]
+    out: list[str] = []
+    for item in items:
+        value = ctx.render_value(item) if isinstance(item, str) else item
+        for v in value if isinstance(value, list) else [value]:
+            if isinstance(v, dict):  # 파일 정보 묶음({id, filename, ...})도 받아 준다
+                v = v.get("id") or v.get("url") or ""
+            if v not in (None, "") and str(v).strip():
+                out.append(str(v).strip())
+    return out
 
 
 def _llm_outputs(data: dict[str, Any]) -> list[str]:
@@ -145,6 +165,13 @@ LLM = NodeSpec(
             prompt={"type": "string", "title": "프롬프트"},
             output_schema={"type": "object", "title": "출력 형식(JSON Schema)"},
             memory={"type": "boolean", "title": "이전 대화 기억(챗 앱)", "default": False},
+            images={
+                "type": "array",
+                "title": "함께 볼 이미지(파일·주소, 최대 4장)",
+                "description": "입력 단계의 파일 항목({{n1.photo}})이나 공개 이미지 주소. 이미지를 볼 수 있는 모델이 필요해요.",
+                "items": {"type": "string"},
+                "maxItems": 4,
+            },
         ),
         "required": ["prompt"],
     },

@@ -99,6 +99,7 @@ export function ChatView({
   const [busy, setBusy] = useState(false);
   const [files, setFiles] = useState<StoredFile[]>([]);
   const [uploading, setUploading] = useState(false);
+  const [previews, setPreviews] = useState<Record<string, string>>({});
   const [listening, setListening] = useState(false);
   const [sessionId, setSessionId] = useState<string | undefined>(undefined);
   const [sessions, setSessions] = useState<SessionEntry[]>(() =>
@@ -560,7 +561,16 @@ export function ChatView({
     setUploading(true);
     try {
       const uploaded: StoredFile[] = [];
-      for (const f of picked) uploaded.push(await transport.upload(f));
+      const thumbs: Record<string, string> = {};
+      for (const f of picked) {
+        const stored = await transport.upload(f);
+        uploaded.push(stored);
+        // 사진은 보내기 전에 작은 미리 보기를 보여 준다(v0.6 비전, 브라우저 안에서만)
+        if (f.type.startsWith("image/") && typeof URL.createObjectURL === "function") {
+          thumbs[stored.id] = URL.createObjectURL(f);
+        }
+      }
+      setPreviews((p) => ({ ...p, ...thumbs }));
       setFiles((fs) => [...fs, ...uploaded]);
     } catch (err) {
       const { message: m, hint } = errorLines(err);
@@ -829,7 +839,15 @@ export function ChatView({
                       key={f.id}
                       className="inline-flex max-w-full items-center gap-1 rounded-full bg-slate-100 px-2.5 py-1 text-xs text-slate-600"
                     >
-                      <Paperclip className="h-3 w-3 shrink-0" />
+                      {previews[f.id] ? (
+                        <img
+                          src={previews[f.id]}
+                          alt=""
+                          className="h-6 w-6 shrink-0 rounded object-cover"
+                        />
+                      ) : (
+                        <Paperclip className="h-3 w-3 shrink-0" />
+                      )}
                       <span className="truncate">{f.filename}</span>
                       <button
                         type="button"
@@ -859,7 +877,7 @@ export function ChatView({
                     <button
                       type="button"
                       aria-label="파일 첨부"
-                      title={`파일 첨부(최대 ${maxFiles}개)`}
+                      title={`파일·사진 첨부(최대 ${maxFiles}개)`}
                       disabled={uploading || files.length >= maxFiles}
                       onClick={() => fileRef.current?.click()}
                       className={cn(iconBtn, "h-9 w-9 rounded-xl")}

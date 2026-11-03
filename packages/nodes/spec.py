@@ -41,7 +41,10 @@ class NodeServices(Protocol):
         temperature: float | None,
         json_schema: JsonSchema | None,
         stream: bool = False,
+        images: list[str] | None = None,
     ) -> LlmResult: ...
+
+    # images(v0.6 비전): 올린 파일 id 또는 공개 https 이미지 주소. 엔진이 읽어 공급자 형식으로 보낸다.
 
     # stream=True: 답 조각을 실행 이벤트로 흘려보낸다(공유 챗 실시간 표시)
 

@@ -50,8 +50,20 @@ class FakeAdapter:
         temperature: float | None,
         json_schema: dict[str, Any] | None,
         on_delta: OnText | None = None,
+        images: list[Any] | None = None,
     ) -> LlmResult:
-        self.calls.append({"kind": "complete", "system": system, "prompt": prompt})
+        self.calls.append(
+            {"kind": "complete", "system": system, "prompt": prompt, "images": list(images or [])}
+        )
+        if images:
+            # 비전 시험용: 받은 이미지 수와 형식을 답에 적는다
+            kinds = ", ".join(getattr(i, "mime", "?") for i in images)
+            return LlmResult(
+                text=f"이미지 {len(images)}장을 봤어요({kinds}).",
+                model=model,
+                input_tokens=200,
+                output_tokens=10,
+            )
         if json_schema:
             props = json_schema.get("properties", {})
             data: dict[str, Any] = {}
