@@ -95,18 +95,19 @@ services:
   # 처음 한 번: docker compose logs tailscale 에 나오는 로그인 링크로 승인하거나 .env에 TS_AUTHKEY를 둔다.
   tailscale:
     image: tailscale/tailscale:v1.80.3
-    hostname: genio
+    # web 컨테이너와 네트워크를 같이 써서 localhost:5190으로 웹을 본다(serve는 localhost만 지원)
+    network_mode: service:web
     environment:
       TS_AUTHKEY: ${TS_AUTHKEY:-}
     # 기본 시작 스크립트는 로그인을 60초만 기다리고 재시작해 승인 링크가 계속 바뀐다.
-    # 그래서 직접 띄우고, 승인될 때까지 기다린 뒤 HTTPS(443) → web:5190으로 넘긴다.
+    # 그래서 직접 띄우고, 승인될 때까지 기다린 뒤 HTTPS(443) → 127.0.0.1:5190(web)으로 넘긴다.
     entrypoint: ["/bin/sh", "-c"]
     command:
       - |
         tailscaled --tun=userspace-networking --statedir=/var/lib/tailscale &
         sleep 2
         tailscale up --hostname=genio ${TS_AUTHKEY:+--auth-key=$$TS_AUTHKEY} --timeout=0
-        tailscale serve --bg --https=443 http://web:5190
+        tailscale serve --bg --https=443 http://127.0.0.1:5190
         wait
     volumes:
       - tsstate:/var/lib/tailscale

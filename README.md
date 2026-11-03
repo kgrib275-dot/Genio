@@ -2,7 +2,8 @@
 
 말로 요청하면 빌더 챗봇이 흐름(워크플로우) 앱을 만들어 주고, 캔버스에서 다듬어 챗봇으로 배포하는 대화형 로우코드 플랫폼의 프로토타입.
 
-- 공유 주소(tailnet): https://desktop-u122bbm.tail6bd481.ts.net:9443
+- 실행: `start_genio.bat` 더블클릭 (끄기: `stop_genio.bat`)
+- 공유 주소(tailnet): https://genio.tail6bd481.ts.net
 - 데모 계정: `owner@example.com` 등 5개, 비밀번호 `genio1234!` ([runbook](docs/runbook.md))
 
 ## 문서

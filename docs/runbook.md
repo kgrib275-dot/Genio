@@ -23,7 +23,12 @@
 
 템플릿 5개와 프롬프트 팩 2개는 미리 설치돼 있다. 커넥터(Slack·Email·Google Sheets)는 데모 시나리오에서 마켓으로 설치한다.
 
-## 처음 한 번
+## 가장 쉬운 실행
+`start_genio.bat`을 더블클릭한다. Docker 켜기, `.env` 만들기, 컨테이너 실행, 준비 확인, 브라우저 열기까지 한 번에 한다.
+- 코드를 고친 뒤: `start_genio.bat -Rebuild`
+- 끄기: `stop_genio.bat` (데이터는 남음)
+
+## 처음 한 번(수동)
 ```bash
 cp .env.example .env
 # GENIO_SECRET_KEY, GENIO_FERNET_KEY를 채운다
