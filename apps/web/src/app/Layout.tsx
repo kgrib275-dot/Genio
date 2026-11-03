@@ -1,4 +1,5 @@
 import {
+  Gauge,
   BookMarked,
   BookOpen,
   ChevronDown,
@@ -30,7 +31,7 @@ import type { Me, Role } from "@/lib/api/types";
 import { useProjects } from "@/lib/api/v3";
 import { cn } from "@/lib/cn";
 import { rememberEnterToSend } from "@/lib/composer";
-import { canManage, useSession } from "@/store/session";
+import { canManage, canViewRuns, useSession } from "@/store/session";
 import { applyFontSize, applyTheme } from "@/store/theme";
 
 interface NavItem {
@@ -234,7 +235,7 @@ function SidebarBody({
 const PROJECTS_OPEN_KEY = "genio.sidebar.projects";
 
 function ProjectsSection({ myUserId, onNavigate }: { myUserId?: string; onNavigate?: () => void }) {
-  const { workspaceId } = useSession();
+  const { workspaceId, role } = useSession();
   const projects = useProjects(workspaceId);
   const navigate = useNavigate();
   const { pathname } = useLocation();
@@ -275,6 +276,21 @@ function ProjectsSection({ myUserId, onNavigate }: { myUserId?: string; onNaviga
       </button>
       {open && (
         <div className="mt-0.5 space-y-0.5">
+          {canViewRuns(role) && (
+            <Link
+              to="/projects"
+              onClick={onNavigate}
+              className={cn(
+                "flex items-center gap-2.5 rounded-lg px-3 py-1.5 text-sm transition-colors",
+                pathname === "/projects"
+                  ? "bg-indigo-50 font-semibold text-indigo-700"
+                  : "text-slate-600 hover:bg-slate-100 hover:text-slate-900",
+              )}
+            >
+              <Gauge className="h-[18px] w-[18px]" />
+              <span className="min-w-0 flex-1 truncate">전체 현황</span>
+            </Link>
+          )}
           {list.map((p) => (
             <Link
               key={p.id}

@@ -1,7 +1,7 @@
 // v0.3: 개인 설정·프로젝트 API 훅
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api/client";
-import type { Me, Preferences, Project, ProjectColor } from "@/lib/api/types";
+import type { Me, Preferences, Project, ProjectColor, ProjectsOverview } from "@/lib/api/types";
 import { DEFAULT_PREFERENCES } from "@/lib/api/types";
 
 export function preferencesOf(me: Me | undefined): Preferences {
@@ -32,6 +32,14 @@ export function useProjects(ws: string) {
   });
 }
 
+export function useProjectsOverview(ws: string, days: number, enabled = true) {
+  return useQuery({
+    queryKey: ["projects-overview", ws, days],
+    queryFn: () => api.get<ProjectsOverview>(`/workspaces/${ws}/projects/overview?days=${days}`),
+    enabled: Boolean(ws) && enabled,
+  });
+}
+
 export interface ProjectInput {
   name: string;
   description?: string;
@@ -43,6 +51,7 @@ function useInvalidateProjects(ws: string) {
   const qc = useQueryClient();
   return () => {
     void qc.invalidateQueries({ queryKey: ["projects", ws] });
+    void qc.invalidateQueries({ queryKey: ["projects-overview", ws] });
     void qc.invalidateQueries({ queryKey: ["apps", ws] });
     void qc.invalidateQueries({ queryKey: ["kbs", ws] });
   };

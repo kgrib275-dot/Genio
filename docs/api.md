@@ -294,6 +294,9 @@ Project = {id, workspace_id, name, description, color: indigo|sky|emerald|amber|
 | PATCH | `/projects/{id}` | 만든 사람·owner·admin | `{name?, description?, color?, visibility?}` | `Project` |
 | DELETE | `/projects/{id}` | 만든 사람·owner·admin | | 204 (앱·KB는 지우지 않고 '프로젝트 없음'으로) |
 | PUT | `/projects/{id}/members` | 만든 사람·owner·admin | `{user_ids: [워크스페이스 멤버 user_id]}` | `Project` |
+| GET | `/workspaces/{ws}/projects/overview?days=30` | owner, admin, builder, operator | | `{days, totals, projects: [{project, ...통계}], unassigned}` |
+
+프로젝트 현황판 통계(프로젝트마다, '프로젝트 없음'은 `unassigned`): `apps, published_apps, knowledge_bases, documents, runs, succeeded, failed, waiting_approval, input_tokens, output_tokens, cost, conversations, last_activity_at, success_rate(성공/(성공+실패), 없으면 null), series[{date, runs}]`. 실행·대화·비용은 기간(1~90일) 기준, 앱·지식 수는 현재 값. 볼 수 없는 비공개 프로젝트는 목록과 합계 모두에서 빠진다.
 
 기존 API 변경:
 - `App`, `KnowledgeBase` 응답에 `project_id` 추가.

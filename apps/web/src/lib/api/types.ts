@@ -701,3 +701,40 @@ export interface SystemSettings {
   allow_signup: boolean;
   show_demo_accounts: boolean;
 }
+
+/** 프로젝트 현황판: 프로젝트(또는 '프로젝트 없음') 하나의 기간 통계 */
+export interface ProjectStats {
+  apps: number;
+  published_apps: number;
+  knowledge_bases: number;
+  documents: number;
+  runs: number;
+  succeeded: number;
+  failed: number;
+  waiting_approval: number;
+  input_tokens: number;
+  output_tokens: number;
+  cost: number;
+  conversations: number;
+  last_activity_at: string | null;
+  success_rate: number | null;
+  series: { date: string; runs: number }[];
+}
+
+export interface ProjectsOverview {
+  days: number;
+  totals: {
+    projects: number;
+    apps: number;
+    published_apps: number;
+    runs: number;
+    succeeded: number;
+    failed: number;
+    waiting_approval: number;
+    cost: number;
+    conversations: number;
+    success_rate: number | null;
+  };
+  projects: (ProjectStats & { project: Project })[];
+  unassigned: ProjectStats;
+}

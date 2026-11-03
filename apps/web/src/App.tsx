@@ -26,6 +26,7 @@ const AppApiPage = lazy(() => import("@/pages/apps/AppApiPage"));
 const AdminPage = lazy(() => import("@/pages/admin/AdminPage"));
 const HelpPage = lazy(() => import("@/pages/help/HelpPage"));
 const SettingsPage = lazy(() => import("@/pages/settings/SettingsPage"));
+const ProjectsBoardPage = lazy(() => import("@/pages/projects/ProjectsBoardPage"));
 
 export default function App() {
   return (
@@ -61,6 +62,7 @@ export default function App() {
             <Route path="admin" element={<AdminPage />} />
             <Route path="help" element={<HelpPage />} />
             <Route path="settings" element={<SettingsPage />} />
+            <Route path="projects" element={<ProjectsBoardPage />} />
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
