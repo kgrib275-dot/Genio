@@ -9,6 +9,7 @@ alembic>=1.13,<2
 psycopg[binary]>=3.2,<4
 pgvector>=0.3,<1
 celery>=5.4,<6
+packaging>=24  # kombu 5.7 redis transport imports it without declaring it
 redis>=5.0,<7
 cryptography>=43
 bcrypt>=4.2
