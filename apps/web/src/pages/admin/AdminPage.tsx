@@ -20,9 +20,10 @@ import {
   SystemSection,
   UsageSection,
 } from "@/pages/workspace/sections";
+import { TracingSection } from "@/pages/admin/TracingSection";
 import { canManage, useSession } from "@/store/session";
 
-type Tab = "overview" | "members" | "llm" | "usage" | "audit" | "keys" | "system";
+type Tab = "overview" | "members" | "llm" | "usage" | "audit" | "keys" | "tracing" | "system";
 
 const TABS: { value: Tab; label: string }[] = [
   { value: "overview", label: "개요" },
@@ -31,6 +32,7 @@ const TABS: { value: Tab; label: string }[] = [
   { value: "usage", label: "사용량" },
   { value: "audit", label: "활동 기록" },
   { value: "keys", label: "API 키" },
+  { value: "tracing", label: "외부 추적" },
   { value: "system", label: "시스템 설정" },
 ];
 
@@ -237,6 +239,7 @@ export default function AdminPage() {
       {tab === "usage" && <UsageSection ws={ws} />}
       {tab === "audit" && <AuditSection ws={ws} />}
       {tab === "keys" && <AdminApiKeysSection ws={ws} />}
+      {tab === "tracing" && <TracingSection ws={ws} />}
       {tab === "system" && <SystemSection ws={ws} />}
     </PageContainer>
   );

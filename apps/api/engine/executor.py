@@ -451,6 +451,14 @@ def _after_finish(db: Session, run: Run) -> None:
         except Exception:
             log.exception("챗 결과 전달 실패(run=%s)", run.id)
             db.rollback()
+    if run.status in TERMINAL:
+        try:
+            from api.services.tracing import dispatch_trace
+
+            dispatch_trace(db, run)  # v0.6 외부 추적: 켠 워크스페이스만, 실패해도 실행과 무관
+        except Exception:
+            log.exception("외부 추적 전송 준비 실패(run=%s)", run.id)
+            db.rollback()
     if run.status == "failed" and run.trigger not in NO_FAILURE_HOOK:
         try:
             _dispatch_on_failure(db, run)
@@ -802,6 +810,8 @@ def _execute(db: Session, run_id: str) -> None:
 
     context = dict(run.context or {})
     outputs: dict[str, dict[str, Any]] = dict(context.get("outputs", {}))
+    # v0.6: 단계별 AI 사용량(외부 추적용)
+    node_usage: dict[str, dict[str, Any]] = dict(context.get("usage", {}))
     run_input: dict[str, Any] = dict(run.input or {})
     env_vars = decrypt_env_vars(app.env_vars or [])
     conv_vars: dict[str, Any] = dict(context.get("conv") or run_input.pop("__conv", None) or {})
@@ -936,6 +946,8 @@ def _execute(db: Session, run_id: str) -> None:
             db.commit()
             _publish(run, step)
             return
+        if result.usage:
+            node_usage[node.id] = dict(result.usage)
         conv_set = result.output.pop("__conv_set", None)
         if isinstance(conv_set, dict):
             for k, v in conv_set.items():
@@ -1044,6 +1056,8 @@ def _execute(db: Session, run_id: str) -> None:
             leftover.db.close()
 
     if fatal is not None:
+        if node_usage:
+            run.context = {**(run.context or {}), "usage": node_usage}
         _finish(db, run, services, "failed", fatal)
         return
 
@@ -1068,7 +1082,12 @@ def _execute(db: Session, run_id: str) -> None:
             "task_id": task.id,
             "requested_at": now().isoformat(),
         }
-        run.context = {"outputs": outputs, "conv": conv_vars, "sched": sched.dump()}
+        run.context = {
+            "outputs": outputs,
+            "conv": conv_vars,
+            "sched": sched.dump(),
+            "usage": node_usage,
+        }
         run.output = {"text": last_output_text, "outputs": output_values, "conv": conv_vars}
         db.commit()
         _finish(db, run, services, "waiting_approval")
@@ -1077,5 +1096,5 @@ def _execute(db: Session, run_id: str) -> None:
     if not last_output_text and output_values:
         last_output_text = str(list(output_values.values())[-1].get("text", ""))
     run.output = {"text": last_output_text, "outputs": output_values, "conv": conv_vars}
-    run.context = {"outputs": outputs, "conv": conv_vars}
+    run.context = {"outputs": outputs, "conv": conv_vars, "usage": node_usage}
     _finish(db, run, services, "succeeded")

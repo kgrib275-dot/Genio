@@ -38,7 +38,9 @@ Owners = Annotated[Ctx, Depends(require_role(("owner",)))]
 
 
 def _ws(w: Workspace) -> dict[str, Any]:
-    return {"id": w.id, "name": w.name, "settings": w.settings or {}}
+    # 외부 추적 설정(암호화된 키 포함)은 전용 화면(/tracing)에서만 다룬다
+    settings = {k: v for k, v in (w.settings or {}).items() if k != "tracing"}
+    return {"id": w.id, "name": w.name, "settings": settings}
 
 
 @router.get("/workspaces/{ws}")

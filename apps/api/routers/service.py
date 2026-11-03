@@ -58,7 +58,7 @@ def app_key(request: Request, db: DbDep) -> AppKeyCtx:
 
 KeyDep = Annotated[AppKeyCtx, Depends(app_key)]
 
-SCOPE_NAMES = {"chat": "대화", "run": "흐름 실행", "logs": "기록 읽기"}
+SCOPE_NAMES = {"chat": "대화", "run": "흐름 실행", "logs": "기록 읽기", "mcp": "MCP 도구"}
 
 
 def need_scope(k: AppKeyCtx, scope: str) -> None:
