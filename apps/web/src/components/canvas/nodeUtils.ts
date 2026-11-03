@@ -8,6 +8,28 @@ export function conditionHandles(data: Record<string, unknown>): string[] {
   return [...ids, elseId];
 }
 
+export interface BranchHandle {
+  id: string;
+  label: string;
+}
+
+/** 분기 노드(condition, question_classifier)의 출구 핸들. 다른 노드는 빈 목록. */
+export function branchHandles(type: string, data: Record<string, unknown>): BranchHandle[] {
+  if (type === "condition") return conditionHandles(data).map((id) => ({ id, label: id }));
+  if (type === "question_classifier") {
+    const classes = (data.classes as { id?: string; name?: string }[] | undefined) ?? [];
+    return classes
+      .filter((c): c is { id: string; name?: string } => Boolean(c.id))
+      .map((c) => ({ id: c.id, label: c.name || c.id }));
+  }
+  return [];
+}
+
+/** 실패했을 때 "실패 분기"로 가게 설정했으면 true("fail" 핸들이 생긴다). */
+export function hasFailHandle(data: Record<string, unknown>): boolean {
+  return data._on_error === "branch";
+}
+
 /** 새 노드의 기본 data(스키마 기본값 + 종류별 시작 값). */
 export function defaultData(spec: NodeType | undefined): Record<string, unknown> {
   const props = (spec?.input_schema.properties ?? {}) as Record<string, { default?: unknown }>;
@@ -15,5 +37,10 @@ export function defaultData(spec: NodeType | undefined): Record<string, unknown>
   for (const [k, p] of Object.entries(props)) if (p.default !== undefined) data[k] = p.default;
   if (spec?.type === "input") data.fields = [{ key: "message", type: "text", required: true }];
   if (spec?.type === "condition") data.cases = [{ id: "c1", when: "" }];
+  if (spec?.type === "question_classifier")
+    data.classes = [
+      { id: "c1", name: "분류 1", description: "" },
+      { id: "c2", name: "분류 2", description: "" },
+    ];
   return data;
 }

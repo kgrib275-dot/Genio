@@ -61,6 +61,8 @@ export default function BuilderPage() {
   const [running, setRunning] = useState(false);
   const [showPalette, setShowPalette] = useState(false);
   const [logOpen, setLogOpen] = useState(false);
+  // 좁은 화면(모바일·태블릿)에서는 패널을 탭으로 하나씩 보여 준다
+  const [mobileTab, setMobileTab] = useState<"chat" | "canvas" | "settings">("chat");
   const loadedFor = useRef<string>("");
   const abortRef = useRef<AbortController | null>(null);
   const readOnly = !canEdit(role);
@@ -159,16 +161,18 @@ export default function BuilderPage() {
         appId={appId}
         title={app.data.name}
         icon={app.data.icon}
+        help="builder"
         right={
           <>
-            <span className="mr-1 flex items-center gap-1.5 text-xs text-slate-400">
+            <span className="mr-1 hidden items-center gap-1.5 text-xs text-slate-400 sm:flex">
               <span
                 className={`h-1.5 w-1.5 rounded-full ${saving ? "animate-pulse bg-amber-400" : dirty ? "bg-amber-400" : "bg-emerald-500"}`}
               />
               {saving ? "저장 중…" : dirty ? "바뀐 내용 있음" : "자동 저장됨"}
             </span>
             <Button size="sm" variant="outline" onClick={() => void onValidate()}>
-              <ShieldCheck className="h-3.5 w-3.5" /> 검사
+              <ShieldCheck className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">검사</span>
             </Button>
             {!readOnly && (
               <Button
@@ -177,12 +181,14 @@ export default function BuilderPage() {
                 disabled={saveVersion.isPending}
                 onClick={() => void onSaveVersion()}
               >
-                <Save className="h-3.5 w-3.5" /> 버전 저장
+                <Save className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">버전 저장</span>
               </Button>
             )}
             {!readOnly && (
               <Button size="sm" onClick={() => setTestOpen(true)}>
-                <Play className="h-3.5 w-3.5" /> 테스트 실행
+                <Play className="h-3.5 w-3.5" /> 테스트
+                <span className="hidden sm:inline">실행</span>
               </Button>
             )}
           </>
@@ -193,15 +199,45 @@ export default function BuilderPage() {
           {generalErrors.join(" · ")}
         </div>
       )}
+      <div
+        role="tablist"
+        aria-label="빌더 화면"
+        className="flex shrink-0 gap-1 border-b border-slate-200 bg-white px-2 py-1.5 lg:hidden"
+      >
+        {(
+          [
+            ...(!readOnly ? [["chat", "빌더 챗"] as const] : []),
+            ["canvas", "캔버스"] as const,
+            ["settings", selected ? "설정 ●" : "설정"] as const,
+          ] as const
+        ).map(([key, label]) => (
+          <button
+            key={key}
+            type="button"
+            role="tab"
+            aria-selected={mobileTab === key}
+            onClick={() => setMobileTab(key)}
+            className={`flex-1 rounded-md px-2 py-1.5 text-[13px] font-medium ${mobileTab === key ? "bg-indigo-50 text-indigo-700" : "text-slate-500"}`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
       <div className="flex min-h-0 flex-1">
         {!readOnly && (
-          <section className="w-[380px] shrink-0 border-r border-slate-200">
+          <section
+            className={`w-full shrink-0 border-r border-slate-200 lg:block lg:w-[380px] ${mobileTab === "chat" ? "block" : "hidden"}`}
+          >
             <BuilderChat appId={appId} />
           </section>
         )}
-        <section className="flex min-w-0 flex-1 flex-col">
+        <section
+          className={`min-w-0 flex-1 flex-col lg:flex ${mobileTab === "chat" && !readOnly ? "hidden" : "flex"}`}
+        >
           <div className="relative flex min-h-0 flex-1">
-            <div className="relative min-w-0 flex-1 bg-slate-50">
+            <div
+              className={`relative min-w-0 flex-1 bg-slate-50 lg:block ${mobileTab === "settings" ? "hidden" : "block"}`}
+            >
               {!readOnly && (
                 <div className="absolute left-3 top-3 z-10">
                   <Button
@@ -235,8 +271,15 @@ export default function BuilderPage() {
               )}
               <FlowCanvas specs={specs} readOnly={readOnly} />
             </div>
+            {mobileTab === "settings" && !selected && (
+              <p className="flex-1 p-6 text-center text-sm text-slate-500 lg:hidden">
+                캔버스에서 노드를 누르면 여기에서 설정을 고칠 수 있어요.
+              </p>
+            )}
             {selected && (
-              <aside className="w-[340px] shrink-0 border-l border-slate-200 bg-white">
+              <aside
+                className={`w-full shrink-0 border-l border-slate-200 bg-white lg:block lg:w-[340px] ${mobileTab === "settings" ? "block" : "hidden"}`}
+              >
                 <NodeSettingsPanel
                   node={selected}
                   spec={specs.find((s) => s.type === selected.type)}

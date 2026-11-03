@@ -56,7 +56,7 @@ INPUT = NodeSpec(
                         "type": {
                             "type": "string",
                             "title": "형식",
-                            "enum": ["text", "number", "boolean"],
+                            "enum": ["text", "number", "boolean", "file"],
                             "default": "text",
                         },
                         "required": {"type": "boolean", "title": "필수", "default": True},
@@ -81,6 +81,10 @@ def _run_llm(data: dict[str, Any], ctx: NodeContext) -> NodeResult:
         raise NodeError("출력 형식(output_schema)은 JSON 객체여야 해요.")
     system = ctx.render(str(data.get("system", "")))
     prompt = ctx.render(str(data.get("prompt", "")))
+    history = str(ctx.run_input.get("history") or "")
+    if data.get("memory") and history.strip():
+        # 챗 앱: 앱 기능의 기억 창(memory.window)만큼 이전 대화를 붙인다
+        prompt = f"이전 대화:\n{history}\n\n{prompt}"
     if not prompt.strip():
         raise NodeError("프롬프트가 비어 있어요. 노드 설정에서 프롬프트를 채워 주세요.")
     temp = data.get("temperature")
@@ -134,6 +138,7 @@ LLM = NodeSpec(
             system={"type": "string", "title": "역할 지시"},
             prompt={"type": "string", "title": "프롬프트"},
             output_schema={"type": "object", "title": "출력 형식(JSON Schema)"},
+            memory={"type": "boolean", "title": "이전 대화 기억(챗 앱)", "default": False},
         ),
         "required": ["prompt"],
     },
@@ -312,7 +317,16 @@ def _run_kb(data: dict[str, Any], ctx: NodeContext) -> NodeResult:
         raise NodeError("검색할 지식베이스를 골라 주세요.")
     query = ctx.render(str(data.get("query", "")))
     top_k = int(data.get("top_k") or 4)
-    results = ctx.services.kb_search(kb_id=kb_id, query=query, top_k=top_k)
+    mf = ctx.render_value(data.get("metadata_filter") or {})
+    thr = data.get("score_threshold")
+    results = ctx.services.kb_search(
+        kb_id=kb_id,
+        query=query,
+        top_k=top_k,
+        method=str(data.get("method") or "") or None,
+        score_threshold=float(thr) if thr not in (None, "") else None,
+        metadata_filter=mf if isinstance(mf, dict) and mf else None,
+    )
     context = "\n\n".join(f"[{i + 1}] {r.get('content', '')}" for i, r in enumerate(results))
     return NodeResult(output={"results": results, "context": context})
 
@@ -327,6 +341,23 @@ KNOWLEDGE_SEARCH = NodeSpec(
         "properties": _props(
             kb_id={"type": "string", "title": "지식베이스"},
             query={"type": "string", "title": "검색어"},
+            method={
+                "type": "string",
+                "title": "검색 방식(비우면 지식베이스 설정)",
+                "enum": ["", "vector", "keyword", "hybrid"],
+                "default": "",
+            },
+            score_threshold={
+                "type": "number",
+                "title": "최소 점수(0~1)",
+                "minimum": 0,
+                "maximum": 1,
+            },
+            metadata_filter={
+                "type": "object",
+                "title": "메타데이터 필터(키: 값)",
+                "additionalProperties": {"type": "string"},
+            },
             top_k={
                 "type": "integer",
                 "title": "가져올 개수",
@@ -341,7 +372,7 @@ KNOWLEDGE_SEARCH = NodeSpec(
         "type": "object",
         "properties": {"results": {"type": "array"}, "context": {"type": "string"}},
     },
-    ui_schema={"kb_id": {"ui:widget": "kb"}},
+    ui_schema={"kb_id": {"ui:widget": "kb"}, "metadata_filter": {"ui:widget": "json"}},
     run=_run_kb,
     outputs=lambda d: ["results", "context"],
 )

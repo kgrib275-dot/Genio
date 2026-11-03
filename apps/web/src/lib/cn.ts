@@ -42,3 +42,16 @@ export function timeAgo(iso: string | null | undefined): string {
   if (diff < 86400 * 7) return `${Math.floor(diff / 86400)}일 전`;
   return new Date(iso).toLocaleDateString("ko-KR");
 }
+
+/** 객체를 JSON 파일로 내려받게 한다. */
+export function downloadJson(filename: string, data: unknown): void {
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename.replace(/[\\/:*?"<>|]+/g, "_");
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}

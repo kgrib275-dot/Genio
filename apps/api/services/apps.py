@@ -182,7 +182,11 @@ def app_dict(app: App, latest: int | None) -> dict[str, Any]:
 
 def app_detail(db: Session, app: App) -> dict[str, Any]:
     last = latest_version(db, app.id)
+    from api.services.app_config import merged_features, public_env_vars
+
     return {
         **app_dict(app, last.version if last else None),
         "draft_graph": app.draft_graph or starter_graph(),
+        "features": merged_features(app.features),
+        "env_vars": public_env_vars(app.env_vars or []),
     }

@@ -1,5 +1,5 @@
-import { ArrowRight, LayoutTemplate, Plus, Sparkles, Wand2 } from "lucide-react";
-import { useState, type FormEvent } from "react";
+import { ArrowRight, LayoutTemplate, Plus, Sparkles, Upload, Wand2 } from "lucide-react";
+import { useRef, useState, type FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { PageContainer } from "@/app/Layout";
 import { AppIcon } from "@/components/AppIcon";
@@ -12,7 +12,11 @@ import { Field, Input, Select, Textarea } from "@/components/ui/input";
 import { ko } from "@/i18n/ko";
 import { useApps, useCreateApp } from "@/lib/api/apps";
 import { useTemplates } from "@/lib/api/resources";
-import type { AppType } from "@/lib/api/types";
+import { ApiError } from "@/lib/api/client";
+import type { AppExport, AppType } from "@/lib/api/types";
+import { useImportApp } from "@/lib/api/v2";
+import { HelpButton } from "@/help/HelpButton";
+import { toast } from "@/components/ui/toast-store";
 import { useWorkspaceRuns } from "@/lib/api/workspace";
 import { timeAgo } from "@/lib/cn";
 import { canEdit, canViewRuns, useSession } from "@/store/session";
@@ -60,11 +64,11 @@ function PromptHero() {
   };
 
   return (
-    <section className="relative overflow-hidden rounded-2xl border border-indigo-100 bg-gradient-to-br from-indigo-50 via-white to-violet-50 px-8 py-8">
+    <section className="relative overflow-hidden rounded-2xl border border-indigo-100 bg-gradient-to-br from-indigo-50 via-white to-violet-50 px-5 py-6 sm:px-8 sm:py-8">
       <div className="flex items-center gap-2 text-sm font-semibold text-indigo-600">
         <Sparkles className="h-4 w-4" /> 말로 앱 만들기
       </div>
-      <h2 className="mt-2 text-[26px] font-bold tracking-tight text-slate-900">
+      <h2 className="mt-2 text-xl font-bold tracking-tight text-slate-900 sm:text-[26px]">
         무엇을 자동으로 처리하고 싶으세요?
       </h2>
       <p className="mt-1 text-sm text-slate-500">
@@ -153,6 +157,58 @@ function TemplateRow() {
   );
 }
 
+/** 내보낸 앱 파일(JSON)을 올려 새 앱으로 가져온다. */
+function ImportAppButton() {
+  const ws = useSession((s) => s.workspaceId);
+  const importApp = useImportApp(ws);
+  const navigate = useNavigate();
+  const fileRef = useRef<HTMLInputElement>(null);
+  return (
+    <>
+      <input
+        ref={fileRef}
+        type="file"
+        accept=".json,application/json"
+        className="hidden"
+        aria-label="앱 파일"
+        onChange={async (e) => {
+          const f = e.target.files?.[0];
+          e.target.value = "";
+          if (!f) return;
+          let data: AppExport;
+          try {
+            data = JSON.parse(await f.text()) as AppExport;
+          } catch {
+            toast.error(
+              new ApiError(
+                0,
+                "앱 파일을 읽지 못했어요.",
+                "내보내기로 받은 .json 파일인지 확인하세요.",
+              ),
+            );
+            return;
+          }
+          importApp.mutate(data, {
+            onSuccess: (app) => {
+              toast.success("앱을 가져왔어요.");
+              navigate(`/apps/${app.id}/builder`);
+            },
+            onError: (err) => toast.error(err),
+          });
+        }}
+      />
+      <Button
+        size="sm"
+        variant="outline"
+        disabled={importApp.isPending}
+        onClick={() => fileRef.current?.click()}
+      >
+        <Upload className="h-4 w-4" /> 앱 가져오기
+      </Button>
+    </>
+  );
+}
+
 function BlankAppDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   const ws = useSession((s) => s.workspaceId);
   const create = useCreateApp(ws);
@@ -238,17 +294,21 @@ export default function DashboardPage() {
       {editable && <TemplateRow />}
 
       <section className="mt-10">
-        <div className="mb-3 flex items-center justify-between">
-          <h3 className="text-lg font-bold tracking-tight">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <h3 className="flex items-center gap-1 text-lg font-bold tracking-tight">
             {editable ? "내 앱" : "사용할 수 있는 앱"}
             {appList.length > 0 && (
-              <span className="ml-2 text-sm font-medium text-slate-400">{appList.length}</span>
+              <span className="ml-1 text-sm font-medium text-slate-400">{appList.length}</span>
             )}
+            <HelpButton page="dashboard" />
           </h3>
           {editable && (
-            <Button size="sm" variant="outline" onClick={() => setOpen(true)}>
-              <Plus className="h-4 w-4" /> 빈 앱
-            </Button>
+            <div className="flex gap-2">
+              <ImportAppButton />
+              <Button size="sm" variant="outline" onClick={() => setOpen(true)}>
+                <Plus className="h-4 w-4" /> 빈 앱
+              </Button>
+            </div>
           )}
         </div>
         {apps.isLoading && <Loading />}

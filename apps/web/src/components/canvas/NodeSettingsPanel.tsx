@@ -2,6 +2,7 @@ import Form from "@rjsf/core";
 import type { RJSFSchema } from "@rjsf/utils";
 import validator from "@rjsf/validator-ajv8";
 import { useMemo } from "react";
+import { FailureSettings } from "@/components/canvas/FailureSettings";
 import { nodeFields, nodeTemplates, nodeWidgets } from "@/components/canvas/formRegistry";
 import { referenceHints, toRjsfUiSchema } from "@/components/canvas/uiSchema";
 import type { NodeFormContext } from "@/components/canvas/widgets";
@@ -35,9 +36,19 @@ export function NodeSettingsForm({ node, spec, wsId, onChange, readOnly }: NodeS
       liveValidate={false}
       showErrorList={false}
       noHtml5Validate
-      onChange={(e) => onChange((e.formData ?? {}) as Record<string, unknown>)}
+      onChange={(e) =>
+        // "_"로 시작하는 공통 설정(_retry 등)은 아래 '실패했을 때' 영역이 관리하므로 지키며 합친다
+        onChange({
+          ...((e.formData ?? {}) as Record<string, unknown>),
+          ...underscoreKeys(node.data),
+        })
+      }
     />
   );
+}
+
+function underscoreKeys(data: Record<string, unknown>): Record<string, unknown> {
+  return Object.fromEntries(Object.entries(data).filter(([k]) => k.startsWith("_")));
 }
 
 export function NodeSettingsPanel({
@@ -99,6 +110,9 @@ export function NodeSettingsPanel({
           <p className="text-sm text-red-600">
             이 노드 종류({node.type})를 찾을 수 없어요. 마켓에서 해당 아이템을 다시 설치하세요.
           </p>
+        )}
+        {spec && node.type !== "input" && node.type !== "output" && (
+          <FailureSettings key={node.id} data={node.data} onChange={onChange} readOnly={readOnly} />
         )}
         {hints.length > 0 && (
           <div className="mt-4 rounded bg-slate-50 px-3 py-2">

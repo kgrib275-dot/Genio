@@ -1,3 +1,4 @@
+import { HelpButton } from "@/help/HelpButton";
 import { useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { PageContainer } from "@/app/Layout";
@@ -119,6 +120,7 @@ export default function ConnectorsPage() {
       <PageHeader
         title="연결 정보"
         description="슬랙 토큰 같은 비밀값을 안전하게 보관해요. 흐름은 이름으로만 고르고 값은 볼 수 없어요."
+        help={<HelpButton page="connectors" />}
       />
       <div className="grid gap-6 lg:grid-cols-[3fr_2fr]">
         <Card>

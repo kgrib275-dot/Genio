@@ -416,3 +416,253 @@ export interface AuditLog {
   meta: Record<string, unknown>;
   created_at: string;
 }
+
+// ---------------- v0.2 ----------------
+export interface AppFeatures {
+  opening_statement: string;
+  suggested_questions: string[];
+  follow_up: { enabled: boolean };
+  citations: { enabled: boolean };
+  moderation: { enabled: boolean; keywords: string[]; preset_reply: string; check_output: boolean };
+  annotation_reply: { enabled: boolean; score_threshold: number };
+  speech: { stt: boolean; tts: boolean };
+  file_upload: { enabled: boolean; max_files: number };
+  memory: { window: number };
+}
+
+export const DEFAULT_FEATURES: AppFeatures = {
+  opening_statement: "",
+  suggested_questions: [],
+  follow_up: { enabled: false },
+  citations: { enabled: false },
+  moderation: { enabled: false, keywords: [], preset_reply: "", check_output: false },
+  annotation_reply: { enabled: false, score_threshold: 0.85 },
+  speech: { stt: false, tts: false },
+  file_upload: { enabled: false, max_files: 3 },
+  memory: { window: 0 },
+};
+
+/** 서버가 일부 키를 빠뜨려도 화면이 깨지지 않게 기본값과 합친다. */
+export function normalizeFeatures(f: Partial<AppFeatures> | null | undefined): AppFeatures {
+  const src = f ?? {};
+  return {
+    opening_statement: src.opening_statement ?? "",
+    suggested_questions: src.suggested_questions ?? [],
+    follow_up: { ...DEFAULT_FEATURES.follow_up, ...src.follow_up },
+    citations: { ...DEFAULT_FEATURES.citations, ...src.citations },
+    moderation: { ...DEFAULT_FEATURES.moderation, ...src.moderation },
+    annotation_reply: { ...DEFAULT_FEATURES.annotation_reply, ...src.annotation_reply },
+    speech: { ...DEFAULT_FEATURES.speech, ...src.speech },
+    file_upload: { ...DEFAULT_FEATURES.file_upload, ...src.file_upload },
+    memory: { ...DEFAULT_FEATURES.memory, ...src.memory },
+  };
+}
+
+export interface EnvVar {
+  key: string;
+  value: string;
+  secret: boolean;
+}
+
+export interface AppDetailV2 extends AppDetail {
+  features?: Partial<AppFeatures> | null;
+  env_vars?: EnvVar[] | null;
+}
+
+export interface AppExport {
+  genio_version: string;
+  app: { name: string; type: AppType; description: string; icon: string; features?: unknown };
+  graph: unknown;
+  env_vars?: EnvVar[];
+}
+
+export interface StoredFile {
+  id: string;
+  filename: string;
+  mime: string;
+  size: number;
+  created_at: string;
+}
+
+export interface ConversationSummary {
+  id: string;
+  user_name: string | null;
+  external_session_id: string | null;
+  message_count: number;
+  likes: number;
+  dislikes: number;
+  created_at: string;
+  last_message_at: string | null;
+  first_question: string | null;
+}
+
+export type Rating = "like" | "dislike";
+
+export interface ConversationMessage {
+  id: string;
+  role: "user" | "assistant" | "system";
+  content: string;
+  run_id: string | null;
+  feedback: Rating | null | { rating?: Rating | null; comment?: string | null };
+  created_at: string;
+  annotated?: boolean;
+  moderated?: boolean;
+}
+
+export interface Annotation {
+  id: string;
+  question: string;
+  answer: string;
+  hit_count: number;
+  created_at: string;
+}
+
+export interface StatPoint {
+  date?: string;
+  runs: number;
+  conversations: number;
+  messages: number;
+  input_tokens: number;
+  output_tokens: number;
+  cost: number | string;
+  avg_latency_ms: number;
+  success_rate: number;
+  likes: number;
+  dislikes: number;
+}
+
+export interface AppStats {
+  days: (StatPoint & { date: string })[];
+  totals: StatPoint;
+}
+
+export interface ApiKey {
+  id: string;
+  name: string;
+  prefix: string;
+  created_at: string;
+  last_used_at: string | null;
+  app_id?: string;
+  app_name?: string;
+}
+
+export interface NewApiKey extends ApiKey {
+  key: string;
+}
+
+export type ChunkMode = "general" | "parent_child";
+export type RetrievalMethod = "vector" | "keyword" | "hybrid";
+
+export interface KbSettings {
+  chunk_mode: ChunkMode;
+  separator: string;
+  chunk_size: number;
+  chunk_overlap: number;
+  child_chunk_size: number;
+  retrieval: {
+    method: RetrievalMethod;
+    top_k: number;
+    score_threshold: number;
+    vector_weight: number;
+    rerank: boolean;
+  };
+}
+
+export const DEFAULT_KB_SETTINGS: KbSettings = {
+  chunk_mode: "general",
+  separator: "\n\n",
+  chunk_size: 800,
+  chunk_overlap: 100,
+  child_chunk_size: 200,
+  retrieval: { method: "vector", top_k: 4, score_threshold: 0, vector_weight: 0.7, rerank: false },
+};
+
+export function normalizeKbSettings(s: Partial<KbSettings> | null | undefined): KbSettings {
+  const src = s ?? {};
+  return {
+    ...DEFAULT_KB_SETTINGS,
+    ...src,
+    retrieval: { ...DEFAULT_KB_SETTINGS.retrieval, ...(src.retrieval ?? {}) },
+  };
+}
+
+export interface KnowledgeBaseV2 extends KnowledgeBase {
+  settings?: Partial<KbSettings> | null;
+}
+
+export interface KbDocumentV2 extends KbDocument {
+  metadata?: Record<string, string> | null;
+  source?: "upload" | "url";
+  url?: string | null;
+}
+
+export interface KbChunk {
+  id: string;
+  index: number;
+  content: string;
+  parent_content: string | null;
+  enabled: boolean;
+  char_count: number;
+}
+
+export interface SearchHitV2 extends SearchHit {
+  metadata?: Record<string, string> | null;
+}
+
+export interface Citation {
+  index: number;
+  filename: string;
+  content: string;
+  score: number;
+}
+
+export interface PublicFeatures {
+  opening_statement?: string;
+  suggested_questions?: string[];
+  follow_up?: { enabled: boolean };
+  citations?: { enabled: boolean };
+  speech?: { stt: boolean; tts: boolean };
+  file_upload?: { enabled: boolean; max_files: number };
+}
+
+export interface PublicAppV2 extends PublicApp {
+  features?: PublicFeatures | null;
+}
+
+export interface AdminOverview {
+  counts: {
+    members: number;
+    apps: number;
+    published_apps: number;
+    knowledge_bases: number;
+    documents: number;
+    api_keys: number;
+  };
+  days: {
+    date: string;
+    runs: number;
+    tokens: number;
+    cost: number | string;
+    active_users: number;
+    conversations: number;
+  }[];
+  top_apps: { app_id: string; app_name: string; runs: number; cost: number | string }[];
+}
+
+export interface WorkspaceSettings {
+  default_models?: { chat?: string | null; embedding?: string | null };
+  public_rate_limit_per_minute?: number;
+  [k: string]: unknown;
+}
+
+export interface WorkspaceInfo {
+  id: string;
+  name: string;
+  settings: WorkspaceSettings | null;
+}
+
+export interface SystemSettings {
+  is_instance_admin: boolean;
+  allow_signup: boolean;
+  show_demo_accounts: boolean;
+}

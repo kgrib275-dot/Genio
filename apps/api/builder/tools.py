@@ -45,7 +45,7 @@ TOOL_DEFS: list[ToolDef] = [
     ),
     ToolDef(
         "add_node",
-        "노드를 하나 추가한다. after를 주면 그 노드 바로 뒤에 붙이고 선을 이어 준다(after 다음에 있던 노드는 새 노드 뒤로 밀린다). after가 조건 분기 노드면 handle에 분기 이름을 준다.",
+        "노드를 하나 추가한다. after를 주면 그 노드 바로 뒤에 붙이고 선을 이어 준다(after 다음에 있던 노드는 새 노드 뒤로 밀린다). after가 갈림길(condition·question_classifier)이면 handle에 분기 이름을, 실패 길이면 handle='fail'을 준다.",
         {
             "type": "object",
             "properties": {
@@ -83,7 +83,7 @@ TOOL_DEFS: list[ToolDef] = [
     ),
     ToolDef(
         "connect",
-        "두 노드를 선으로 잇는다. source가 condition이면 handle(분기 이름)이 필요하다. 조건이 아닌 노드에서 이미 나가는 선이 있으면 새 선으로 바꾼다.",
+        "두 노드를 선으로 잇는다. source가 갈림길(condition·question_classifier)이면 handle(분기 이름)이, 실패 길이면 handle='fail'이 필요하다. 조건이 아닌 노드에서 이미 나가는 선이 있으면 새 선으로 바꾼다.",
         {
             "type": "object",
             "properties": {
@@ -313,17 +313,23 @@ class BuilderToolbox:
             raise ToolError(f"'{after}' 노드가 없어요. get_graph로 id를 확인하세요.")
         if prev is not None:
             branch_offset = 0.0
-            if prev.type == "condition":
-                cases = [str(c.get("id")) for c in prev.data.get("cases", [])] + [
-                    str(prev.data.get("else") or "else")
-                ]
+            cases = _exits(prev)
+            if handle == "fail":
+                if prev.data.get("_on_error") != "branch":
+                    raise ToolError(
+                        "'fail' 출구를 쓰려면 먼저 그 노드의 _on_error를 'branch'로 바꾸세요."
+                    )
+                branch_offset = 200.0
+            elif cases is not None:
                 if not handle:
                     raise ToolError(
-                        f"조건 노드 뒤에 붙이려면 handle(분기 이름)이 필요해요: {', '.join(cases)}"
+                        f"갈림길 노드 뒤에 붙이려면 handle(분기 이름)이 필요해요: {', '.join(cases)}"
                     )
                 if handle not in cases:
                     raise ToolError(f"'{handle}' 분기가 없어요. 가능한 분기: {', '.join(cases)}")
                 branch_offset = (cases.index(handle) - (len(cases) - 1) / 2) * 160
+            elif handle:
+                raise ToolError(f"'{prev.id}' 노드에는 '{handle}' 출구가 없어요.")
             pos = Position(x=prev.position.x + 300, y=prev.position.y + branch_offset)
         else:
             max_x = max((n.position.x for n in g.nodes), default=-300)
@@ -335,7 +341,7 @@ class BuilderToolbox:
             old = [
                 e
                 for e in g.edges
-                if e.source == prev.id and (prev.type != "condition" or e.source_handle == handle)
+                if e.source == prev.id and (e.source_handle or None) == (handle or None)
             ]
             for e in old:
                 g.edges.remove(e)
@@ -346,8 +352,8 @@ class BuilderToolbox:
             g.edges.append(e1)
             ops.append({"op": "add_edge", "edge": e1.model_dump(by_alias=True, exclude_none=True)})
             if old and type not in ("output",):
-                if type == "condition":
-                    pass  # 조건 노드 뒤 연결은 에이전트가 분기별로 정한다
+                if type in ("condition", "question_classifier"):
+                    pass  # 갈림길 노드 뒤 연결은 에이전트가 분기별로 정한다
                 else:
                     e2 = GraphEdge(id=self._new_edge_id(g), source=node_id, target=old[0].target)
                     g.edges.append(e2)
@@ -392,7 +398,7 @@ class BuilderToolbox:
             ops.append({"op": "remove_edge", "id": e.id})
         g.nodes.remove(node)
         ops.append({"op": "remove_node", "id": id})
-        if len(ins) == 1 and len(outs) == 1 and node.type != "condition":
+        if len(ins) == 1 and len(outs) == 1 and _exits(node) is None:
             e = GraphEdge(
                 id=self._new_edge_id(g),
                 source=ins[0].source,
@@ -414,16 +420,22 @@ class BuilderToolbox:
         if source == target:
             raise ToolError("노드를 자기 자신과 이을 수 없어요.")
         ops: list[dict[str, Any]] = []
-        if src.type == "condition":
-            cases = [str(c.get("id")) for c in src.data.get("cases", [])] + [
-                str(src.data.get("else") or "else")
-            ]
+        cases = _exits(src)
+        if handle == "fail":
+            if src.data.get("_on_error") != "branch":
+                raise ToolError(
+                    "'fail' 출구를 쓰려면 먼저 그 노드의 _on_error를 'branch'로 바꾸세요."
+                )
+            old = [e for e in g.edges if e.source == source and e.source_handle == "fail"]
+        elif cases is not None:
             if not handle or handle not in cases:
-                raise ToolError(f"조건 노드에서 이을 때는 분기 이름이 필요해요: {', '.join(cases)}")
+                raise ToolError(
+                    f"갈림길 노드에서 이을 때는 분기 이름이 필요해요: {', '.join(cases)}"
+                )
             old = [e for e in g.edges if e.source == source and e.source_handle == handle]
         else:
             handle = None
-            old = [e for e in g.edges if e.source == source]
+            old = [e for e in g.edges if e.source == source and not e.source_handle]
         for e in old:
             g.edges.remove(e)
             ops.append({"op": "remove_edge", "id": e.id})
@@ -565,6 +577,17 @@ class ToolError(Exception):
     def __init__(self, message: str) -> None:
         super().__init__(message)
         self.message = message
+
+
+def _exits(node: GraphNode) -> list[str] | None:
+    """갈림길 노드의 분기 이름 목록(순서 유지). 갈림길이 아니면 None."""
+    if node.type == "condition":
+        return [str(c.get("id")) for c in node.data.get("cases", []) if c.get("id")] + [
+            str(node.data.get("else") or "else")
+        ]
+    if node.type == "question_classifier":
+        return [str(c.get("id")) for c in node.data.get("classes", []) if c.get("id")]
+    return None
 
 
 def _best_match(items: list[MarketItem], text: str) -> MarketItem | None:

@@ -55,10 +55,15 @@ class FakeAdapter:
             props = json_schema.get("properties", {})
             data: dict[str, Any] = {}
             for key, spec in props.items():
-                if key == "category":
+                if spec.get("enum"):
+                    guess = classify(prompt)
+                    data[key] = guess if guess in spec["enum"] else spec["enum"][0]
+                elif key == "category":
                     data[key] = classify(prompt)
                 elif spec.get("type") == "string":
                     data[key] = f"{key}: {prompt[:30]}"
+                elif spec.get("type") == "array":
+                    data[key] = [f"{key} 예시 {i}" for i in range(1, 4)]
                 else:
                     data[key] = None
             text = json.dumps(data, ensure_ascii=False)

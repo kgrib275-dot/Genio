@@ -413,6 +413,8 @@ def test_scenario2_faq_bot_share_link(
         events = parse_sse("".join(res.iter_text()))
     answer = next(d for n, d in events if n == "answer")["text"]
     assert "연차 15일" in answer
+    cites = next(d for n, d in events if n == "citations")
+    assert cites[0]["filename"] == "사내규정.txt" and cites[0]["index"] == 1
     assert (
         client.get(f"/api/v1/workspaces/{team.ws}/apps", headers=team.h("member")).json()[0][
             "status"

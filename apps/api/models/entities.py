@@ -109,6 +109,11 @@ class App(Base):
     )
     # ADR 0002
     draft_graph: Mapped[dict[str, Any] | None] = mapped_column(JsonType, nullable=True)
+    # v0.2: 앱 기능(App Toolkit)·환경 변수(비밀은 value_enc에 암호화)
+    features: Mapped[dict[str, Any]] = mapped_column(JsonType, default=dict, server_default="{}")
+    env_vars: Mapped[list[dict[str, Any]]] = mapped_column(
+        JsonType, default=list, server_default="[]"
+    )
 
 
 class WorkflowVersion(Base):
@@ -183,6 +188,8 @@ class Conversation(Base):
     )
     user_id: Mapped[str | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     external_session_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    # v0.2: 대화 변수({{conv.x}})
+    variables: Mapped[dict[str, Any]] = mapped_column(JsonType, default=dict, server_default="{}")
     created_at: Mapped[datetime] = _created()
 
 
@@ -197,6 +204,13 @@ class Message(Base):
     run_id: Mapped[str | None] = mapped_column(
         ForeignKey("runs.id", ondelete="SET NULL"), nullable=True
     )
+    # v0.2: 피드백·주석·검열·출처·응답 시간
+    feedback: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    feedback_comment: Mapped[str | None] = mapped_column(Text, nullable=True)
+    annotation_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    moderated: Mapped[bool] = mapped_column(default=False, server_default="false")
+    citations: Mapped[list[dict[str, Any]] | None] = mapped_column(JsonType, nullable=True)
+    latency_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
     created_at: Mapped[datetime] = _created()
 
 
@@ -210,6 +224,8 @@ class KnowledgeBase(Base):
     name: Mapped[str] = mapped_column(String(200))
     embedding_model: Mapped[str] = mapped_column(String(100))
     chunk_size: Mapped[int] = mapped_column(Integer, default=800)
+    # v0.2: 청킹·검색 설정
+    settings: Mapped[dict[str, Any]] = mapped_column(JsonType, default=dict, server_default="{}")
     created_at: Mapped[datetime] = _created()
 
 
@@ -227,6 +243,12 @@ class Document(Base):
     # ADR 0002
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
     content: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
+    # v0.2: 메타데이터·출처
+    doc_metadata: Mapped[dict[str, Any]] = mapped_column(
+        "doc_metadata", JsonType, default=dict, server_default="{}"
+    )
+    source: Mapped[str] = mapped_column(String(20), default="upload", server_default="upload")
+    url: Mapped[str | None] = mapped_column(String(2000), nullable=True)
 
 
 class Chunk(Base):
@@ -253,6 +275,10 @@ class Chunk(Base):
         Vector(EMBEDDING_DIM).with_variant(JSON(), "sqlite"), nullable=True
     )
     metadata_: Mapped[dict[str, Any]] = mapped_column("metadata", JsonType, default=dict)
+    # v0.2: 순서·켜고 끄기·부모 문단(부모-자식 청킹)
+    position: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    enabled: Mapped[bool] = mapped_column(default=True, server_default="true")
+    parent_content: Mapped[str | None] = mapped_column(Text, nullable=True)
 
 
 # ---------- 3-4 커넥터 ----------
@@ -372,3 +398,58 @@ class LlmProvider(Base):
     base_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     default_model: Mapped[str] = mapped_column(String(100))
     is_default: Mapped[bool] = mapped_column(default=False)
+
+
+# ---------- v0.2 ----------
+class StoredFile(Base):
+    """앱 입력·챗 첨부 파일."""
+
+    __tablename__ = "files"
+    id: Mapped[str] = _id()
+    workspace_id: Mapped[str] = mapped_column(
+        ForeignKey("workspaces.id", ondelete="CASCADE"), index=True
+    )
+    app_id: Mapped[str | None] = mapped_column(
+        ForeignKey("apps.id", ondelete="CASCADE"), nullable=True
+    )
+    filename: Mapped[str] = mapped_column(String(300))
+    mime: Mapped[str] = mapped_column(String(100))
+    size: Mapped[int] = mapped_column(Integer)
+    content: Mapped[bytes] = mapped_column(LargeBinary)
+    created_by: Mapped[str | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    created_at: Mapped[datetime] = _created()
+
+
+class Annotation(Base):
+    """주석 답변: 비슷한 질문이 오면 이 답을 바로 돌려준다."""
+
+    __tablename__ = "annotations"
+    id: Mapped[str] = _id()
+    app_id: Mapped[str] = mapped_column(ForeignKey("apps.id", ondelete="CASCADE"), index=True)
+    question: Mapped[str] = mapped_column(Text)
+    answer: Mapped[str] = mapped_column(Text)
+    hit_count: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    created_by: Mapped[str | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    created_at: Mapped[datetime] = _created()
+
+
+class AppApiKey(Base):
+    """앱별 서비스 API 키. 원문은 만들 때 한 번만 보여 주고 해시만 저장한다."""
+
+    __tablename__ = "app_api_keys"
+    id: Mapped[str] = _id()
+    app_id: Mapped[str] = mapped_column(ForeignKey("apps.id", ondelete="CASCADE"), index=True)
+    name: Mapped[str] = mapped_column(String(100))
+    prefix: Mapped[str] = mapped_column(String(20))
+    key_hash: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    created_by: Mapped[str | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    created_at: Mapped[datetime] = _created()
+    last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class SystemSetting(Base):
+    """인스턴스 전체 설정(회원가입 허용 등)."""
+
+    __tablename__ = "system_settings"
+    key: Mapped[str] = mapped_column(String(100), primary_key=True)
+    value: Mapped[Any] = mapped_column(JsonType)

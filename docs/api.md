@@ -172,3 +172,103 @@ SSE `/builder/sessions/{id}/messages` 이벤트(순서대로 여러 번):
 | GET | `/workspaces/{ws}/runs?app=&status=&from=&to=` | owner, admin, builder, operator | `[Run + {app_name}]` 최근 200개 |
 | GET | `/workspaces/{ws}/usage?from=&to=` | owner, admin, builder, operator | `{total_runs, total_input_tokens, total_output_tokens, total_cost, by_app: [{app_id, app_name, runs, input_tokens, output_tokens, cost}]}` |
 | GET | `/workspaces/{ws}/audit-logs` | owner, admin | `[{id, user_id, user_email, action, target_type, target_id, meta, created_at}]` 최근 200개 |
+
+---
+
+# v0.2 추가 (Dify 기능 반영, docs/dify-gap.md)
+
+## 노드 추가(그래프 스키마는 그대로, `GET /workspaces/{ws}/nodes`에 자동 노출)
+`question_classifier`, `parameter_extractor`, `template`, `variable_aggregator`, `list_operator`, `iteration`, `loop`, `document_extractor`, `variable_assigner`, `agent`.
+- `question_classifier`: `data.classes=[{id, name, description}]`. 출구 핸들 = 각 class `id`(condition처럼 `sourceHandle`). 출력 `{class_id, class_name}`.
+- 모든 노드 공통 선택 설정(노드 설정 패널 아래 "실패했을 때" 영역):
+  - `data._retry = {max_retries: 0~5, interval_ms: 100~5000}`
+  - `data._on_error = "stop" | "default" | "branch"`, `data._default = {...}`(default일 때 출력)
+  - `branch`이면 출구 핸들 `"fail"`이 생긴다(실패 시 그쪽으로). 출력 `{error}`.
+- 템플릿에서 쓸 수 있는 범위: `{{노드.값}}`, `{{input.x}}`, `{{env.x}}`(앱 환경 변수), `{{conv.x}}`(대화 변수, 챗 앱), `{{item}}`/`{{index}}`(iteration 안), `{{loop.index}}`/`{{loop.last}}`(loop 안).
+- 입력 노드 `fields[].type`에 `file` 추가. 값은 파일 id(문자열).
+
+## 파일
+| POST | `/workspaces/{ws}/files` | owner, admin, builder | multipart `file` | `File` |
+| POST | `/public/apps/{token}/files` | 접근 규칙 | multipart `file` | `File` |
+`File = {id, filename, mime, size, created_at}` (최대 15MB)
+
+## 앱 기능(App Toolkit)·환경 변수
+`AppDetail`에 `features`, `env_vars` 추가.
+```
+features = {
+  opening_statement: string, suggested_questions: [string],
+  follow_up: {enabled: bool},
+  citations: {enabled: bool},
+  moderation: {enabled: bool, keywords: [string], preset_reply: string, check_output: bool},
+  annotation_reply: {enabled: bool, score_threshold: number(0.5~1, 기본 0.85)},
+  speech: {stt: bool, tts: bool},
+  file_upload: {enabled: bool, max_files: number},
+  memory: {window: number(0~20)}
+}
+env_vars = [{key, value, secret: bool}]   # 응답에서 secret 값은 "****abcd"
+```
+| PATCH | `/apps/{id}/features` | owner, admin, builder | `features`(부분) | `AppDetail` |
+| PUT | `/apps/{id}/env-vars` | owner, admin, builder | `{env_vars: [...]}` (secret 값이 `****`로 시작하면 기존 값 유지) | `AppDetail` |
+| GET | `/apps/{id}/export` | owner, admin, builder | | `{genio_version: "0.2", app: {name, type, description, icon, features}, graph, env_vars(비밀 제외)}` |
+| POST | `/workspaces/{ws}/apps/import` | owner, admin, builder | 위 export 형식 | `AppDetail` |
+| POST | `/apps/{id}/duplicate` | owner, admin, builder | | `AppDetail` |
+| POST | `/apps/{id}/versions/{version}/restore` | owner, admin, builder | | `AppDetail`(작업본을 그 버전으로) |
+
+## 공개 챗 확장
+`PublicApp`에 `features: {opening_statement, suggested_questions, follow_up, citations, speech, file_upload}` 추가.
+`POST /public/apps/{token}/chat` 요청에 `files?: [file_id]`. 이벤트 추가:
+- `answer`: `{text, message_id}` (message_id로 피드백)
+- `citations`: `[{index, filename, content, score}]`
+- `suggestions`: `[string]` (이어서 물어볼 질문)
+- `moderated`: `{text}` (검열에 걸려 미리 정한 답으로 대체)
+- `annotated`: `{text, annotation_id}` (주석 답변으로 바로 답함)
+| POST | `/public/apps/{token}/messages/{message_id}/feedback` | 접근 규칙 | `{rating: "like"|"dislike"|null, comment?}` | `{ok}` |
+
+## 로그·주석·모니터링
+| GET | `/apps/{id}/conversations?page=` | VIEW_RUNS | | `[{id, user_name, external_session_id, message_count, likes, dislikes, created_at, last_message_at, first_question}]` |
+| GET | `/conversations/{id}/messages` | VIEW_RUNS | | `[{id, role, content, run_id, feedback, created_at, annotated, moderated}]` |
+| GET | `/apps/{id}/annotations` | owner, admin, builder | | `[{id, question, answer, hit_count, created_at}]` |
+| POST | `/apps/{id}/annotations` | owner, admin, builder | `{question, answer}` | `Annotation` |
+| PATCH | `/annotations/{id}` | owner, admin, builder | `{question?, answer?}` | `Annotation` |
+| DELETE | `/annotations/{id}` | owner, admin, builder | | 204 |
+| GET | `/apps/{id}/stats?days=7` | VIEW_RUNS | | `{days: [{date, runs, conversations, messages, input_tokens, output_tokens, cost, avg_latency_ms, success_rate, likes, dislikes}], totals: {...같은 키}}` |
+
+## 앱 API 키·서비스 API
+| GET | `/apps/{id}/api-keys` | owner, admin, builder | | `[{id, name, prefix, created_at, last_used_at}]` |
+| POST | `/apps/{id}/api-keys` | owner, admin, builder | `{name}` | `{id, name, prefix, created_at, key}` (key는 이때 한 번만) |
+| DELETE | `/api-keys/{id}` | owner, admin, builder | | 204 |
+
+서비스 API(헤더 `Authorization: Bearer gk-...`, 앱 키, IP·키당 분당 60회):
+| POST | `/service/chat-messages` | `{query, inputs?, conversation_id?, user?}` | `{answer, conversation_id, message_id, metadata: {usage, citations}}` |
+| POST | `/service/workflows/run` | `{inputs}` | `{run_id, status, outputs, error, elapsed_ms}` |
+| GET | `/service/parameters` | | `{input_fields, features}` |
+
+## 지식베이스 확장
+`KnowledgeBase`에 `settings` 추가:
+```
+settings = {
+  chunk_mode: "general" | "parent_child", separator: "\n\n", chunk_size, chunk_overlap, child_chunk_size,
+  retrieval: {method: "vector"|"keyword"|"hybrid", top_k, score_threshold, vector_weight(0~1), rerank: bool}
+}
+```
+`Document`에 `metadata: {키: 값}`, `source: "upload"|"url"`, `url` 추가.
+| PATCH | `/knowledge-bases/{id}` | owner, admin, builder | `{name?, settings?}` | `KnowledgeBase` |
+| POST | `/knowledge-bases/{id}/documents/url` | owner, admin, builder | `{url}` | `Document` |
+| PATCH | `/documents/{id}` | owner, admin, builder | `{metadata}` | `Document` |
+| POST | `/documents/{id}/reprocess` | owner, admin, builder | | `Document` (설정 바꾼 뒤 다시 조각내기) |
+| GET | `/documents/{id}/chunks` | VIEW_RUNS | | `[{id, index, content, parent_content, enabled, char_count}]` |
+| PATCH | `/chunks/{id}` | owner, admin, builder | `{content?, enabled?}` | `Chunk` |
+| POST | `/knowledge-bases/{id}/search` | 기존 | `{query, top_k?, method?, score_threshold?, metadata_filter?: {키: 값}}` | `[{chunk_id, document_id, filename, content, score, metadata}]` |
+`knowledge_search` 노드 data에도 `method`, `score_threshold`, `metadata_filter` 추가.
+
+## 관리 콘솔(owner, admin 전용. 시스템 설정은 "인스턴스 관리자" = 가장 먼저 만든 워크스페이스의 owner)
+| GET | `/workspaces/{ws}/admin/overview?days=14` | owner, admin | `{counts: {members, apps, published_apps, knowledge_bases, documents, api_keys}, days: [{date, runs, tokens, cost, active_users, conversations}], top_apps: [{app_id, app_name, runs, cost}]}` |
+| PATCH | `/workspaces/{ws}` | owner, admin | `{name?, settings?: {default_models?: {chat?: provider_id, embedding?: provider_id}, public_rate_limit_per_minute?}}` | `{id, name, settings}` |
+| GET | `/workspaces/{ws}` | 모든 역할 | | `{id, name, settings}` |
+| DELETE | `/workspaces/{ws}/members/{id}` | owner, admin (owner 내보내기는 불가) | | 204 |
+| POST | `/workspaces/{ws}/transfer-ownership` | owner | `{member_id}` | `{ok}` (나는 admin이 됨) |
+| DELETE | `/workspaces/{ws}/invitations/{id}` | owner, admin | | 204 |
+| GET | `/workspaces/{ws}/admin/api-keys` | owner, admin | | `[{id, app_id, app_name, name, prefix, created_at, last_used_at}]` |
+| GET | `/admin/system` | 로그인 | | `{is_instance_admin, allow_signup, show_demo_accounts}` |
+| PATCH | `/admin/system` | 인스턴스 관리자 | `{allow_signup?, show_demo_accounts?}` | 같은 형식 |
+`POST /auth/signup`은 `allow_signup=false`면 403. `GET /auth/demo-accounts`는 `show_demo_accounts=false`면 `enabled:false`.

@@ -1,3 +1,4 @@
+import { Copy, Download, RotateCcw } from "lucide-react";
 import { useEffect, useState, type FormEvent } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { JsonView } from "@/components/canvas/RunPanel";
@@ -26,7 +27,8 @@ import {
   type Role,
   type VersionDetail,
 } from "@/lib/api/types";
-import { copyText, formatDate } from "@/lib/cn";
+import { exportApp, useDuplicateApp, useRestoreVersion } from "@/lib/api/v2";
+import { copyText, downloadJson, formatDate } from "@/lib/cn";
 import { canEdit, useSession } from "@/store/session";
 import { AppNav } from "@/pages/apps/AppNav";
 
@@ -202,8 +204,9 @@ function DeploymentsCard({ appId, editable }: { appId: string; editable: boolean
   );
 }
 
-function VersionsCard({ appId }: { appId: string }) {
+function VersionsCard({ appId, editable }: { appId: string; editable: boolean }) {
   const versions = useVersions(appId);
+  const restore = useRestoreVersion(appId);
   const [shown, setShown] = useState<VersionDetail | null>(null);
   return (
     <Card>
@@ -218,10 +221,35 @@ function VersionsCard({ appId }: { appId: string }) {
         )}
         <ul className="divide-y divide-slate-100">
           {(versions.data ?? []).map((v) => (
-            <li key={v.id} className="flex items-center gap-3 px-5 py-2.5 text-sm">
+            <li
+              key={v.id}
+              className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2.5 text-sm sm:px-5"
+            >
               <Badge tone="indigo">버전 {v.version}</Badge>
-              <span className="flex-1 truncate text-slate-600">{v.note || "메모 없음"}</span>
+              <span className="min-w-0 flex-1 truncate text-slate-600">
+                {v.note || "메모 없음"}
+              </span>
               <span className="text-xs text-slate-400">{formatDate(v.created_at)}</span>
+              {editable && (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  disabled={restore.isPending}
+                  onClick={() => {
+                    if (
+                      window.confirm(
+                        `작업본을 버전 ${v.version}으로 되돌릴까요? 지금 작업본의 바뀐 내용은 사라져요.`,
+                      )
+                    )
+                      restore.mutate(v.version, {
+                        onSuccess: () => toast.success(`버전 ${v.version}으로 되돌렸어요.`),
+                        onError: (err) => toast.error(err),
+                      });
+                  }}
+                >
+                  <RotateCcw className="h-3.5 w-3.5" /> 되돌리기
+                </Button>
+              )}
               <Button
                 size="sm"
                 variant="ghost"
@@ -262,6 +290,7 @@ function AppInfoCard({ appId, editable }: { appId: string; editable: boolean }) 
   const app = useApp(appId);
   const update = useUpdateApp(appId);
   const del = useDeleteApp();
+  const duplicate = useDuplicateApp();
   const navigate = useNavigate();
   const [form, setForm] = useState({
     name: "",
@@ -333,6 +362,40 @@ function AppInfoCard({ appId, editable }: { appId: string; editable: boolean }) 
           </Field>
           <ErrorBox error={update.error ?? del.error} />
           {editable && (
+            <div className="flex flex-wrap gap-2 border-t border-slate-100 pt-3">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={async () => {
+                  try {
+                    const data = await exportApp(appId);
+                    downloadJson(`${app.data?.name ?? "app"}.genio.json`, data);
+                  } catch (err) {
+                    toast.error(err);
+                  }
+                }}
+              >
+                <Download className="h-3.5 w-3.5" /> 내보내기
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={duplicate.isPending}
+                onClick={() =>
+                  duplicate.mutate(appId, {
+                    onSuccess: (copy) => {
+                      toast.success("복제했어요.");
+                      navigate(`/apps/${copy.id}/builder`);
+                    },
+                    onError: (err) => toast.error(err),
+                  })
+                }
+              >
+                <Copy className="h-3.5 w-3.5" /> 복제
+              </Button>
+            </div>
+          )}
+          {editable && (
             <div className="flex justify-between">
               <Button type="submit" disabled={update.isPending}>
                 {ko.common.save}
@@ -369,11 +432,11 @@ export default function AppSettingsPage() {
     );
   return (
     <div>
-      <AppNav appId={appId} title={app.data?.name ?? ""} icon={app.data?.icon} />
-      <div className="mx-auto grid max-w-6xl gap-6 px-8 py-6 lg:grid-cols-[3fr_2fr]">
-        <div className="space-y-6">
+      <AppNav appId={appId} title={app.data?.name ?? ""} icon={app.data?.icon} help="settings" />
+      <div className="mx-auto grid max-w-6xl gap-6 px-4 py-6 sm:px-6 lg:grid-cols-[3fr_2fr] lg:px-8">
+        <div className="min-w-0 space-y-6">
           <DeploymentsCard appId={appId} editable={editable} />
-          <VersionsCard appId={appId} />
+          <VersionsCard appId={appId} editable={editable} />
         </div>
         <AppInfoCard appId={appId} editable={editable} />
       </div>

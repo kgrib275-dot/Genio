@@ -12,7 +12,9 @@ from api.core.errors import install_error_handlers
 from api.db import Base, SessionLocal, engine
 from api.market.service import ensure_market_nodes, sync_catalog
 from api.routers import (
+    admin,
     apps,
+    apps_v02,
     auth,
     builder,
     connectors,
@@ -20,6 +22,7 @@ from api.routers import (
     knowledge,
     market,
     runs,
+    service,
     workspaces,
 )
 from api.services.seed import seed_demo
@@ -56,7 +59,20 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-for r in (auth, workspaces, connectors, apps, runs, builder, knowledge, deployments, market):
+for r in (
+    admin,
+    auth,
+    workspaces,
+    connectors,
+    apps,
+    apps_v02,
+    runs,
+    builder,
+    knowledge,
+    deployments,
+    market,
+    service,
+):
     app.include_router(r.router, prefix="/api/v1")
 
 

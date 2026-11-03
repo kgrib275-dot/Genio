@@ -6,6 +6,9 @@
 - 공유 주소(tailnet): https://genio.tail6bd481.ts.net
 - 데모 계정: `owner@example.com` 등 5개, 비밀번호 `genio1234!` ([runbook](docs/runbook.md))
 
+## v0.2 (Dify 기능 반영)
+노드 19종, 앱 기능(시작 인사·추천 질문·출처·검열·주석 답변·파일·음성), 로그·모니터링·앱 API 키·서비스 API, 지식베이스(부모-자식 조각·혼합 검색·메타데이터·웹 가져오기), 관리 콘솔, 사용설명서·도움말 팝업, 반응형 화면. 비교표: [docs/dify-gap.md](docs/dify-gap.md)
+
 ## 문서
 - 작업 규칙: [CLAUDE.md](CLAUDE.md)
 - 설계서: [docs/design.md](docs/design.md)

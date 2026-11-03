@@ -107,7 +107,7 @@ def test_condition_handle_rules() -> None:
     g = copy.deepcopy(base_graph())
     g["edges"][2]["sourceHandle"] = "c9"
     msgs = messages(validate_graph(g, env()))
-    assert any("'c9' 분기가 조건 목록에 없어요" in m for m in msgs)
+    assert any("'c9' 분기가 목록에 없어요" in m for m in msgs)
     g["edges"][2].pop("sourceHandle")
     msgs = messages(validate_graph(g, env()))
     assert any("어떤 분기인지" in m for m in msgs)

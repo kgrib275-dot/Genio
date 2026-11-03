@@ -205,7 +205,12 @@ export function usePublicApp(token: string) {
 
 export function sendPublicChat(
   token: string,
-  body: { message: string; session_id?: string; input?: Record<string, unknown> },
+  body: {
+    message: string;
+    session_id?: string;
+    input?: Record<string, unknown>;
+    files?: string[];
+  },
   onEvent: (ev: SSEEvent) => void,
   signal?: AbortSignal,
 ): Promise<void> {

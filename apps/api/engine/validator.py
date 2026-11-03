@@ -13,9 +13,9 @@ from api.schemas.graph import Graph, GraphError, ValidationResult
 from nodes import NodeRegistry, NodeSpec
 
 # 노드 설정에 담기지만 검증 대상에서 빼는 키(캔버스 UI용)
-_UI_KEYS = {"label", "note"}
+_UI_KEYS = {"label", "note", "_retry", "_on_error", "_default"}
 # 그래프 바깥에서 쓸 수 있는 예약 이름
-RESERVED_SCOPES = {"input", "vars"}
+RESERVED_SCOPES = {"input", "vars", "env", "conv", "item", "index", "loop"}
 
 
 @dataclass
@@ -28,6 +28,17 @@ class ValidationEnv:
     connectors: set[str] | None = None
     knowledge_bases: set[str] | None = None
     errors: list[GraphError] = field(default_factory=list)
+
+
+def branch_handles(node_type: str, data: dict[str, Any]) -> set[str] | None:
+    """갈림길 노드의 출구 이름. 갈림길이 아니면 None."""
+    if node_type == "condition":
+        h = {str(c.get("id")) for c in data.get("cases", []) if c.get("id")}
+        h.add(str(data.get("else") or "else"))
+        return h
+    if node_type == "question_classifier":
+        return {str(c.get("id")) for c in data.get("classes", []) if c.get("id")}
+    return None
 
 
 def _schema_errors(spec: NodeSpec, node_id: str, data: dict[str, Any]) -> list[GraphError]:
@@ -125,41 +136,56 @@ def validate_graph(raw: dict[str, Any], env: ValidationEnv) -> ValidationResult:
 
     for nid, edges in out_edges.items():
         node = nodes[nid]
-        if node.type == "condition":
-            handles = {str(c.get("id")) for c in node.data.get("cases", []) if c.get("id")}
-            handles.add(str(node.data.get("else") or "else"))
-            used: set[str] = set()
-            for e in edges:
-                if not e.source_handle:
+        branches = branch_handles(node.type, node.data)
+        can_fail = node.data.get("_on_error") == "branch"
+        used: set[str] = set()
+        plain = 0
+        for e in edges:
+            h = e.source_handle or ""
+            if h == "fail":
+                if not can_fail:
                     errors.append(
                         GraphError(
                             node_id=nid,
-                            message="조건 분기에서 나가는 선은 어떤 분기인지 골라야 해요.",
+                            message="'실패' 길을 쓰려면 이 노드의 '실패했을 때'를 '실패 길로 보내기'로 바꿔 주세요.",
                         )
                     )
-                elif e.source_handle not in handles:
+                elif "fail" in used:
+                    errors.append(
+                        GraphError(node_id=nid, message="'실패' 길은 한 곳으로만 이을 수 있어요.")
+                    )
+                used.add("fail")
+                continue
+            if branches is not None:
+                if not h:
                     errors.append(
                         GraphError(
-                            node_id=nid, message=f"'{e.source_handle}' 분기가 조건 목록에 없어요."
+                            node_id=nid, message="갈림길에서 나가는 선은 어떤 분기인지 골라야 해요."
                         )
                     )
-                elif e.source_handle in used:
+                elif h not in branches:
+                    errors.append(GraphError(node_id=nid, message=f"'{h}' 분기가 목록에 없어요."))
+                elif h in used:
                     errors.append(
                         GraphError(
                             node_id=nid,
-                            message=f"'{e.source_handle}' 분기에서 두 곳으로 갈 수 없어요(병렬 분기 미지원).",
+                            message=f"'{h}' 분기에서 두 곳으로 갈 수 없어요(병렬 분기 미지원).",
                         )
                     )
-                used.add(e.source_handle or "")
-        elif len(edges) > 1:
+                used.add(h)
+            else:
+                if h:
+                    errors.append(
+                        GraphError(node_id=nid, message=f"이 노드에는 '{h}' 출구가 없어요.")
+                    )
+                plain += 1
+        if plain > 1:
             errors.append(
                 GraphError(
                     node_id=nid,
                     message="한 노드에서 여러 곳으로 동시에 갈 수 없어요(병렬 분기는 아직 지원하지 않아요).",
                 )
             )
-        if node.type == "output" and edges:
-            pass  # 결과 노드 뒤에 이어지는 것은 허용(로그용)
 
     # 순환 검사(Kahn)
     indeg = dict(in_deg)
@@ -235,6 +261,11 @@ def validate_graph(raw: dict[str, Any], env: ValidationEnv) -> ValidationResult:
             spec = specs.get(ref_node)
             if spec is not None and spec.outputs is not None and ref_field:
                 fields = spec.outputs(nodes[ref_node].data)
+                if fields is not None and nodes[ref_node].data.get("_on_error") in (
+                    "default",
+                    "branch",
+                ):
+                    fields = [*fields, "error"]
                 if fields is not None and ref_field not in fields:
                     errors.append(
                         GraphError(

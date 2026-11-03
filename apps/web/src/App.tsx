@@ -19,6 +19,12 @@ const MarketPage = lazy(() => import("@/pages/market/MarketPage"));
 const MarketDetailPage = lazy(() => import("@/pages/market/MarketDetailPage"));
 const WorkspacePage = lazy(() => import("@/pages/workspace/WorkspacePage"));
 const SharePage = lazy(() => import("@/pages/share/SharePage"));
+const AppFeaturesPage = lazy(() => import("@/pages/apps/AppFeaturesPage"));
+const AppLogsPage = lazy(() => import("@/pages/apps/AppLogsPage"));
+const AppMonitorPage = lazy(() => import("@/pages/apps/AppMonitorPage"));
+const AppApiPage = lazy(() => import("@/pages/apps/AppApiPage"));
+const AdminPage = lazy(() => import("@/pages/admin/AdminPage"));
+const HelpPage = lazy(() => import("@/pages/help/HelpPage"));
 
 export default function App() {
   return (
@@ -41,12 +47,18 @@ export default function App() {
             <Route path="apps/:id/builder" element={<BuilderPage />} />
             <Route path="apps/:id/settings" element={<AppSettingsPage />} />
             <Route path="apps/:id/runs" element={<AppRunsPage />} />
+            <Route path="apps/:id/features" element={<AppFeaturesPage />} />
+            <Route path="apps/:id/logs" element={<AppLogsPage />} />
+            <Route path="apps/:id/monitor" element={<AppMonitorPage />} />
+            <Route path="apps/:id/api" element={<AppApiPage />} />
             <Route path="runs/:id" element={<RunDetailPage />} />
             <Route path="knowledge" element={<KnowledgePage />} />
             <Route path="connectors" element={<ConnectorsPage />} />
             <Route path="market" element={<MarketPage />} />
             <Route path="market/:key" element={<MarketDetailPage />} />
             <Route path="workspace" element={<WorkspacePage />} />
+            <Route path="admin" element={<AdminPage />} />
+            <Route path="help" element={<HelpPage />} />
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

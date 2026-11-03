@@ -1,7 +1,9 @@
 """ORM 모델. 설계서 §3 테이블 + ADR 0002 추가 컬럼."""
 
 from api.models.entities import (
+    Annotation,
     App,
+    AppApiKey,
     AuditLog,
     BuilderMessage,
     BuilderSession,
@@ -22,13 +24,17 @@ from api.models.entities import (
     Purchase,
     Run,
     RunStep,
+    StoredFile,
+    SystemSetting,
     User,
     WorkflowVersion,
     Workspace,
 )
 
 __all__ = [
+    "Annotation",
     "App",
+    "AppApiKey",
     "AuditLog",
     "BuilderMessage",
     "BuilderSession",
@@ -49,6 +55,8 @@ __all__ = [
     "Purchase",
     "Run",
     "RunStep",
+    "StoredFile",
+    "SystemSetting",
     "User",
     "WorkflowVersion",
     "Workspace",

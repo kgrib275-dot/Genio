@@ -62,6 +62,8 @@ Step "컨테이너 실행 (web · api · worker · postgres · redis · tailscal
 if ($Rebuild) { docker compose up -d --build } else { docker compose up -d }
 if ($LASTEXITCODE -ne 0) { Fail "컨테이너를 띄우지 못했어요." "docker compose logs 로 오류를 확인하세요." }
 Ok "컨테이너 실행됨"
+# tailscale은 web의 네트워크를 같이 쓰므로, web이 새로 만들어졌으면 다시 붙여야 한다
+docker compose up -d --force-recreate tailscale 2>$null | Out-Null
 
 # 4) 준비 확인
 Step "서버 준비 기다리는 중"

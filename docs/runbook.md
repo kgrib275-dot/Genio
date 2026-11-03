@@ -40,7 +40,7 @@ api 컨테이너가 시작할 때 `alembic upgrade head`를 먼저 실행한다.
 
 ## 웹 화면 실행 방식
 - docker compose의 web은 **배포용 빌드를 nginx로** 서빙한다(gzip, /assets 1년 캐시, /api·SSE 프록시). 첫 화면이 0.4초 안팎으로 뜬다.
-- 화면 코드를 고친 뒤 반영: `docker compose up -d --build web`
+- 화면 코드를 고친 뒤 반영: `start_genio.bat -Rebuild` (직접 할 때는 `docker compose up -d --build web` 다음 `docker compose up -d --force-recreate tailscale` — tailscale이 web 네트워크를 같이 쓰기 때문)
 - 고치면서 바로 보고 싶을 때(개발 모드): `cd apps/web && npm run dev` → http://127.0.0.1:5190 (API는 8190으로 프록시). 이때는 web 컨테이너를 먼저 멈춘다.
 
 ## 공유 (Tailscale)

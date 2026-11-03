@@ -1,12 +1,16 @@
 import {
+  BookMarked,
   BookOpen,
   LayoutGrid,
   LogOut,
+  Menu,
   PanelLeftClose,
   PanelLeftOpen,
   Plug,
+  Shield,
   Store,
   Users,
+  X,
   type LucideIcon,
 } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -16,16 +20,28 @@ import { ErrorBox, Loading } from "@/components/ErrorBox";
 import { ko } from "@/i18n/ko";
 import { useMe } from "@/lib/api/auth";
 import { signOut } from "@/lib/api/client";
+import type { Me, Role } from "@/lib/api/types";
 import { cn } from "@/lib/cn";
-import { useSession } from "@/store/session";
+import { canManage, useSession } from "@/store/session";
 
-const NAV: { to: string; label: string; icon: LucideIcon; end?: boolean }[] = [
+interface NavItem {
+  to: string;
+  label: string;
+  icon: LucideIcon;
+  end?: boolean;
+  show?: (role: Role | null) => boolean;
+}
+
+const NAV: NavItem[] = [
   { to: "/", label: ko.nav.dashboard, icon: LayoutGrid, end: true },
   { to: "/knowledge", label: ko.nav.knowledge, icon: BookOpen },
   { to: "/connectors", label: ko.nav.connectors, icon: Plug },
   { to: "/market", label: ko.nav.market, icon: Store },
   { to: "/workspace", label: ko.nav.workspace, icon: Users },
+  { to: "/admin", label: "관리", icon: Shield, show: canManage },
 ];
+
+const BOTTOM_NAV: NavItem[] = [{ to: "/help", label: "사용설명서", icon: BookMarked }];
 
 export function Logo({ compact = false }: { compact?: boolean }) {
   return (
@@ -43,6 +59,147 @@ export function Logo({ compact = false }: { compact?: boolean }) {
   );
 }
 
+function NavItems({
+  items,
+  compact,
+  role,
+  onNavigate,
+}: {
+  items: NavItem[];
+  compact: boolean;
+  role: Role | null;
+  onNavigate?: () => void;
+}) {
+  return (
+    <>
+      {items
+        .filter((n) => !n.show || n.show(role))
+        .map((n) => (
+          <NavLink
+            key={n.to}
+            to={n.to}
+            end={n.end}
+            title={compact ? n.label : undefined}
+            onClick={onNavigate}
+            className={({ isActive }) =>
+              cn(
+                "flex items-center gap-2.5 rounded-lg py-2 text-sm transition-colors",
+                compact ? "justify-center px-0" : "px-3",
+                isActive
+                  ? "bg-indigo-50 font-semibold text-indigo-700"
+                  : "text-slate-600 hover:bg-slate-100 hover:text-slate-900",
+              )
+            }
+          >
+            <n.icon className="h-[18px] w-[18px] shrink-0" strokeWidth={2} />
+            {!compact && n.label}
+          </NavLink>
+        ))}
+    </>
+  );
+}
+
+function SidebarBody({
+  me,
+  compact,
+  inApp,
+  onTogglePin,
+  onNavigate,
+}: {
+  me: Me | undefined;
+  compact: boolean;
+  inApp: boolean;
+  onTogglePin?: () => void;
+  onNavigate?: () => void;
+}) {
+  const { workspaceId, role, setWorkspace } = useSession();
+  const navigate = useNavigate();
+  const workspaces = me?.workspaces ?? [];
+  const current = workspaces.find((w) => w.id === workspaceId);
+  return (
+    <>
+      {!compact && (
+        <div className="px-3 pb-3">
+          <label className="mb-1 block px-1 text-[11px] font-medium text-slate-400">
+            워크스페이스
+          </label>
+          <select
+            aria-label="워크스페이스"
+            className="w-full truncate rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-2 text-sm font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+            value={workspaceId}
+            onChange={(e) => {
+              const w = workspaces.find((x) => x.id === e.target.value);
+              if (w) setWorkspace(w.id, w.role);
+            }}
+          >
+            {workspaces.map((w) => (
+              <option key={w.id} value={w.id}>
+                {w.name}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
+
+      <nav className={cn("flex-1 space-y-0.5 overflow-y-auto", compact ? "px-2" : "px-3")}>
+        <NavItems items={NAV} compact={compact} role={role} onNavigate={onNavigate} />
+      </nav>
+
+      <div className={cn("space-y-0.5 pb-2", compact ? "px-2" : "px-3")}>
+        <NavItems items={BOTTOM_NAV} compact={compact} role={role} onNavigate={onNavigate} />
+        {inApp && onTogglePin && (
+          <button
+            type="button"
+            title={compact ? "메뉴 펼치기" : "메뉴 접기"}
+            onClick={onTogglePin}
+            className={cn(
+              "flex w-full items-center gap-2 rounded-lg py-2 text-xs text-slate-500 hover:bg-slate-100",
+              compact ? "justify-center" : "px-3",
+            )}
+          >
+            {compact ? (
+              <PanelLeftOpen className="h-4 w-4" />
+            ) : (
+              <>
+                <PanelLeftClose className="h-4 w-4" /> 메뉴 접기
+              </>
+            )}
+          </button>
+        )}
+      </div>
+
+      <div
+        className={cn(
+          "flex items-center gap-2.5 border-t border-slate-100 py-3",
+          compact ? "flex-col px-2" : "px-4",
+        )}
+      >
+        <Avatar name={me?.name ?? ""} />
+        {!compact && (
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-sm font-medium">{me?.name}</p>
+            <p className="truncate text-[11px] text-slate-500">
+              {current ? ko.roles[current.role] : ""} · {me?.email}
+            </p>
+          </div>
+        )}
+        <button
+          type="button"
+          title={ko.common.logout}
+          aria-label={ko.common.logout}
+          className="rounded-md p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+          onClick={() => {
+            signOut();
+            navigate("/login");
+          }}
+        >
+          <LogOut className="h-4 w-4" />
+        </button>
+      </div>
+    </>
+  );
+}
+
 export function Layout() {
   const me = useMe();
   const { workspaceId, setWorkspace } = useSession();
@@ -51,6 +208,7 @@ export function Layout() {
   // 앱 화면(빌더 등)에서는 캔버스를 넓게 쓰도록 메뉴를 아이콘만 보이게 접는다.
   const inApp = pathname.startsWith("/apps/") || pathname.startsWith("/runs/");
   const [pinnedOpen, setPinnedOpen] = useState(false);
+  const [drawerOpen, setDrawerOpen] = useState(false);
   const compact = inApp && !pinnedOpen;
 
   useEffect(() => {
@@ -82,6 +240,9 @@ export function Layout() {
     return () => window.removeEventListener("genio:logout", onLogout);
   }, [navigate]);
 
+  // 화면을 옮기면 모바일 메뉴를 닫는다
+  useEffect(() => setDrawerOpen(false), [pathname]);
+
   if (me.isLoading) return <Loading />;
   if (me.error)
     return (
@@ -90,117 +251,69 @@ export function Layout() {
       </div>
     );
 
-  const workspaces = me.data?.workspaces ?? [];
-  const current = workspaces.find((w) => w.id === workspaceId);
-
   return (
-    <div className="flex h-screen bg-slate-50 text-slate-900">
+    <div className="flex h-[100dvh] flex-col bg-slate-50 text-slate-900 md:flex-row">
+      {/* 모바일 위쪽 막대 */}
+      <header className="flex h-12 shrink-0 items-center gap-2 border-b border-slate-200 bg-white px-3 md:hidden">
+        <button
+          type="button"
+          aria-label="메뉴 열기"
+          className="rounded-md p-1.5 text-slate-600 hover:bg-slate-100"
+          onClick={() => setDrawerOpen(true)}
+        >
+          <Menu className="h-5 w-5" />
+        </button>
+        <Logo />
+      </header>
+
+      {drawerOpen && (
+        <div className="fixed inset-0 z-40 md:hidden">
+          <div
+            className="absolute inset-0 bg-slate-900/40"
+            onClick={() => setDrawerOpen(false)}
+            aria-hidden
+          />
+          <aside className="absolute inset-y-0 left-0 flex w-72 max-w-[85vw] flex-col bg-white shadow-xl">
+            <div className="flex items-center justify-between px-4 py-4">
+              <Logo />
+              <button
+                type="button"
+                aria-label="메뉴 닫기"
+                className="rounded-md p-1.5 text-slate-500 hover:bg-slate-100"
+                onClick={() => setDrawerOpen(false)}
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <SidebarBody
+              me={me.data}
+              compact={false}
+              inApp={false}
+              onNavigate={() => setDrawerOpen(false)}
+            />
+          </aside>
+        </div>
+      )}
+
+      {/* 데스크톱 옆 메뉴 */}
       <aside
         className={cn(
-          "flex shrink-0 flex-col border-r border-slate-200 bg-white transition-[width] duration-200",
+          "hidden shrink-0 flex-col border-r border-slate-200 bg-white transition-[width] duration-200 md:flex",
           compact ? "w-[60px]" : "w-60",
         )}
       >
         <div className={cn("flex items-center py-4", compact ? "justify-center" : "px-4")}>
           <Logo compact={compact} />
         </div>
-
-        {!compact && (
-          <div className="px-3 pb-3">
-            <label className="mb-1 block px-1 text-[11px] font-medium text-slate-400">
-              워크스페이스
-            </label>
-            <select
-              aria-label="워크스페이스"
-              className="w-full truncate rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-2 text-sm font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
-              value={workspaceId}
-              onChange={(e) => {
-                const w = workspaces.find((x) => x.id === e.target.value);
-                if (w) setWorkspace(w.id, w.role);
-              }}
-            >
-              {workspaces.map((w) => (
-                <option key={w.id} value={w.id}>
-                  {w.name}
-                </option>
-              ))}
-            </select>
-          </div>
-        )}
-
-        <nav className={cn("flex-1 space-y-0.5", compact ? "px-2" : "px-3")}>
-          {NAV.map((n) => (
-            <NavLink
-              key={n.to}
-              to={n.to}
-              end={n.end}
-              title={compact ? n.label : undefined}
-              className={({ isActive }) =>
-                cn(
-                  "flex items-center gap-2.5 rounded-lg py-2 text-sm transition-colors",
-                  compact ? "justify-center px-0" : "px-3",
-                  isActive
-                    ? "bg-indigo-50 font-semibold text-indigo-700"
-                    : "text-slate-600 hover:bg-slate-100 hover:text-slate-900",
-                )
-              }
-            >
-              <n.icon className="h-[18px] w-[18px] shrink-0" strokeWidth={2} />
-              {!compact && n.label}
-            </NavLink>
-          ))}
-        </nav>
-
-        {inApp && (
-          <button
-            type="button"
-            title={compact ? "메뉴 펼치기" : "메뉴 접기"}
-            onClick={() => setPinnedOpen((v) => !v)}
-            className={cn(
-              "mx-2 mb-2 flex items-center gap-2 rounded-lg py-2 text-xs text-slate-500 hover:bg-slate-100",
-              compact ? "justify-center" : "px-3",
-            )}
-          >
-            {compact ? (
-              <PanelLeftOpen className="h-4 w-4" />
-            ) : (
-              <>
-                <PanelLeftClose className="h-4 w-4" /> 메뉴 접기
-              </>
-            )}
-          </button>
-        )}
-
-        <div
-          className={cn(
-            "flex items-center gap-2.5 border-t border-slate-100 py-3",
-            compact ? "flex-col px-2" : "px-4",
-          )}
-        >
-          <Avatar name={me.data?.name ?? ""} />
-          {!compact && (
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-medium">{me.data?.name}</p>
-              <p className="truncate text-[11px] text-slate-500">
-                {current ? ko.roles[current.role] : ""} · {me.data?.email}
-              </p>
-            </div>
-          )}
-          <button
-            type="button"
-            title={ko.common.logout}
-            aria-label={ko.common.logout}
-            className="rounded-md p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
-            onClick={() => {
-              signOut();
-              navigate("/login");
-            }}
-          >
-            <LogOut className="h-4 w-4" />
-          </button>
-        </div>
+        <SidebarBody
+          me={me.data}
+          compact={compact}
+          inApp={inApp}
+          onTogglePin={() => setPinnedOpen((v) => !v)}
+        />
       </aside>
-      <main className="min-w-0 flex-1 overflow-y-auto">
+
+      <main className="min-h-0 min-w-0 flex-1 overflow-y-auto">
         {workspaceId ? (
           <Outlet />
         ) : (
@@ -214,5 +327,5 @@ export function Layout() {
 }
 
 export function PageContainer({ children }: { children: React.ReactNode }) {
-  return <div className="mx-auto max-w-6xl px-8 py-8">{children}</div>;
+  return <div className="mx-auto max-w-6xl px-4 py-6 sm:px-8 sm:py-8">{children}</div>;
 }

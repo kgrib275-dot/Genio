@@ -12,8 +12,12 @@ from api.core.errors import AppError, forbidden, not_found
 from api.core.security import decode_token
 from api.db import get_db
 from api.models import (
+    Annotation,
     App,
+    AppApiKey,
     BuilderSession,
+    Chunk,
+    Conversation,
     Deployment,
     Document,
     KnowledgeBase,
@@ -73,7 +77,19 @@ class Ctx:
     db: Session
 
 
-Via = Literal["ws", "app", "run", "session", "kb", "deployment", "document"]
+Via = Literal[
+    "ws",
+    "app",
+    "run",
+    "session",
+    "kb",
+    "deployment",
+    "document",
+    "conversation",
+    "annotation",
+    "api_key",
+    "chunk",
+]
 
 
 def _workspace_of(db: Session, via: Via, key: str) -> str:
@@ -104,6 +120,26 @@ def _workspace_of(db: Session, via: Via, key: str) -> str:
         if doc is None:
             raise not_found("문서")
         return _workspace_of(db, "kb", doc.kb_id)
+    if via == "conversation":
+        conv = db.get(Conversation, key)
+        if conv is None:
+            raise not_found("대화")
+        return _workspace_of(db, "app", conv.app_id)
+    if via == "annotation":
+        ann = db.get(Annotation, key)
+        if ann is None:
+            raise not_found("주석")
+        return _workspace_of(db, "app", ann.app_id)
+    if via == "api_key":
+        k = db.get(AppApiKey, key)
+        if k is None:
+            raise not_found("API 키")
+        return _workspace_of(db, "app", k.app_id)
+    if via == "chunk":
+        ch = db.get(Chunk, key)
+        if ch is None:
+            raise not_found("조각")
+        return _workspace_of(db, "kb", ch.kb_id)
     dep = db.get(Deployment, key)
     if dep is None:
         raise not_found("배포")
@@ -118,6 +154,10 @@ _PARAM = {
     "kb": "kb_id",
     "deployment": "deployment_id",
     "document": "document_id",
+    "conversation": "conversation_id",
+    "annotation": "annotation_id",
+    "api_key": "key_id",
+    "chunk": "chunk_id",
 }
 
 

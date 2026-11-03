@@ -21,6 +21,7 @@ from api.core.security import (
 )
 from api.deps import CurrentUser, DbDep
 from api.models import Invitation, Membership, Organization, User, Workspace
+from api.services import system
 from api.services.apps import slugify
 from api.services.seed import DEMO_PASSWORD, DEMO_USERS
 
@@ -63,6 +64,8 @@ def create_workspace(db: Session, owner: User, name: str) -> Workspace:
 
 @router.post("/auth/signup")
 def signup(body: SignupIn, db: DbDep) -> dict[str, str]:
+    if not system.get_system(db)["allow_signup"]:
+        raise AppError(403, "지금은 새로 가입할 수 없어요.", "관리자에게 초대 링크를 요청하세요.")
     email = body.email.lower()
     if db.scalar(select(User).where(User.email == email)):
         raise AppError(409, "이미 가입된 이메일이에요.", "로그인하거나 다른 이메일을 쓰세요.")
@@ -98,9 +101,9 @@ def login(body: LoginIn, db: DbDep) -> dict[str, str]:
 
 
 @router.get("/auth/demo-accounts")
-def demo_accounts() -> dict[str, Any]:
-    """데모 모드(GENIO_SEED_DEMO)일 때만 로그인 화면에 보여 줄 공개 데모 계정."""
-    if not get_settings().genio_seed_demo:
+def demo_accounts(db: DbDep) -> dict[str, Any]:
+    """데모 모드이고 관리자가 숨기지 않았을 때만 로그인 화면에 보여 줄 공개 데모 계정."""
+    if not get_settings().genio_seed_demo or not system.get_system(db)["show_demo_accounts"]:
         return {"enabled": False, "password": "", "accounts": []}
     return {
         "enabled": True,

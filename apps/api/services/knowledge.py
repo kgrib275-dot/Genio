@@ -1,7 +1,10 @@
 """지식베이스: 문서 텍스트 추출 → 청킹 → 임베딩 → 검색."""
 
+import html
 import io
+import json
 import math
+import re
 from typing import Any
 
 from pypdf import PdfReader
@@ -54,9 +57,12 @@ def extract_text(content: bytes, filename: str, mime: str) -> str:
     return content.decode("utf-8", errors="replace")
 
 
-def chunk_text(text: str, size: int = 800, overlap: int = 100) -> list[str]:
+def chunk_text(
+    text: str, size: int = 800, overlap: int = 100, separator: str = "\n\n"
+) -> list[str]:
     """문단 단위로 모아 size 글자 안팎의 조각을 만든다. 긴 문단은 잘라서 겹치게 둔다."""
-    paras = [p.strip() for p in text.replace("\r\n", "\n").split("\n\n")]
+    sep = separator.encode().decode("unicode_escape") if "\\" in separator else separator
+    paras = [p.strip() for p in text.replace("\r\n", "\n").split(sep or "\n\n")]
     paras = [" ".join(p.split()) for p in paras if p.strip()]
     chunks: list[str] = []
     buf = ""
@@ -89,6 +95,81 @@ def _embed(db: Session, workspace_id: str, texts: list[str]) -> list[list[float]
     return vectors
 
 
+KB_DEFAULTS: dict[str, Any] = {
+    "chunk_mode": "general",
+    "separator": "\\n\\n",
+    "chunk_size": 800,
+    "chunk_overlap": 100,
+    "child_chunk_size": 200,
+    "retrieval": {
+        "method": "vector",
+        "top_k": 4,
+        "score_threshold": 0.0,
+        "vector_weight": 0.7,
+        "rerank": False,
+    },
+}
+
+
+def kb_settings(kb: KnowledgeBase) -> dict[str, Any]:
+    out: dict[str, Any] = json.loads(json.dumps(KB_DEFAULTS))
+    out["chunk_size"] = kb.chunk_size
+    saved = kb.settings or {}
+    for k, v in saved.items():
+        if k == "retrieval" and isinstance(v, dict):
+            out["retrieval"].update({kk: vv for kk, vv in v.items() if kk in out["retrieval"]})
+        elif k in out:
+            out[k] = v
+    return out
+
+
+def patch_kb_settings(kb: KnowledgeBase, patch: dict[str, Any]) -> dict[str, Any]:
+    cur = kb_settings(kb)
+    for k, v in patch.items():
+        if k == "retrieval" and isinstance(v, dict):
+            cur["retrieval"].update({kk: vv for kk, vv in v.items() if kk in cur["retrieval"]})
+        elif k in cur:
+            cur[k] = v
+    if cur["chunk_mode"] not in ("general", "parent_child"):
+        cur["chunk_mode"] = "general"
+    cur["chunk_size"] = max(200, min(int(cur["chunk_size"]), 4000))
+    cur["chunk_overlap"] = max(0, min(int(cur["chunk_overlap"]), cur["chunk_size"] // 2))
+    cur["child_chunk_size"] = max(50, min(int(cur["child_chunk_size"]), cur["chunk_size"]))
+    r = cur["retrieval"]
+    if r["method"] not in ("vector", "keyword", "hybrid"):
+        r["method"] = "vector"
+    r["top_k"] = max(1, min(int(r["top_k"]), 20))
+    r["score_threshold"] = max(0.0, min(float(r["score_threshold"]), 1.0))
+    r["vector_weight"] = max(0.0, min(float(r["vector_weight"]), 1.0))
+    r["rerank"] = bool(r["rerank"])
+    kb.chunk_size = cur["chunk_size"]
+    kb.settings = cur
+    return cur
+
+
+def _pieces(text: str, cfg: dict[str, Any]) -> list[tuple[str, str | None]]:
+    """(검색에 쓸 조각, 돌려줄 부모 문단) 목록."""
+    parents = chunk_text(
+        text,
+        size=int(cfg["chunk_size"]),
+        overlap=int(cfg["chunk_overlap"]),
+        separator=str(cfg["separator"]),
+    )
+    if cfg["chunk_mode"] != "parent_child":
+        return [(p, None) for p in parents]
+    out: list[tuple[str, str | None]] = []
+    size = int(cfg["child_chunk_size"])
+    for parent in parents:
+        # Dify처럼 줄·문장마다 자식 조각 하나. 너무 긴 문장만 크기대로 자른다.
+        for sent in (s.strip() for s in re.split(r"(?<=[.!?。])\s+|\n", parent)):
+            while len(sent) > size:
+                out.append((sent[:size], parent))
+                sent = sent[size:].strip()
+            if sent:
+                out.append((sent, parent))
+    return out
+
+
 def process_document(db: Session, document_id: str) -> None:
     doc = db.get(Document, document_id)
     if doc is None:
@@ -100,21 +181,24 @@ def process_document(db: Session, document_id: str) -> None:
     doc.error = None
     db.commit()
     try:
-        text = extract_text(doc.content or b"", doc.filename, doc.mime)
-        pieces = chunk_text(text, size=kb.chunk_size)
+        content = extract_text(doc.content or b"", doc.filename, doc.mime)
+        pieces = _pieces(content, kb_settings(kb))
         if not pieces:
             raise ValueError(
                 "문서에서 글자를 찾지 못했어요. 스캔 이미지 PDF는 아직 지원하지 않아요."
             )
-        vectors = _embed(db, kb.workspace_id, pieces)
+        vectors = _embed(db, kb.workspace_id, [p[0] for p in pieces])
         db.execute(delete(Chunk).where(Chunk.document_id == doc.id))
-        for i, (piece, vec) in enumerate(zip(pieces, vectors, strict=True)):
+        for i, ((piece, parent), vec) in enumerate(zip(pieces, vectors, strict=True)):
             db.add(
                 Chunk(
                     document_id=doc.id,
                     kb_id=kb.id,
                     content=piece,
+                    parent_content=parent,
                     embedding=vec,
+                    position=i,
+                    enabled=True,
                     metadata_={"index": i, "filename": doc.filename},
                 )
             )
@@ -132,6 +216,16 @@ def process_document(db: Session, document_id: str) -> None:
         db.commit()
 
 
+def reembed_chunk(db: Session, chunk: Chunk) -> None:
+    kb = db.get(KnowledgeBase, chunk.kb_id)
+    if kb is None:
+        return
+    try:
+        chunk.embedding = _embed(db, kb.workspace_id, [chunk.content])[0]
+    except LlmError as exc:
+        raise ValueError(f"{exc.message} {exc.hint}") from exc
+
+
 def _cosine(a: list[float], b: list[float]) -> float:
     dot = sum(x * y for x, y in zip(a, b, strict=False))
     na = math.sqrt(sum(x * x for x in a))
@@ -139,42 +233,187 @@ def _cosine(a: list[float], b: list[float]) -> float:
     return dot / (na * nb) if na and nb else 0.0
 
 
+def _terms(text: str) -> set[str]:
+    words = [w for w in re.findall(r"[0-9A-Za-z가-힣]+", text.lower()) if len(w) >= 2]
+    grams = {w[i : i + 2] for w in words for i in range(len(w) - 1)}
+    return set(words) | grams
+
+
+def keyword_score(query_terms: set[str], content: str) -> float:
+    if not query_terms:
+        return 0.0
+    ct = _terms(content)
+    return len(query_terms & ct) / len(query_terms)
+
+
+def _allowed_docs(
+    db: Session, kb_id: str, metadata_filter: dict[str, Any] | None
+) -> dict[str, Document]:
+    docs = {d.id: d for d in db.scalars(select(Document).where(Document.kb_id == kb_id))}
+    if not metadata_filter:
+        return docs
+    want = {str(k): str(v) for k, v in metadata_filter.items() if str(k).strip()}
+    return {
+        i: d
+        for i, d in docs.items()
+        if all(str((d.doc_metadata or {}).get(k, "")) == v for k, v in want.items())
+    }
+
+
+def _rerank(
+    db: Session, workspace_id: str, query: str, items: list[tuple[Chunk, float]]
+) -> list[tuple[Chunk, float]]:
+    if len(items) < 2:
+        return items
+    listing = "\n".join(f"[{i}] {c.content[:300]}" for i, (c, _) in enumerate(items))
+    try:
+        llm = resolve_llm(db, workspace_id, "default")
+        res = llm.adapter.complete(
+            model=llm.model,
+            system="질문에 답하는 데 도움이 되는 순서대로 조각 번호를 나열하세요.",
+            prompt=f"질문: {query}\n\n조각:\n{listing}",
+            temperature=None,
+            json_schema={
+                "type": "object",
+                "properties": {"order": {"type": "array", "items": {"type": "integer"}}},
+                "required": ["order"],
+            },
+        )
+    except LlmError:
+        return items
+    order = [
+        i for i in (res.data or {}).get("order", []) if isinstance(i, int) and 0 <= i < len(items)
+    ]
+    seen: set[int] = set()
+    ranked = []
+    for i in order + list(range(len(items))):
+        if i not in seen:
+            seen.add(i)
+            ranked.append(items[i])
+    return ranked
+
+
 def search(
-    db: Session, workspace_id: str, kb_id: str, query: str, top_k: int = 4
+    db: Session,
+    workspace_id: str,
+    kb_id: str,
+    query: str,
+    top_k: int | None = None,
+    *,
+    method: str | None = None,
+    score_threshold: float | None = None,
+    metadata_filter: dict[str, Any] | None = None,
 ) -> list[dict[str, Any]]:
     kb = db.get(KnowledgeBase, kb_id)
     if kb is None or kb.workspace_id != workspace_id:
         raise NodeError("지식베이스를 찾을 수 없어요. 노드 설정에서 다시 골라 주세요.")
     if not query.strip():
         return []
-    try:
-        qvec = _embed(db, workspace_id, [query])[0]
-    except LlmError as exc:
-        raise NodeError(f"{exc.message} {exc.hint}") from exc
-    rows: list[tuple[Chunk, float]]
-    if is_postgres():
-        # ivfflat는 근사 검색이라 목록을 여러 개 살펴봐야 작은 지식베이스에서도 놓치지 않는다
-        db.execute(text("SET LOCAL ivfflat.probes = 10"))
-        dist = Chunk.embedding.cosine_distance(qvec)
-        result = db.execute(
-            select(Chunk, dist.label("dist"))
-            .where(Chunk.kb_id == kb_id, Chunk.embedding.is_not(None))
-            .order_by(dist)
-            .limit(top_k)
-        ).all()
-        rows = [(c, 1.0 - float(d)) for c, d in result]
-    else:
-        chunks = list(db.scalars(select(Chunk).where(Chunk.kb_id == kb_id)))
-        scored = [(c, _cosine(qvec, list(c.embedding or []))) for c in chunks]
-        rows = sorted(scored, key=lambda x: x[1], reverse=True)[:top_k]
-    docs = {d.id: d.filename for d in db.scalars(select(Document).where(Document.kb_id == kb_id))}
-    return [
-        {
-            "chunk_id": c.id,
-            "document_id": c.document_id,
-            "filename": docs.get(c.document_id, ""),
-            "content": c.content,
-            "score": round(score, 4),
-        }
-        for c, score in rows
-    ]
+    cfg = kb_settings(kb)["retrieval"]
+    method = method or str(cfg["method"])
+    k = int(top_k or cfg["top_k"])
+    threshold = float(cfg["score_threshold"] if score_threshold is None else score_threshold)
+    weight = float(cfg["vector_weight"])
+    docs = _allowed_docs(db, kb_id, metadata_filter)
+    if not docs:
+        return []
+    doc_ids = list(docs)
+    pool = max(k * 4, 20)
+    scores: dict[str, float] = {}
+    chunk_by_id: dict[str, Chunk] = {}
+    vec_scores: dict[str, float] = {}
+    if method in ("vector", "hybrid"):
+        try:
+            qvec = _embed(db, workspace_id, [query])[0]
+        except LlmError as exc:
+            raise NodeError(f"{exc.message} {exc.hint}") from exc
+        if is_postgres():
+            # ivfflat는 근사 검색이라 목록을 여러 개 살펴봐야 작은 지식베이스에서도 놓치지 않는다
+            db.execute(text("SET LOCAL ivfflat.probes = 10"))
+            dist = Chunk.embedding.cosine_distance(qvec)
+            result = db.execute(
+                select(Chunk, dist.label("dist"))
+                .where(
+                    Chunk.kb_id == kb_id,
+                    Chunk.embedding.is_not(None),
+                    Chunk.enabled.is_(True),
+                    Chunk.document_id.in_(doc_ids),
+                )
+                .order_by(dist)
+                .limit(pool)
+            ).all()
+            for c, d in result:
+                chunk_by_id[c.id] = c
+                vec_scores[c.id] = 1.0 - float(d)
+        else:
+            for c in db.scalars(
+                select(Chunk).where(
+                    Chunk.kb_id == kb_id, Chunk.enabled.is_(True), Chunk.document_id.in_(doc_ids)
+                )
+            ):
+                chunk_by_id[c.id] = c
+                vec_scores[c.id] = _cosine(qvec, list(c.embedding or []))
+    kw_scores: dict[str, float] = {}
+    if method in ("keyword", "hybrid"):
+        qt = _terms(query)
+        for c in db.scalars(
+            select(Chunk).where(
+                Chunk.kb_id == kb_id, Chunk.enabled.is_(True), Chunk.document_id.in_(doc_ids)
+            )
+        ):
+            sc = keyword_score(qt, c.content)
+            if sc > 0:
+                chunk_by_id[c.id] = c
+                kw_scores[c.id] = sc
+    for cid in chunk_by_id:
+        if method == "vector":
+            scores[cid] = vec_scores.get(cid, 0.0)
+        elif method == "keyword":
+            scores[cid] = kw_scores.get(cid, 0.0)
+        else:
+            v = vec_scores.get(cid)
+            if (
+                v is None
+                and chunk_by_id[cid].embedding is not None
+                and method == "hybrid"
+                and vec_scores
+            ):
+                v = 0.0
+            scores[cid] = weight * (v or 0.0) + (1 - weight) * kw_scores.get(cid, 0.0)
+    ranked = sorted(
+        ((chunk_by_id[c], s) for c, s in scores.items() if s >= threshold),
+        key=lambda x: x[1],
+        reverse=True,
+    )[: max(k, 1) * (3 if cfg["rerank"] else 1)]
+    if cfg["rerank"]:
+        ranked = _rerank(db, workspace_id, query, ranked)
+    ranked = ranked[:k]
+    out = []
+    for c, score in ranked:
+        d = docs.get(c.document_id)
+        out.append(
+            {
+                "chunk_id": c.id,
+                "document_id": c.document_id,
+                "filename": d.filename if d else "",
+                "content": c.parent_content or c.content,
+                "matched": c.content,
+                "score": round(score, 4),
+                "metadata": (d.doc_metadata if d else {}) or {},
+            }
+        )
+    return out
+
+
+def html_to_text(raw: str) -> tuple[str, str]:
+    """(제목, 본문 글)"""
+    title_m = re.search(r"(?is)<title[^>]*>(.*?)</title>", raw)
+    title = re.sub(r"\s+", " ", title_m.group(1)).strip() if title_m else ""
+    body = re.sub(r"(?is)<(head|script|style|nav|footer|header|noscript)[^>]*>.*?</\1>", " ", raw)
+    body = re.sub(r"(?i)<br\s*/?>|</p>|</div>|</li>|</h[1-6]>", "\n\n", body)
+    body = re.sub(r"(?s)<[^>]+>", " ", body)
+    body = html.unescape(body)
+    lines = [re.sub(r"[ \t]+", " ", ln).strip() for ln in body.splitlines()]
+    text_out = "\n".join(ln for ln in lines if ln)
+    text_out = re.sub(r"\n{3,}", "\n\n", text_out)
+    return title, text_out

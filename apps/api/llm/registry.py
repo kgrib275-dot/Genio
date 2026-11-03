@@ -11,7 +11,7 @@ from api.llm.anthropic_adapter import AnthropicAdapter
 from api.llm.base import ChatAdapter, LlmError
 from api.llm.google_adapter import GoogleAdapter
 from api.llm.openai_adapter import OpenAIAdapter
-from api.models import LlmProvider
+from api.models import LlmProvider, Workspace
 
 PROVIDERS = ("openai", "anthropic", "google", "openai-compatible")
 
@@ -64,7 +64,16 @@ def resolve_llm(
     if not rows:
         raise _no_provider()
     chosen: LlmProvider | None = None
-    if purpose == "embedding":
+    ws = db.get(Workspace, workspace_id)
+    defaults = ((ws.settings or {}).get("default_models") or {}) if ws else {}
+    by_id = {r.id: r for r in rows}
+    if purpose == "embedding" and defaults.get("embedding") in by_id:
+        chosen = by_id[defaults["embedding"]]
+    elif purpose == "chat" and ref in ("", "default") and defaults.get("chat") in by_id:
+        chosen = by_id[defaults["chat"]]
+    if chosen is not None:
+        pass
+    elif purpose == "embedding":
         chosen = next(
             (r for r in rows if r.provider in ("openai", "openai-compatible") and r.is_default),
             None,

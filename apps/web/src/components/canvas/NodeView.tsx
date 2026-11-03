@@ -2,7 +2,7 @@ import { Handle, Position, type Node, type NodeProps } from "@xyflow/react";
 import { StatusBadge } from "@/components/ui/badge";
 import { NodeIcon } from "@/components/canvas/NodeIcon";
 import { toneOf } from "@/components/canvas/nodeStyle";
-import { conditionHandles } from "@/components/canvas/nodeUtils";
+import { branchHandles, hasFailHandle } from "@/components/canvas/nodeUtils";
 import type { GraphNode, NodeType, RunStep } from "@/lib/api/types";
 import { cn } from "@/lib/cn";
 
@@ -31,6 +31,29 @@ function summary(node: GraphNode): string {
       return ((d.fields as { key?: string }[] | undefined) ?? []).map((f) => f.key).join(", ");
     case "approval":
       return String(d.message ?? "").slice(0, 60);
+    case "question_classifier":
+      return ((d.classes as { name?: string }[] | undefined) ?? []).map((c) => c.name).join(" / ");
+    case "parameter_extractor":
+      return ((d.parameters as { name?: string }[] | undefined) ?? [])
+        .map((p) => p.name)
+        .join(", ");
+    case "template":
+      return String(d.template ?? "").slice(0, 60);
+    case "variable_aggregator":
+      return ((d.variables as string[] | undefined) ?? []).join(" · ").slice(0, 60);
+    case "list_operator":
+    case "iteration":
+      return String(d.items ?? d.input ?? "").slice(0, 60);
+    case "loop":
+      return `최대 ${String(d.max_iterations ?? "?")}회`;
+    case "document_extractor":
+      return String(d.file ?? "").slice(0, 60);
+    case "variable_assigner":
+      return ((d.assignments as { variable?: string }[] | undefined) ?? [])
+        .map((a) => a.variable)
+        .join(", ");
+    case "agent":
+      return String(d.instruction ?? d.query ?? "").slice(0, 60);
     default:
       return "";
   }
@@ -38,8 +61,9 @@ function summary(node: GraphNode): string {
 
 export function NodeView({ data, selected }: NodeProps<GenioFlowNode>) {
   const { node, spec, errors, highlighted, step } = data;
-  const isCondition = node.type === "condition";
-  const handles = isCondition ? conditionHandles(node.data) : [];
+  const handles = branchHandles(node.type, node.data);
+  const isBranching = handles.length > 0 || node.type === "condition";
+  const fail = hasFailHandle(node.data);
   const hasErrors = Boolean(errors && errors.length);
   const label = (node.data.label as string | undefined) || spec?.label || node.type;
 
@@ -84,17 +108,17 @@ export function NodeView({ data, selected }: NodeProps<GenioFlowNode>) {
             ))}
           </ul>
         )}
-        {isCondition && (
+        {handles.length > 0 && (
           <div className="mt-2 space-y-1">
             {handles.map((h) => (
               <div
-                key={h}
+                key={h.id}
                 className="relative rounded-md bg-amber-50 px-2 py-0.5 text-right text-[11px] font-medium text-amber-800"
               >
-                {h}
+                {h.label}
                 <Handle
                   type="source"
-                  id={h}
+                  id={h.id}
                   position={Position.Right}
                   className="!h-2.5 !w-2.5 !border-2 !border-white !bg-amber-500"
                   style={{ top: "50%", right: -14 }}
@@ -103,8 +127,20 @@ export function NodeView({ data, selected }: NodeProps<GenioFlowNode>) {
             ))}
           </div>
         )}
+        {fail && (
+          <div className="relative mt-1 rounded-md bg-red-50 px-2 py-0.5 text-right text-[11px] font-medium text-red-700">
+            실패 시
+            <Handle
+              type="source"
+              id="fail"
+              position={Position.Right}
+              className="!h-2.5 !w-2.5 !border-2 !border-white !bg-red-500"
+              style={{ top: "50%", right: -14 }}
+            />
+          </div>
+        )}
       </div>
-      {!isCondition && node.type !== "output" && (
+      {!isBranching && node.type !== "output" && (
         <Handle
           type="source"
           position={Position.Right}

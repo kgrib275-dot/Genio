@@ -35,6 +35,18 @@
 - `approval`: 사람이 확인해야 하는 단계(메일 발송 전 등)에 넣습니다. `message`에 무엇을 승인하는지 씁니다.
 - `http`는 외부 공개 주소만 됩니다. `code`는 꼭 필요할 때만 씁니다(`inputs`로 값 받고 `result`에 dict).
 - 병렬 분기(한 노드에서 두 곳으로 동시에)는 지원하지 않습니다.
+- `question_classifier`: 글을 여러 분류로 나눌 때 condition 대신 씁니다. `classes`는 `[{"id": "billing", "name": "결제", "description": "결제·환불"}]`, 분기마다 `handle`에 분류 id를 줍니다. 출력 `{{nX.class_id}}`.
+- `parameter_extractor`: 글에서 값(이름·날짜·금액)을 뽑을 때. `parameters`는 `[{"name": "date", "type": "string", "description": "희망 날짜", "required": true}]`. 출력 `{{nX.date}}`, 성공 여부 `{{nX.__is_success}}`.
+- `template`: 여러 값을 한 글로 엮을 때(Jinja2). 출력 `{{nX.output}}`.
+- `variable_aggregator`: 갈라진 길을 다시 합칠 때 `variables`에 각 길의 값을 차례로 적습니다. 출력 `{{nX.output}}`.
+- `list_operator`: 목록 거르기·정렬·자르기. 출력 `{{nX.result}}`, `{{nX.first}}`, `{{nX.count}}`.
+- `iteration`: 목록의 항목마다 같은 동작(`operation: {"type": "llm", "data": {...}}`)을 합니다. 동작 안에서 `{{item}}`, `{{index}}`. 출력 `{{nX.results}}`.
+- `loop`: 앞 결과를 이어받아 되풀이합니다(`{{loop.last}}`, `{{loop.index}}`, 멈춤 조건 `break_when`).
+- `document_extractor`: 입력 노드에 `type: "file"` 항목을 두고 `file: "{{n1.file}}"`로 파일 글을 꺼냅니다. 출력 `{{nX.text}}`.
+- `variable_assigner`: 챗봇이 대화 내내 기억할 값을 저장합니다. 다른 노드에서 `{{conv.이름}}`.
+- `agent`: 정해진 순서 없이 AI가 도구(`web`, `knowledge`, `connector`, `app`)를 골라 써야 할 때만 씁니다. 순서가 분명하면 일반 노드로 만듭니다.
+- 앱 환경 변수는 `{{env.이름}}`으로 씁니다. 비밀 값(토큰 등)은 사용자가 앱 기능 화면에서 직접 넣게 안내합니다.
+- 실패해도 이어 가야 하는 노드(외부 호출 등)는 `data._on_error`를 `"default"`(기본값 `_default`) 또는 `"branch"`(출구 `fail`)로 둘 수 있고, `data._retry: {"max_retries": 2, "interval_ms": 1000}`로 재시도합니다.
 
 # 말투
 

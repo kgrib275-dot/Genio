@@ -51,7 +51,16 @@ class NodeServices(Protocol):
         body: Any,
     ) -> dict[str, Any]: ...
 
-    def kb_search(self, *, kb_id: str, query: str, top_k: int) -> list[dict[str, Any]]: ...
+    def kb_search(
+        self,
+        *,
+        kb_id: str,
+        query: str,
+        top_k: int,
+        method: str | None = None,
+        score_threshold: float | None = None,
+        metadata_filter: dict[str, Any] | None = None,
+    ) -> list[dict[str, Any]]: ...
 
     def run_connector(
         self,
@@ -63,6 +72,24 @@ class NodeServices(Protocol):
     ) -> dict[str, Any]: ...
 
     def run_code(self, *, code: str, inputs: dict[str, Any]) -> dict[str, Any]: ...
+
+    # v0.2
+    def read_file(self, *, file_id: str) -> tuple[str, str, bytes]:
+        """(파일 이름, MIME, 내용)"""
+        ...
+
+    def extract_text(self, *, filename: str, mime: str, content: bytes) -> str: ...
+
+    def run_agent(
+        self,
+        *,
+        provider: str,
+        model: str | None,
+        instruction: str,
+        query: str,
+        tools: list[dict[str, Any]],
+        max_iterations: int,
+    ) -> dict[str, Any]: ...
 
 
 @dataclass
@@ -78,9 +105,16 @@ class NodeContext:
     render_value: Callable[[Any], Any]
     evaluate: Callable[[str], Any]
     logs: list[str] = field(default_factory=list)
+    # v0.2: 범위(item, index, loop 등)를 더한 하위 컨텍스트를 만든다(iteration·loop용)
+    scoped: Callable[[dict[str, Any]], "NodeContext"] | None = None
 
     def log(self, message: str) -> None:
         self.logs.append(message)
+
+    def with_scope(self, extra: dict[str, Any]) -> "NodeContext":
+        if self.scoped is None:
+            raise NodeError("이 노드는 하위 동작을 실행할 수 없어요.")
+        return self.scoped(extra)
 
 
 @dataclass

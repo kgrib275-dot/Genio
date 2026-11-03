@@ -31,22 +31,28 @@ export function CardHeader({
 }
 
 export function CardBody({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
-  return <div className={cn("px-5 pb-5 pt-1", className)} {...props} />;
+  return <div className={cn("px-4 pb-5 pt-1 sm:px-5", className)} {...props} />;
 }
 
 export function PageHeader({
   title,
   description,
   action,
+  help,
 }: {
   title: ReactNode;
   description?: ReactNode;
   action?: ReactNode;
+  /** 제목 옆에 붙는 '?' 도움말 버튼 */
+  help?: ReactNode;
 }) {
   return (
     <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight text-slate-900">{title}</h1>
+      <div className="min-w-0">
+        <h1 className="flex items-center gap-1.5 text-xl font-bold tracking-tight text-slate-900 sm:text-2xl">
+          {title}
+          {help}
+        </h1>
         {description && <p className="mt-1 text-sm text-slate-500">{description}</p>}
       </div>
       {action}

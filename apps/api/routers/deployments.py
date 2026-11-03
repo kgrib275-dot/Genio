@@ -1,11 +1,9 @@
 """배포(위젯·공유 링크·API)와 공개 챗 API, 위젯 스크립트."""
 
-import json
-import time
 from collections.abc import Iterator
 from typing import Annotated, Any, Literal
 
-from fastapi import APIRouter, Depends, Request, Response
+from fastapi import APIRouter, Depends, File, Request, Response, UploadFile
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import select
@@ -26,16 +24,17 @@ from api.deps import (
     membership_role,
     require_role,
 )
-from api.models import App, Conversation, Deployment, Message, Run, User, WorkflowVersion
+from api.models import App, Conversation, Deployment, Message, StoredFile, User, WorkflowVersion
 from api.routers.common import client_ip, public_origin, sse_frame, sse_response
 from api.services import apps as app_svc
-from api.services.queue import enqueue_run
+from api.services.app_config import merged_features
+from api.services.chat import ChatRequest, input_fields, run_chat, start_chat
+from api.services.files import save_upload
 
 router = APIRouter(tags=["deployments"])
 AppDeployers = Annotated[Ctx, Depends(require_role(DEPLOY_APPS, via="app"))]
 AppViewers = Annotated[Ctx, Depends(require_role(VIEW_RUNS, via="app"))]
 DepDeployers = Annotated[Ctx, Depends(require_role(DEPLOY_APPS, via="deployment"))]
-CHAT_WAIT_SECONDS = 120
 
 
 def _dep(d: Deployment, version: int | None, origin: str) -> dict[str, Any]:
@@ -180,20 +179,7 @@ def _check_access(db: Session, dep: Deployment, app: App, user: User | None) -> 
         )
 
 
-def _input_fields(graph: dict[str, Any]) -> list[dict[str, Any]]:
-    node = next((n for n in graph.get("nodes", []) if n.get("type") == "input"), None)
-    if node is None:
-        return []
-    return [
-        {
-            "key": f.get("key"),
-            "label": f.get("label") or f.get("key"),
-            "type": f.get("type", "text"),
-            "required": bool(f.get("required")),
-        }
-        for f in node.get("data", {}).get("fields", [])
-        if f.get("key")
-    ]
+_input_fields = input_fields
 
 
 OptionalUser = Annotated[User | None, Depends(get_optional_user)]
@@ -207,6 +193,7 @@ def public_app(token: str, db: DbDep, user: OptionalUser) -> dict[str, Any]:
         _check_access(db, dep, app, user)
     except AppError:
         can_use = False
+    f = merged_features(app.features)
     return {
         "name": app.name,
         "description": app.description,
@@ -216,6 +203,14 @@ def public_app(token: str, db: DbDep, user: OptionalUser) -> dict[str, Any]:
         "requires_login": dep.access != "public",
         "can_use": can_use,
         "input_fields": _input_fields(version.graph),
+        "features": {
+            "opening_statement": f["opening_statement"],
+            "suggested_questions": f["suggested_questions"],
+            "follow_up": f["follow_up"],
+            "citations": f["citations"],
+            "speech": f["speech"],
+            "file_upload": f["file_upload"],
+        },
     }
 
 
@@ -223,113 +218,102 @@ class ChatIn(BaseModel):
     message: str = Field(default="", max_length=4000)
     session_id: str | None = Field(default=None, max_length=100)
     input: dict[str, Any] | None = None
+    files: list[str] = Field(default_factory=list, max_length=10)
+
+
+def _rate_limited(app: App, key: str) -> bool:
+    ws = app.workspace_id
+    limit = None
+    from api.models import Workspace
+
+    with SessionLocal() as s:
+        w = s.get(Workspace, ws)
+        if w is not None:
+            limit = (w.settings or {}).get("public_rate_limit_per_minute")
+    return not ratelimit.allow(key, int(limit) if limit else None)
 
 
 @router.post("/public/apps/{token}/chat")
 def public_chat(
     token: str, body: ChatIn, request: Request, db: DbDep, user: OptionalUser
 ) -> StreamingResponse:
-    if not ratelimit.allow(f"chat:{client_ip(request)}"):
-        raise AppError(429, "요청이 너무 많아요.", "1분 뒤에 다시 시도하세요.")
     dep, app, version = _load_public(db, token)
+    if _rate_limited(app, f"chat:{client_ip(request)}"):
+        raise AppError(429, "요청이 너무 많아요.", "1분 뒤에 다시 시도하세요.")
     _check_access(db, dep, app, user)
-    fields = _input_fields(version.graph)
-    conv: Conversation | None = None
-    if body.session_id:
-        conv = db.scalar(
-            select(Conversation).where(
-                Conversation.deployment_id == dep.id,
-                Conversation.external_session_id == body.session_id,
-            )
-        )
-    if conv is None:
-        conv = Conversation(
-            app_id=app.id,
-            deployment_id=dep.id,
-            user_id=user.id if user else None,
-            external_session_id=body.session_id or random_token(12),
-        )
-        db.add(conv)
-        db.flush()
-    history = [
-        {"role": m.role, "content": m.content}
-        for m in db.scalars(
-            select(Message)
-            .where(Message.conversation_id == conv.id)
-            .order_by(Message.created_at.desc())
-            .limit(10)
-        )
-    ][::-1]
-    run_input: dict[str, Any] = dict(body.input or {})
-    if fields and body.message:
-        run_input.setdefault(str(fields[0]["key"]), body.message)
-    run_input["history"] = "\n".join(f"{h['role']}: {h['content']}" for h in history)
-    db.add(
-        Message(
-            conversation_id=conv.id,
-            role="user",
-            content=body.message or json.dumps(body.input or {}, ensure_ascii=False),
-        )
+    files = _own_files(db, app, body.files)
+    req = ChatRequest(
+        app=app,
+        version=version,
+        deployment=dep,
+        user_id=user.id if user else None,
+        message=body.message,
+        session_id=body.session_id,
+        inputs=dict(body.input or {}),
+        files=files,
     )
-    run = Run(
-        app_id=app.id,
-        version_id=version.id,
-        trigger="chat",
-        input=run_input,
-        created_by=user.id if user else None,
-    )
-    db.add(run)
-    db.commit()
-    session_id = conv.external_session_id or ""
-    conv_id = conv.id
-    run_id = run.id
+    conv, _ = start_chat(db, req)
+    conv_id, session_id = conv.id, conv.external_session_id or ""
+    app_id, version_id, user_id = app.id, version.id, req.user_id
 
     def frames() -> Iterator[str]:
         yield sse_frame("session", {"session_id": session_id})
-        yield sse_frame("status", {"message": "답을 만들고 있어요"})
-        enqueue_run(run_id)
-        deadline = time.time() + CHAT_WAIT_SECONDS
-        status = "queued"
-        while time.time() < deadline:
-            with SessionLocal() as s:
-                r = s.get(Run, run_id)
-                status = r.status if r else "failed"
-                if r is not None and status in ("succeeded", "failed", "waiting_approval"):
-                    if status == "succeeded":
-                        answer = str((r.output or {}).get("text", "")) or "(답이 비어 있어요)"
-                    elif status == "waiting_approval":
-                        answer = "담당자의 승인을 기다리고 있어요. 승인되면 처리돼요."
-                    else:
-                        answer = ""
-                    if answer:
-                        s.add(
-                            Message(
-                                conversation_id=conv_id,
-                                role="assistant",
-                                content=answer,
-                                run_id=run_id,
-                            )
-                        )
-                        s.commit()
-                        yield sse_frame("answer", {"text": answer})
-                    else:
-                        yield sse_frame(
-                            "error",
-                            {
-                                "message": "답을 만들지 못했어요.",
-                                "hint": "잠시 후 다시 물어보거나 앱 관리자에게 알려 주세요.",
-                            },
-                        )
-                    break
-            time.sleep(0.4)
-        else:
-            yield sse_frame(
-                "error",
-                {"message": "답이 너무 오래 걸려요.", "hint": "잠시 후 다시 물어봐 주세요."},
-            )
-        yield sse_frame("done", {"session_id": session_id, "run_id": run_id, "status": status})
+        for name, data in run_chat(
+            conv_id, app_id, version_id, user_id, body.message, req.inputs, files
+        ):
+            yield sse_frame(name, data)
 
     return sse_response(frames())
+
+
+def _own_files(db: Session, app: App, ids: list[str]) -> list[str]:
+    out = []
+    for fid in ids:
+        f = db.get(StoredFile, fid)
+        if f is None or f.workspace_id != app.workspace_id:
+            raise AppError(404, "첨부한 파일을 찾을 수 없어요.", "파일을 다시 올려 주세요.")
+        out.append(f.id)
+    return out
+
+
+@router.post("/public/apps/{token}/files")
+async def public_upload(
+    token: str, request: Request, db: DbDep, user: OptionalUser, file: Annotated[UploadFile, File()]
+) -> dict[str, Any]:
+    dep, app, _ = _load_public(db, token)
+    _check_access(db, dep, app, user)
+    if not merged_features(app.features)["file_upload"]["enabled"]:
+        raise AppError(
+            403,
+            "이 앱은 파일 첨부를 받지 않아요.",
+            "앱 관리자에게 파일 첨부를 켜 달라고 요청하세요.",
+        )
+    if _rate_limited(app, f"upload:{client_ip(request)}"):
+        raise AppError(429, "요청이 너무 많아요.", "1분 뒤에 다시 시도하세요.")
+    return await save_upload(
+        db, app.workspace_id, file, app_id=app.id, user_id=user.id if user else None
+    )
+
+
+class FeedbackIn(BaseModel):
+    rating: Literal["like", "dislike"] | None = None
+    comment: str | None = Field(default=None, max_length=1000)
+
+
+@router.post("/public/apps/{token}/messages/{message_id}/feedback")
+def public_feedback(
+    token: str, message_id: str, body: FeedbackIn, db: DbDep, user: OptionalUser
+) -> dict[str, bool]:
+    dep, app, _ = _load_public(db, token)
+    _check_access(db, dep, app, user)
+    msg = db.get(Message, message_id)
+    conv = db.get(Conversation, msg.conversation_id) if msg else None
+    if msg is None or conv is None or conv.app_id != app.id or msg.role != "assistant":
+        raise AppError(404, "답변을 찾을 수 없어요.", "화면을 새로고침하세요.")
+    msg.feedback = body.rating
+    msg.feedback_comment = body.comment
+    db.commit()
+    return {"ok": True}
 
 
 WIDGET_JS = """(function(){
