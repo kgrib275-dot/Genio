@@ -33,6 +33,7 @@ from api.routers import (
     service,
     tasks,
     triggers,
+    versions_v06,
     workspaces,
 )
 from api.services.seed import seed_demo, seed_demo_samples
@@ -129,6 +130,7 @@ for r in (
     service,
     tasks,
     triggers,
+    versions_v06,
 ):
     app.include_router(r.router, prefix="/api/v1")
 

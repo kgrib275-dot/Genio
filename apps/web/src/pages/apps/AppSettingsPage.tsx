@@ -1,4 +1,5 @@
-import { Copy, Download, Palette, RotateCcw, UserCheck } from "lucide-react";
+import { Copy, Download, GitCompare, Palette, RotateCcw, UserCheck } from "lucide-react";
+import { VersionDiffView } from "@/components/VersionDiffView";
 import { useEffect, useState, type FormEvent } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { JsonView } from "@/components/canvas/RunPanel";
@@ -405,6 +406,7 @@ function VersionsCard({ appId, editable }: { appId: string; editable: boolean })
   const versions = useVersions(appId);
   const restore = useRestoreVersion(appId);
   const [shown, setShown] = useState<VersionDetail | null>(null);
+  const [cmp, setCmp] = useState<{ from: string; to: string } | null>(null);
   const vc = useListControls(versions.data, {
     key: "app-versions",
     defaultSize: 10,
@@ -469,11 +471,31 @@ function VersionsCard({ appId, editable }: { appId: string; editable: boolean })
               >
                 내용 보기
               </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => {
+                  setShown(null);
+                  setCmp({ from: String(v.version), to: "draft" });
+                }}
+              >
+                <GitCompare className="h-3.5 w-3.5" /> 비교
+              </Button>
             </li>
           ))}
         </ul>
         {(versions.data?.length ?? 0) > 0 && (
           <ListPager c={vc} className="border-t border-slate-100 px-4 py-2 sm:px-5" />
+        )}
+        {cmp && (
+          <VersionDiffView
+            appId={appId}
+            versions={(versions.data ?? []).map((x) => x.version)}
+            from={cmp.from}
+            to={cmp.to}
+            onChange={(from, to) => setCmp({ from, to })}
+            onClose={() => setCmp(null)}
+          />
         )}
         {shown && (
           <div className="border-t border-slate-100 px-5 py-3">
