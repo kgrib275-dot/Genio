@@ -34,7 +34,6 @@ import {
   ttsSupported,
   type SpeechRecognitionLike,
 } from "@/components/chat/speech";
-import { Input } from "@/components/ui/input";
 import {
   askParentToClose,
   downloadText,
@@ -800,15 +799,29 @@ export function ChatView({
                   )}
                 </p>
               )}
-              {extraFields.map((f) => (
-                <Input
-                  key={f.key}
-                  aria-label={f.label || f.key}
-                  placeholder={f.label || f.key}
-                  value={extra[f.key] ?? ""}
-                  onChange={(e) => setExtra({ ...extra, [f.key]: e.target.value })}
-                />
-              ))}
+              {extraFields.length > 0 && (
+                <div className="grid gap-1.5 sm:grid-cols-2">
+                  {extraFields.map((f) => (
+                    // 값을 넣어도 무슨 칸인지 보이게 이름을 칸 왼쪽에 둔다
+                    <label
+                      key={f.key}
+                      className="flex min-w-0 items-center gap-2 rounded-lg border border-slate-200 bg-white pl-2.5 focus-within:border-indigo-400"
+                    >
+                      <span className="shrink-0 text-xs font-medium text-slate-500">
+                        {f.label || f.key}
+                        {f.required && <span className="text-red-500">*</span>}
+                      </span>
+                      <input
+                        aria-label={f.label || f.key}
+                        type={f.type === "number" ? "number" : "text"}
+                        value={extra[f.key] ?? ""}
+                        onChange={(e) => setExtra({ ...extra, [f.key]: e.target.value })}
+                        className="h-9 min-w-0 flex-1 rounded-r-lg bg-transparent px-2 text-sm text-slate-900 focus:outline-none"
+                      />
+                    </label>
+                  ))}
+                </div>
+              )}
               {files.length > 0 && (
                 <div className="flex flex-wrap gap-1.5">
                   {files.map((f) => (

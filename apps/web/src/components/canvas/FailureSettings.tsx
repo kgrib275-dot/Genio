@@ -10,7 +10,9 @@ interface Retry {
   interval_ms?: number;
 }
 
-/** 단계 공통 "실패했을 때" 설정(_retry, _on_error, _default). 바뀐 data 전체를 onChange로 넘긴다. */
+const DEFAULT_TIMEOUT_TEXT = "60초";
+
+/** 단계 공통 "실패했을 때" 설정(_retry, _on_error, _default, _timeout). 바뀐 data 전체를 onChange로 넘긴다. */
 export function FailureSettings({
   data,
   onChange,
@@ -22,7 +24,8 @@ export function FailureSettings({
 }) {
   const retry = (data._retry as Retry | undefined) ?? {};
   const onError = (data._on_error as OnError | undefined) ?? "stop";
-  const configured = Boolean(retry.max_retries) || onError !== "stop";
+  const configured =
+    Boolean(retry.max_retries) || onError !== "stop" || typeof data._timeout === "number";
   const [open, setOpen] = useState(configured);
   const [defaultText, setDefaultText] = useState(() =>
     JSON.stringify(data._default ?? {}, null, 2),
@@ -93,6 +96,27 @@ export function FailureSettings({
               />
             </label>
           </div>
+          <label className="block space-y-1">
+            <span className="block font-medium text-slate-600">
+              제한 시간(초, 비우면 기본 {DEFAULT_TIMEOUT_TEXT})
+            </span>
+            <Input
+              type="number"
+              min={1}
+              max={600}
+              disabled={readOnly}
+              aria-label="제한 시간"
+              placeholder="기본"
+              value={typeof data._timeout === "number" ? data._timeout : ""}
+              onChange={(e) => {
+                const v = e.target.value === "" ? undefined : Number(e.target.value);
+                set({
+                  _timeout:
+                    v === undefined || Number.isNaN(v) ? undefined : Math.max(1, Math.min(600, v)),
+                });
+              }}
+            />
+          </label>
           <label className="block space-y-1">
             <span className="block font-medium text-slate-600">그래도 실패하면</span>
             <Select

@@ -1,4 +1,5 @@
 import {
+  GraduationCap,
   ArrowRight,
   FolderInput,
   LayoutTemplate,
@@ -535,6 +536,53 @@ function CardMenu({ onMove }: { onMove: () => void }) {
   );
 }
 
+const LEARN_BANNER_KEY = "genio.learn.banner";
+
+/** 처음 쓰는 사람에게 배우기를 안내한다. 닫으면 다시 안 보인다. */
+function LearnBanner() {
+  const [hidden, setHidden] = useState(() => {
+    try {
+      return window.localStorage.getItem(LEARN_BANNER_KEY) === "0";
+    } catch {
+      return false;
+    }
+  });
+  if (hidden) return null;
+  return (
+    <div className="mb-6 flex flex-col gap-3 rounded-2xl border border-indigo-100 bg-gradient-to-r from-indigo-50 to-violet-50 p-4 sm:flex-row sm:items-center">
+      <GraduationCap className="h-7 w-7 shrink-0 text-indigo-500" />
+      <div className="min-w-0 flex-1 text-sm">
+        <p className="font-semibold text-slate-900">처음이세요? 샘플로 10분 만에 배워 보세요</p>
+        <p className="text-slate-600">
+          자주 묻는 질문 봇, 휴가 승인, 주문 접수 같은 샘플 10가지를 열어 따라 하는 강좌가 있어요.
+        </p>
+      </div>
+      <div className="flex shrink-0 gap-2">
+        <Link
+          to="/learn"
+          className="inline-flex h-9 items-center rounded-lg bg-indigo-600 px-3 text-sm font-semibold text-white hover:bg-indigo-700"
+        >
+          배우기 열기
+        </Link>
+        <button
+          type="button"
+          onClick={() => {
+            setHidden(true);
+            try {
+              window.localStorage.setItem(LEARN_BANNER_KEY, "0");
+            } catch {
+              // 기억하지 못해도 괜찮다
+            }
+          }}
+          className="h-9 rounded-lg px-3 text-sm text-slate-500 hover:bg-white/60"
+        >
+          닫기
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export default function DashboardPage() {
   const { workspaceId: ws, role } = useSession();
   const [params, setParams] = useSearchParams();
@@ -587,6 +635,7 @@ export default function DashboardPage() {
 
   return (
     <PageContainer>
+      <LearnBanner />
       {editable && <PromptHero projectId={projectId} />}
       {editable && <TemplateRow projectId={projectId} />}
 

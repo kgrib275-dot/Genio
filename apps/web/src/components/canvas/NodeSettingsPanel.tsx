@@ -3,6 +3,7 @@ import type { RJSFSchema } from "@rjsf/utils";
 import validator from "@rjsf/validator-ajv8";
 import { useMemo } from "react";
 import { CurlImport } from "@/components/canvas/CurlImport";
+import { HttpPreview } from "@/components/canvas/HttpPreview";
 import { FailureSettings } from "@/components/canvas/FailureSettings";
 import { nodeFields, nodeTemplates, nodeWidgets } from "@/components/canvas/formRegistry";
 import { toRjsfUiSchema } from "@/components/canvas/uiSchema";
@@ -105,7 +106,12 @@ export function NodeSettingsPanel({
             고르고 D를 누르면 다시 켜져요.
           </p>
         )}
-        {node.type === "http" && !readOnly && <CurlImport data={node.data} onChange={onChange} />}
+        {node.type === "http" && !readOnly && (
+          <div className="flex flex-wrap gap-2">
+            <CurlImport data={node.data} onChange={onChange} />
+            <HttpPreview data={node.data} />
+          </div>
+        )}
         {spec ? (
           <NodeSettingsForm
             node={node}

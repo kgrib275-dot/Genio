@@ -161,8 +161,15 @@ def describe_step(node: dict[str, Any] | None, step: dict[str, Any], label: str)
 
     if ntype == "input":
         keys = [k for k in out if not k.startswith("__") and k != "history"]
-        if keys:
-            return f"{name} 단계에서 {', '.join(keys[:4])} 값을 받았어요."
+        # 영문 키 대신 화면에 보이는 항목 이름으로(예: currency → 통화)
+        labels = {
+            str(f.get("key")): str(f.get("label") or f.get("key"))
+            for f in (data.get("fields") or [])
+            if isinstance(f, dict) and f.get("key")
+        }
+        names = [labels.get(k, k) for k in keys]
+        if names:
+            return f"{name} 단계에서 {', '.join(names[:4])} 값을 받았어요."
         return f"{name} 단계에서 입력을 받았어요."
     if ntype == "question_classifier":
         return f"{name} 단계에서 '{_short(_class_name(data, out), 24)}'(으)로 판단했어요{took}."

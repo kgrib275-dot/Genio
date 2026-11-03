@@ -1,5 +1,6 @@
 import {
   ClipboardList,
+  GraduationCap,
   Gauge,
   BookMarked,
   BookOpen,
@@ -56,7 +57,10 @@ const NAV: NavItem[] = [
   { to: "/admin", label: "관리", icon: Shield, show: canManage },
 ];
 
-const BOTTOM_NAV: NavItem[] = [{ to: "/help", label: "사용설명서", icon: BookMarked }];
+const BOTTOM_NAV: NavItem[] = [
+  { to: "/learn", label: "배우기", icon: GraduationCap },
+  { to: "/help", label: "사용설명서", icon: BookMarked },
+];
 
 export function Logo({ compact = false }: { compact?: boolean }) {
   return (

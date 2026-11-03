@@ -21,6 +21,7 @@ const WorkspacePage = lazy(() => import("@/pages/workspace/WorkspacePage"));
 const SharePage = lazy(() => import("@/pages/share/SharePage"));
 const TaskLinkPage = lazy(() => import("@/pages/share/TaskLinkPage"));
 const TasksPage = lazy(() => import("@/pages/tasks/TasksPage"));
+const LearnPage = lazy(() => import("@/pages/learn/LearnPage"));
 const AppFeaturesPage = lazy(() => import("@/pages/apps/AppFeaturesPage"));
 const AppLogsPage = lazy(() => import("@/pages/apps/AppLogsPage"));
 const AppMonitorPage = lazy(() => import("@/pages/apps/AppMonitorPage"));
@@ -71,6 +72,7 @@ export default function App() {
             <Route path="help" element={<HelpPage />} />
             <Route path="settings" element={<SettingsPage />} />
             <Route path="tasks" element={<TasksPage />} />
+            <Route path="learn" element={<LearnPage />} />
             <Route path="projects" element={<ProjectsBoardPage />} />
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />

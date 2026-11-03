@@ -22,11 +22,15 @@ def _run_input(data: dict[str, Any], ctx: NodeContext) -> NodeResult:
         value = ctx.run_input.get(key)
         if (value is None or value == "") and f.get("required"):
             missing.append(f.get("label") or key)
+        if f.get("type") == "number" and value == "":
+            value = None  # 비워 둔 숫자 칸(필수가 아니면 없음으로)
         if value is not None and f.get("type") == "number":
             try:
-                value = float(value)
+                num = float(value)
             except (TypeError, ValueError) as exc:
                 raise NodeError(f"'{key}' 값은 숫자여야 해요.") from exc
+            # 2 → "2.0"처럼 보이지 않게 정수는 정수로 둔다
+            value = int(num) if num.is_integer() and abs(num) < 2**53 else num
         out[key] = value
     if missing:
         raise NodeError(f"필수 입력이 비어 있어요: {', '.join(missing)}")

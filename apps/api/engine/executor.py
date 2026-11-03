@@ -309,7 +309,13 @@ def _next_skipping(graph: Graph, node_id: str) -> str | None:
 
 
 def _node_timeout(node_type: str, data: dict[str, Any]) -> float | None:
-    """기다리기 단계는 기다리는 시간만큼 제한을 늘린다."""
+    """단계별 제한 시간(_timeout, 초, 1~600). 기다리기 단계는 기다리는 시간만큼 제한을 늘린다."""
+    custom = data.get("_timeout")
+    if custom not in (None, "", 0):
+        try:
+            return max(1.0, min(float(custom), 600.0))
+        except (TypeError, ValueError):
+            return None
     if node_type != "wait":
         return None
     try:

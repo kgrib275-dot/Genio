@@ -50,3 +50,25 @@ def seed_demo(db: Session) -> bool:
         market.install(db, ws.id, item.key, owner_id)
     log.info("데모 데이터를 만들었어요(워크스페이스: %s)", ws.name)
     return True
+
+
+def seed_demo_samples(db: Session) -> bool:
+    """데모 워크스페이스(owner@example.com이 소유)에 샘플 10가지를 한 번 넣는다."""
+    from api.services import samples
+
+    owner = db.scalar(select(User).where(User.email == DEMO_USERS[0][0]))
+    if owner is None:
+        return False
+    m = db.scalar(
+        select(Membership).where(Membership.user_id == owner.id, Membership.role == "owner")
+    )
+    ws = db.get(Workspace, m.workspace_id) if m else None
+    if ws is None or (ws.settings or {}).get("samples_version"):
+        return False
+    try:
+        samples.install(db, ws.id, owner.id)
+    except Exception:
+        db.rollback()
+        logging.getLogger("genio.seed").exception("데모 샘플을 넣지 못했어요")
+        return False
+    return True

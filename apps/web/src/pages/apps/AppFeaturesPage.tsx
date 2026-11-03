@@ -284,8 +284,8 @@ export function FeaturesForm({
         </FeatureRow>
         <FeatureRow
           icon={<MessageSquareQuote className="h-4 w-4" />}
-          title="주석 답변"
-          description="로그·주석에 적어 둔 질문과 비슷하면 정해 둔 답을 바로 줘요."
+          title="모범 답변"
+          description="로그·모범 답변에 적어 둔 질문과 비슷하면 정해 둔 답을 바로 줘요."
           enabled={f.annotation_reply.enabled}
           disabled={readOnly}
           onToggle={(v) => setF({ ...f, annotation_reply: { ...f.annotation_reply, enabled: v } })}
@@ -299,7 +299,7 @@ export function FeaturesForm({
               min={0.5}
               max={1}
               step={0.01}
-              aria-label="주석 답변 유사도 기준"
+              aria-label="모범 답변 유사도 기준"
               className="w-full accent-indigo-600"
               value={f.annotation_reply.score_threshold}
               disabled={readOnly}

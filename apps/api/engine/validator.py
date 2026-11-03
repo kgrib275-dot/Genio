@@ -13,7 +13,7 @@ from api.schemas.graph import Graph, GraphError, ValidationResult
 from nodes import NodeRegistry, NodeSpec
 
 # 단계 설정에 담기지만 검증 대상에서 빼는 키(캔버스 UI용)
-_UI_KEYS = {"label", "note", "_retry", "_on_error", "_default"}
+_UI_KEYS = {"label", "note", "_retry", "_on_error", "_default", "_timeout"}
 # 그래프 바깥에서 쓸 수 있는 예약 이름
 RESERVED_SCOPES = {"input", "vars", "env", "conv", "item", "index", "loop"}
 

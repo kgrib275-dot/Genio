@@ -29,12 +29,13 @@ from api.routers import (
     market,
     projects,
     runs,
+    samples,
     service,
     tasks,
     triggers,
     workspaces,
 )
-from api.services.seed import seed_demo
+from api.services.seed import seed_demo, seed_demo_samples
 
 logging.basicConfig(level=get_settings().genio_log_level)
 log = logging.getLogger("genio")
@@ -53,6 +54,7 @@ def startup() -> None:
             log.info("마켓 아이템 %d개 동기화", count)
             if get_settings().genio_seed_demo:
                 seed_demo(db)
+                seed_demo_samples(db)
             ensure_market_nodes(db)
         finally:
             if engine.dialect.name == "postgresql":
@@ -123,6 +125,7 @@ for r in (
     hooks,
     market,
     projects,
+    samples,
     service,
     tasks,
     triggers,

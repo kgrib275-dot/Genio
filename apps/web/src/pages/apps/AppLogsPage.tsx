@@ -70,7 +70,7 @@ function AnnotationDialog({
   const submit = () => {
     const opts = {
       onSuccess: () => {
-        toast.success("주석을 저장했어요.");
+        toast.success("모범 답변을 저장했어요.");
         onClose();
       },
       onError: (err: unknown) => toast.error(err),
@@ -82,7 +82,7 @@ function AnnotationDialog({
     <Dialog
       open={open}
       onClose={onClose}
-      title={initial.id ? "주석 고치기" : "주석 추가"}
+      title={initial.id ? "모범 답변 고치기" : "모범 답변 추가"}
       wide
       footer={
         <>
@@ -102,7 +102,7 @@ function AnnotationDialog({
         <Field
           label="정해 둔 답"
           htmlFor="ann-a"
-          hint="앱 기능에서 '주석 답변'을 켜면, 비슷한 질문에 AI 대신 이 답을 바로 보내요."
+          hint="앱 기능에서 '모범 답변'을 켜면, 비슷한 질문에 AI 대신 이 답을 바로 보내요."
         >
           <Textarea
             id="ann-a"
@@ -172,7 +172,7 @@ function ConversationView({
                   )}
                 >
                   <span>{formatDate(m.created_at)}</span>
-                  {m.annotated && <Badge tone="indigo">주석 답변</Badge>}
+                  {m.annotated && <Badge tone="indigo">모범 답변</Badge>}
                   {m.moderated && (
                     <Badge tone="amber">
                       <ShieldBan className="h-3 w-3" /> 검열됨
@@ -201,7 +201,7 @@ function ConversationView({
                         setDraft({ question: prevUser?.content ?? "", answer: m.content })
                       }
                     >
-                      <MessageSquarePlus className="h-3 w-3" /> 주석으로 추가
+                      <MessageSquarePlus className="h-3 w-3" /> 모범 답변으로 추가
                     </button>
                   )}
                 </div>
@@ -566,13 +566,13 @@ function Annotations({ appId, editable }: { appId: string; editable: boolean }) 
         </p>
         {editable && (
           <Button size="sm" onClick={() => setEditing({ question: "", answer: "" })}>
-            <MessageSquarePlus className="h-4 w-4" /> 주석 추가
+            <MessageSquarePlus className="h-4 w-4" /> 모범 답변 추가
           </Button>
         )}
       </div>
       {list.isLoading && <Loading />}
       <ErrorBox error={list.error} />
-      {list.data?.length === 0 && <Empty>아직 주석이 없어요.</Empty>}
+      {list.data?.length === 0 && <Empty>아직 모범 답변이 없어요.</Empty>}
       {(list.data?.length ?? 0) > 0 && <ListToolbar c={c} placeholder="질문·답으로 찾기" />}
       <NoMatch c={c} />
       <div className="grid gap-3 md:grid-cols-2">
@@ -590,7 +590,7 @@ function Annotations({ appId, editable }: { appId: string; editable: boolean }) 
                   <Button
                     size="sm"
                     variant="ghost"
-                    aria-label="주석 고치기"
+                    aria-label="모범 답변 고치기"
                     onClick={() => setEditing(a)}
                   >
                     <Pencil className="h-3.5 w-3.5" />
@@ -599,9 +599,9 @@ function Annotations({ appId, editable }: { appId: string; editable: boolean }) 
                     size="sm"
                     variant="ghost"
                     className="text-red-600"
-                    aria-label="주석 지우기"
+                    aria-label="모범 답변 지우기"
                     onClick={() => {
-                      if (window.confirm("이 주석을 지울까요?"))
+                      if (window.confirm("이 모범 답변을 지울까요?"))
                         del.mutate(a.id, { onError: (err) => toast.error(err) });
                     }}
                   >
@@ -651,7 +651,7 @@ export default function AppLogsPage() {
                 value: "handoff" as const,
                 label: waiting > 0 ? `상담원 응대 (${waiting})` : "상담원 응대",
               },
-              ...(editable ? [{ value: "annotations" as const, label: "주석" }] : []),
+              ...(editable ? [{ value: "annotations" as const, label: "모범 답변" }] : []),
             ]}
           />
           <Link

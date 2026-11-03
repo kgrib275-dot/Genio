@@ -369,3 +369,75 @@ Project = {id, workspace_id, name, description, color: indigo|sky|emerald|amber|
 - `GET /public/apps/{token}`에 `appearance` 추가.
 - 배포 모양: `PATCH /deployments/{id}` `{appearance: {primary_color: "#4f46e5", position: "right"|"left", launcher_text, greeting, open_on_load, width, height, title}}` (owner, admin, builder). widget.js가 이 값을 쓴다.
 - 대화로 시험하기: `POST /apps/{id}/preview/chat` (owner, admin, builder) — 공개 챗과 같은 SSE 이벤트, 작업본 그래프로 실행, trigger=`preview`. 로그·모니터링 집계에서 뺀다.
+
+---
+# v0.5 (ADR 0009) — 기능 정의서 P0 반영
+
+## 사람 개입·작업함
+| 메서드 | 경로 | 권한 | 요청 | 응답 |
+|---|---|---|---|---|
+| GET | `/workspaces/{ws}/tasks?status=open\|done\|cancelled\|all&mine=bool&limit≤1000` | 모든 역할(볼 수 있는 프로젝트만) | | `[Task + can_act]` |
+| GET | `/workspaces/{ws}/tasks/count` | 모든 역할 | | `{open}` (내가 처리할 수 있는 것) |
+| GET | `/workspaces/{ws}/tasks/{id}` | 모든 역할 | | `Task + can_act` |
+| POST | `/workspaces/{ws}/tasks/{id}/complete` | owner·admin 항상, 승인은 approver_roles(없으면 builder·operator), 나머지는 담당 사용자·역할 | `{approved?, values?, comment?}` | `Task` (실행이 이어짐) |
+| POST | `/workspaces/{ws}/tasks/{id}/cancel` | owner, admin, builder | | `Task` (기다리던 실행은 실패) |
+| GET·POST | `/public/tasks/{token}` | 공개(토큰 = 권한, IP당 분당 60) | POST는 complete와 같음 | 내부 id 없는 Task, 이미 처리했으면 409 |
+| POST | `/runs/{id}/approve` | 그대로 | | 작업도 함께 닫음. 질문·배정이면 409 |
+| POST | `/runs/{id}/rerun` | owner, admin, builder | `{input?, from_node?}` | 새 Run. from_node면 그 앞 단계 출력을 context로 복사, 없거나 도달 못한 단계면 422 |
+
+## 챗 ↔ 흐름·상담원 전환
+- 공개 챗 SSE 이벤트 추가: `pending {run_id, message}`(사람 확인 대기), `handoff {message, message_id?}`.
+- 사람을 기다리던 챗 실행이 나중에 끝나면 결과를 대화에 assistant 메시지로 붙인다(화면은 대기 중 8초마다 다시 읽음).
+
+| 메서드 | 경로 | 권한 | 요청 | 응답 |
+|---|---|---|---|---|
+| GET | `/public/apps/{token}/sessions/{sid}/state` | 배포 접근 | | `{status: bot\|handoff\|closed, waiting, last_message_at}` |
+| POST | `/public/apps/{token}/sessions/{sid}/handoff` | 배포 접근, 속도 제한 | | `{status:"handoff", message}`, 상담원 연결이 꺼져 있으면 409 |
+| GET | `/apps/{id}/conversations?status=handoff` | VIEW_RUNS | | 각 항목에 `status` |
+| POST | `/conversations/{id}/reply` | VIEW_RUNS | `{content}` | 201 Message(role `agent`), handoff가 아니면 409 |
+| POST | `/conversations/{id}/close` | VIEW_RUNS | | `{id, status:"closed"}` |
+| POST·PATCH | `/apps/{id}/deployments`, `/deployments/{id}` | 배포 역할 | `allowed_users`(워크스페이스 멤버만), PATCH는 `access`·`allowed_roles`도 | access=roles면 역할 OR 사용자 |
+
+## 흐름 앱 공유(입력 폼 → 결과)
+| 메서드 | 경로 | 권한 | 요청 | 응답 |
+|---|---|---|---|---|
+| POST | `/public/apps/{token}/runs` | 배포 접근, 속도 제한 | `{input, files?}` (입력 20KB 이하) | 202 `{run_id, status}` (trigger `form`) |
+| GET | `/public/apps/{token}/runs/{run_id}` | 배포 접근 | | `{run_id, status, text?, error?{message,hint,detail}}` — 그 링크 앱의 form 실행만, 단계 값은 주지 않음 |
+
+## 연결·외부에서 받기·HTTP
+| 메서드 | 경로 | 권한 | 요청 | 응답 |
+|---|---|---|---|---|
+| POST | `/workspaces/{ws}/connectors/credentials/{id}/test` | owner, admin, builder | | `{ok, checked, message}` (비밀값 제거) |
+| GET·PUT | `/workspaces/{ws}/connectors/private-hosts` | owner, admin | `{hosts}` (최대 20, localhost·메타데이터 주소 거부) | `{hosts}` |
+| POST | `/triggers/{id}/secret` | owner, admin, builder | | Trigger + `secret`(한 번만) |
+| GET | `/triggers/{id}/payloads` | owner, admin, builder | | 최근 받은 값 5개(인증·쿠키·서명 헤더 제외, 본문 4KB) |
+| POST | `/workspaces/{ws}/http/preview` | owner, admin, builder | `{method, url, headers, body, auth}` | `{status, headers, body, truncated, elapsed_ms}` |
+- 외부에서 받기 서명: config `require_signature`. 헤더 `X-Genio-Timestamp`(±300초), `X-Genio-Signature: sha256=hex(HMAC(secret, "{ts}.{원문}"))`. 틀리면 401(받은 값 기록에는 남음).
+- HTTP 단계 data: `auth {type: none|bearer|basic|header, credential_id, header_name}`(연결 정보 'HTTP 인증 정보'만), `pagination {type: none|next_url|page, items_path, path, param, max_pages≤10}`. 코드 단계 `language: python|javascript`. 모든 단계 `_timeout`(초, 1~600).
+- DB 커넥터(PostgreSQL·MySQL): 읽기 SELECT 1개(읽기 전용, 15초, 500행), 쓰기 INSERT/UPDATE/DELETE 1개, 값은 바인딩. 내부 주소는 허용 목록에 있을 때만.
+
+## AI·비용·한도·보안
+| 메서드 | 경로 | 권한 | 응답 |
+|---|---|---|---|
+| GET | `/llm/catalog`, `/llm/embedding-models` | 로그인 | 모델 목록(컨텍스트·단가·도구·비전·임베딩) |
+| GET | `/workspaces/{ws}/usage?group=user` | owner, admin, builder, operator | `{total_*, by_user[]}` |
+| GET | `/workspaces/{ws}/usage/estimate?model=&days=30` | 같음 | `{current_cost, estimated_cost, difference, …}`, 모르는 모델 422 |
+| GET·PATCH | `/workspaces/{ws}/limits` | owner, admin | 월 예산·알림 기준·실패 알림·알림 메일·메일 연결·보관 일수 + `month_cost` |
+| GET | `/service/runs`, `/service/runs/{id}` | API 키 `logs` 범위 | 최근 실행 / 실행 하나 |
+- AI 연결 `azure`(base_url 필수). 지식베이스 생성 `embedding_model`(지식베이스별 고정), 문서 `enabled`, DOCX·PPTX·XLSX·HTML 읽기.
+- API 키 `scopes` ⊆ {chat, run, logs}(기본 chat·run), 범위 밖이면 403.
+- 로그인 시도 제한(이메일+IP 15분 5번, 이메일 15분 20번 → 429), 비밀번호 규칙(8자 이상·영문+숫자·흔한 비밀번호 거부, 가입·바꾸기·관리자 계정 만들기 공통), X-Forwarded-For는 신뢰 프록시 뒤에서만, CORS는 공개 주소+localhost, 쿼리에 NUL 문자면 400, nginx 보안 헤더.
+- 공개 챗 속도 제한 키는 앱별(`chat:{app_id}:{ip}`).
+
+## 마켓·빌더·배우기
+| 메서드 | 경로 | 권한 | 응답 |
+|---|---|---|---|
+| POST | `/workspaces/{ws}/market/installations/{id}/update` | owner, admin | 설치 정보, 최신이면 409 |
+| GET·PUT | `/apps/{id}/test-inputs` | owner, admin, builder | `[{name, input}]` (최대 20, 20KB) |
+| GET | `/workspaces/{ws}/builder/metrics` | owner, admin | 빌더 지표 평균·앱별 |
+| GET | `/workspaces/{ws}/samples` | 모든 역할 | `{installed, project_id, apps[]}` |
+| POST | `/workspaces/{ws}/samples` | owner, admin, builder | 201 샘플 10가지 넣기, 이미 있으면 409 |
+- 마켓 아이템 `category`, 템플릿 상세 `preview`(단계·앱 종류·빈칸), 설치 `latest_version`·`update_available`.
+- 작업본 저장 `PUT /apps/{id}/draft`에 `source`(canvas|builder|import, 기본 canvas) — 빌더 지표용.
+- 실행 상세에 `story[]`(실행 이야기)와 단계별 `summary`(한 문장). 빌더 툴 `get_run`.
+- Run.trigger 값 추가: `form`(공유 입력 폼).
