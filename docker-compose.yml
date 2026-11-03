@@ -101,13 +101,14 @@ services:
       TS_AUTHKEY: ${TS_AUTHKEY:-}
     # 기본 시작 스크립트는 로그인을 60초만 기다리고 재시작해 승인 링크가 계속 바뀐다.
     # 그래서 직접 띄우고, 승인될 때까지 기다린 뒤 HTTPS(443) → 127.0.0.1:5190(web)으로 넘긴다.
+    # Funnel: tailnet 밖(핸드폰 등 인터넷)에서도 열린다. 끄려면 funnel 대신 serve로 바꾼다.
     entrypoint: ["/bin/sh", "-c"]
     command:
       - |
         tailscaled --tun=userspace-networking --statedir=/var/lib/tailscale &
         sleep 2
         tailscale up --hostname=genio ${TS_AUTHKEY:+--auth-key=$$TS_AUTHKEY} --timeout=0
-        tailscale serve --bg --https=443 http://127.0.0.1:5190
+        tailscale funnel --bg http://127.0.0.1:5190
         wait
     volumes:
       - tsstate:/var/lib/tailscale
