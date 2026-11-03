@@ -15,7 +15,8 @@ import { Dialog } from "@/components/ui/dialog";
 import { Field, Input, Select } from "@/components/ui/input";
 import { toast } from "@/components/ui/toast-store";
 import { ko } from "@/i18n/ko";
-import { ROLES, type Member, type ProviderKind, type Role } from "@/lib/api/types";
+import { ROLES, type Member, type Role } from "@/lib/api/types";
+import { baseUrlToSend, FALLBACK_PRESETS, groupPresets, presetName } from "@/lib/llmPresets";
 import {
   useAdminApiKeys,
   useCreateAccount,
@@ -46,6 +47,7 @@ import { optionsFrom, useListControls } from "@/lib/useListControls";
 import type { AuditLog } from "@/lib/api/types";
 import { useSession } from "@/store/session";
 import { useMe } from "@/lib/api/auth";
+import { useLlmPresets } from "@/lib/api/v5b";
 import {
   CostEstimateCard,
   LimitsCard,
@@ -539,15 +541,6 @@ export function MembersSection({ ws, manage }: { ws: string; manage: boolean }) 
 }
 
 // ---------------- AI 모델 ----------------
-const PROVIDERS: { value: ProviderKind; label: string; model: string }[] = [
-  { value: "anthropic", label: "Anthropic (Claude)", model: "claude-sonnet-5-5" },
-  { value: "openai", label: "OpenAI", model: "gpt-4o-mini" },
-  { value: "google", label: "Google (Gemini)", model: "gemini-2.0-flash" },
-  { value: "openai-compatible", label: "OpenAI 호환 API", model: "" },
-  // Azure OpenAI: 모델 칸에는 Azure의 배포 이름
-  { value: "azure" as ProviderKind, label: "Azure OpenAI", model: "" },
-];
-
 function DefaultModels({ ws }: { ws: string }) {
   const info = useWorkspaceInfo(ws);
   const providers = useLlmProviders(ws);
@@ -637,6 +630,8 @@ export function LlmSection({
       },
     ],
   });
+  const presetQuery = useLlmPresets();
+  const presets = presetQuery.data?.length ? presetQuery.data : FALLBACK_PRESETS;
   const create = useCreateLlmProvider(ws);
   const del = useDeleteLlmProvider(ws);
   const [form, setForm] = useState<NewLlmProvider>({
@@ -647,11 +642,12 @@ export function LlmSection({
     default_model: "claude-sonnet-5-5",
     is_default: true,
   });
+  const chosen = presets.find((p) => p.key === form.provider);
 
   const submit = (e: FormEvent) => {
     e.preventDefault();
     create.mutate(
-      { ...form, base_url: form.base_url || undefined },
+      { ...form, base_url: baseUrlToSend(chosen, form.base_url ?? "") },
       {
         onSuccess: () => {
           toast.success("AI 연결을 저장했어요. 키는 암호화되어 다시 볼 수 없어요.");
@@ -684,7 +680,7 @@ export function LlmSection({
                   className="flex flex-wrap items-center gap-2 px-4 py-3 text-sm sm:px-5"
                 >
                   <span className="font-medium">{p.label}</span>
-                  <Badge tone="blue">{p.provider}</Badge>
+                  <Badge tone="blue">{presetName(presets, p.provider)}</Badge>
                   {p.is_default && <Badge tone="green">기본</Badge>}
                   <span className="basis-full text-xs text-slate-500 sm:basis-auto">
                     {p.default_model} · 키 {p.api_key_masked}
@@ -717,24 +713,34 @@ export function LlmSection({
             <CardHeader title="새 AI 연결" />
             <CardBody>
               <form onSubmit={submit} className="space-y-3">
-                <Field label="제공사" htmlFor="llm-provider">
+                <Field
+                  label="제공사"
+                  htmlFor="llm-provider"
+                  hint={chosen?.note || (chosen?.native ? undefined : "키만 넣으면 돼요.")}
+                >
                   <Select
                     id="llm-provider"
                     value={form.provider}
                     onChange={(e) => {
-                      const p = PROVIDERS.find((x) => x.value === e.target.value);
+                      const p = presets.find((x) => x.key === e.target.value);
                       setForm({
                         ...form,
-                        provider: e.target.value as ProviderKind,
-                        default_model: p?.model ?? "",
-                        label: p?.label.split(" ")[0] ?? form.label,
+                        provider: e.target.value,
+                        default_model: p?.default_model ?? "",
+                        label: p?.name.split(" (")[0] ?? form.label,
+                        base_url: "",
                       });
                     }}
                   >
-                    {PROVIDERS.map((p) => (
-                      <option key={p.value} value={p.value}>
-                        {p.label}
-                      </option>
+                    {groupPresets(presets).map((g) => (
+                      <optgroup key={g.group} label={g.group}>
+                        {g.items.map((p) => (
+                          <option key={p.key} value={p.key}>
+                            {p.name}
+                            {p.vision ? " · 이미지" : ""}
+                          </option>
+                        ))}
+                      </optgroup>
                     ))}
                   </Select>
                 </Field>
@@ -756,23 +762,37 @@ export function LlmSection({
                     onChange={(e) => setForm({ ...form, api_key: e.target.value })}
                   />
                 </Field>
-                <Field label="기본 모델" htmlFor="llm-model">
+                <Field
+                  label="기본 모델"
+                  htmlFor="llm-model"
+                  hint={
+                    chosen?.models.length
+                      ? "목록에서 고르거나 다른 모델 이름을 직접 적어도 돼요."
+                      : undefined
+                  }
+                >
                   <Input
                     id="llm-model"
                     required
+                    list="llm-model-options"
                     value={form.default_model}
                     onChange={(e) => setForm({ ...form, default_model: e.target.value })}
                   />
+                  <datalist id="llm-model-options">
+                    {(chosen?.models ?? []).map((m) => (
+                      <option key={m.model} value={m.model}>
+                        {m.label}
+                        {m.vision ? " · 이미지" : ""}
+                      </option>
+                    ))}
+                  </datalist>
                 </Field>
-                {(form.provider === "openai-compatible" ||
-                  (form.provider as string) === "azure") && (
+                {chosen?.needs_base_url ? (
                   <Field
-                    label={
-                      (form.provider as string) === "azure" ? "Azure 리소스 주소" : "주소(base URL)"
-                    }
+                    label={form.provider === "azure" ? "Azure 리소스 주소" : "주소(base URL)"}
                     htmlFor="llm-base"
                     hint={
-                      (form.provider as string) === "azure"
+                      form.provider === "azure"
                         ? "예: https://my-resource.openai.azure.com/ · 기본 모델 칸에는 배포 이름을 적어요."
                         : undefined
                     }
@@ -781,7 +801,7 @@ export function LlmSection({
                       id="llm-base"
                       required
                       placeholder={
-                        (form.provider as string) === "azure"
+                        form.provider === "azure"
                           ? "https://my-resource.openai.azure.com/"
                           : "https://example.com/v1"
                       }
@@ -789,6 +809,24 @@ export function LlmSection({
                       onChange={(e) => setForm({ ...form, base_url: e.target.value })}
                     />
                   </Field>
+                ) : (
+                  chosen?.base_url && (
+                    <details className="text-sm">
+                      <summary className="cursor-pointer text-xs text-slate-500">
+                        주소 바꾸기(고급) · 기본 {chosen.base_url}
+                      </summary>
+                      <div className="mt-2">
+                        <Field label="주소(base URL)" htmlFor="llm-base">
+                          <Input
+                            id="llm-base"
+                            placeholder={chosen.base_url}
+                            value={form.base_url}
+                            onChange={(e) => setForm({ ...form, base_url: e.target.value })}
+                          />
+                        </Field>
+                      </div>
+                    </details>
+                  )
                 )}
                 <label className="flex items-center gap-2 text-sm">
                   <input

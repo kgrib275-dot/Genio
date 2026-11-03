@@ -165,7 +165,30 @@ export interface InvitationInfo {
   accepted: boolean;
 }
 
-export type ProviderKind = "openai" | "anthropic" | "google" | "openai-compatible";
+/** AI 공급자 키: 기본 5종 + OpenAI 호환 preset(v0.6, GET /llm/providers) */
+export type ProviderKind = string;
+
+export interface ProviderPresetModel {
+  model: string;
+  label: string;
+  vision: boolean;
+  json: boolean;
+}
+
+/** AI 공급자 목록 한 줄(키만 넣으면 되는 preset 포함) */
+export interface ProviderPreset {
+  key: string;
+  name: string;
+  group: string;
+  base_url: string | null;
+  default_model: string;
+  models: ProviderPresetModel[];
+  note: string;
+  native: boolean;
+  needs_base_url: boolean;
+  embedding: boolean;
+  vision: boolean;
+}
 
 export interface LlmProvider {
   id: string;

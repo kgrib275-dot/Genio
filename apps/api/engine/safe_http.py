@@ -126,3 +126,40 @@ def request(
                     f"요청을 보내지 못했어요: {type(exc).__name__}", retryable=True
                 ) from exc
     raise NodeError("다른 주소로 너무 여러 번 넘어갔어요.")
+
+
+def fetch_bytes(url: str, *, max_bytes: int) -> bytes:
+    """공개 주소에서 파일(이미지 등)을 그대로 받는다. 사설망 차단·리다이렉트 재검사·크기 제한 동일."""
+    s = get_settings()
+    current = url
+    with httpx.Client(timeout=s.genio_http_timeout_seconds, follow_redirects=False) as client:
+        for _ in range(MAX_REDIRECTS + 1):
+            check_url(current)
+            try:
+                with client.stream("GET", current) as resp:
+                    if resp.is_redirect and "location" in resp.headers:
+                        current = urljoin(current, resp.headers["location"])
+                        continue
+                    if resp.status_code >= 400:
+                        raise NodeError(
+                            f"이미지 주소에서 파일을 받지 못했어요({resp.status_code}). "
+                            "주소가 공개돼 있는지 확인해 주세요."
+                        )
+                    chunks: list[bytes] = []
+                    size = 0
+                    for chunk in resp.iter_bytes():
+                        size += len(chunk)
+                        if size > max_bytes:
+                            raise NodeError(
+                                f"파일이 너무 커요(최대 {max_bytes // (1024 * 1024)}MB). "
+                                "더 작은 파일 주소를 써 주세요."
+                            )
+                        chunks.append(chunk)
+                    return b"".join(chunks)
+            except httpx.TimeoutException as exc:
+                raise NodeError("상대 서버가 제때 답하지 않았어요.", retryable=True) from exc
+            except httpx.HTTPError as exc:
+                raise NodeError(
+                    f"파일을 받지 못했어요: {type(exc).__name__}", retryable=True
+                ) from exc
+    raise NodeError("다른 주소로 너무 여러 번 넘어갔어요.")

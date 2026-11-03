@@ -21,6 +21,7 @@ from api.llm.base import (
     json_instruction,
     parse_json_object,
 )
+from api.llm.vision import ImageInput, anthropic_user_content
 from nodes import LlmResult
 
 FALLBACK_BETA = "server-side-fallback-2026-07-01"
@@ -90,13 +91,14 @@ class AnthropicAdapter:
         temperature: float | None,
         json_schema: dict[str, Any] | None,
         on_delta: OnText | None = None,
+        images: list[ImageInput] | None = None,
     ) -> LlmResult:
         del temperature  # 현재 API 버전은 temperature를 받지 않는다(ADR 0003)
         sys_prompt = system + (json_instruction(json_schema) if json_schema else "")
         params: dict[str, Any] = {
             "model": model,
             "max_tokens": 4096,
-            "messages": [{"role": "user", "content": prompt}],
+            "messages": [{"role": "user", "content": anthropic_user_content(prompt, images or [])}],
             **self._extra(model, "low"),
         }
         if sys_prompt.strip():

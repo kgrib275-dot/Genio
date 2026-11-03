@@ -30,6 +30,7 @@ from api.engine import pricing, safe_http
 from api.llm.base import LlmError
 from api.llm.catalog import catalog
 from api.llm.openai_adapter import azure_endpoint
+from api.llm.presets import provider_list
 from api.llm.registry import PROVIDERS
 from api.market import service as market
 from api.models import (
@@ -214,7 +215,8 @@ def list_providers(ws: str, ctx: Builders) -> list[dict[str, Any]]:
 
 
 class ProviderIn(BaseModel):
-    provider: Literal["openai", "anthropic", "google", "openai-compatible", "azure"]
+    # v0.6: 기본 5종 + OpenAI 호환 preset(GET /llm/providers)
+    provider: str = Field(min_length=2, max_length=30)
     label: str = Field(min_length=1, max_length=100)
     api_key: str = Field(min_length=4, max_length=500)
     base_url: str | None = Field(default=None, max_length=500)
@@ -226,6 +228,10 @@ class ProviderIn(BaseModel):
 def add_provider(ws: str, body: ProviderIn, ctx: SecretManagers) -> dict[str, Any]:
     if body.provider not in PROVIDERS:
         raise AppError(422, "지원하지 않는 AI 공급자예요.", "목록에서 공급자를 고르세요.")
+    if body.base_url and not body.base_url.strip().lower().startswith(("https://", "http://")):
+        raise AppError(
+            422, "주소(base URL) 형식이 올바르지 않아요.", "https://로 시작하는 주소를 넣으세요."
+        )
     if body.provider == "openai-compatible" and not body.base_url:
         raise AppError(
             422, "호환 API는 주소(base URL)가 필요해요.", "예: https://api.example.com/v1"
@@ -549,6 +555,13 @@ def usage_estimate(
         "difference": float(estimated - current),
         "price": {"input": float(Decimal(price[0])), "output": float(Decimal(price[1]))},
     }
+
+
+@router.get("/llm/providers")
+def llm_providers(user: CurrentUser) -> list[dict[str, Any]]:
+    """AI 공급자 목록(v0.6): 기본 5종 + 키만 넣으면 되는 OpenAI 호환 공급자. 화면 묶음·기본 주소·모델."""
+    del user
+    return provider_list()
 
 
 @router.get("/llm/catalog")

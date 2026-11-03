@@ -98,7 +98,7 @@ def _price(model: str) -> tuple[float, float]:
 
 
 def catalog() -> list[dict[str, Any]]:
-    out = []
+    out: list[dict[str, Any]] = []
     for provider, model, label, ctx, tools, vision, emb, dims in _MODELS:
         inp, outp = _price(model)
         out.append(
@@ -116,6 +116,22 @@ def catalog() -> list[dict[str, Any]]:
             }
         )
     return out
+
+
+def _preset_models() -> list[tuple[str, str, str, int, bool, bool, bool, int | None]]:
+    """OpenAI 호환 preset의 모델(v0.6). 컨텍스트는 알 수 없어 0, 도구 호출은 지원한다고 본다."""
+    from api.llm.presets import PRESETS
+
+    out: list[tuple[str, str, str, int, bool, bool, bool, int | None]] = []
+    for p in PRESETS.values():
+        if p.native:
+            continue
+        for m in p.models:
+            out.append((p.key, m.model, f"{m.label} · {p.name}", 0, True, m.vision, False, None))
+    return out
+
+
+_MODELS.extend(_preset_models())
 
 
 def embedding_models() -> list[str]:

@@ -50,6 +50,7 @@
 - `llm`: `provider`는 보통 `"default"`, `model`은 비워 둡니다(워크스페이스 기본 모델 사용). 분류처럼 정해진 값이 필요하면 `output_schema`를 줍니다. 예: `{"type":"object","properties":{"category":{"type":"string","enum":["billing","tech","other"]}},"required":["category"]}`. 그러면 `{{n2.category}}`로 쓸 수 있습니다. 출력 형식이 없으면 `{{n2.text}}`를 씁니다.
 - `condition`: `cases`는 `[{"id": "billing", "when": "{{n2.category}} == 'billing'"}]`, 나머지는 `"else": "other"`. 조건 단계에서 나가는 선은 `connect`나 `add_node`의 `handle`에 분기 이름을 줍니다. 한 분기에서 여러 곳으로 동시에 가려면 `parallel: true`를 줍니다.
 - 분기가 여러 개일 때는 각 분기 끝을 같은 `output` 단계로 모아도 됩니다(`connect`).
+- 사진·스크린샷·영수증처럼 이미지를 AI가 봐야 하면 입력 단계에 `type: "file"` 항목(예: `photo`)을 두고 `llm`의 `images`에 `["{{n1.photo}}"]`처럼 목록으로 넣습니다(공개 https 이미지 주소도 됨, 최대 4장). 이미지를 볼 수 있는 모델이 필요하다고 사용자에게 알려 줍니다.
 - `knowledge_search`: `kb_id`는 `knowledge_bases`의 id, `query`는 보통 `{{n1.message}}`. 결과 `{{n2.context}}`를 `llm` 프롬프트에 넣어 "아래 자료로만 답하라"고 지시합니다.
 - `connector`: `connector`(서비스 key), `action`(동작 key), `credential_id`, `params`(동작 설정, 값에 `{{...}}` 사용 가능).
 - `approval`: 사람이 확인해야 하는 단계(메일 발송 전 등)에 넣습니다. `message`에 무엇을 승인하는지 씁니다.

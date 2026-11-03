@@ -3,7 +3,7 @@
 // 문서 켜기·끄기, API 키 권한 범위(docs/api.md v0.5)
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api/client";
-import type { Trigger } from "@/lib/api/types";
+import type { ProviderPreset, Trigger } from "@/lib/api/types";
 
 // ---------------- 타입 ----------------
 export interface CredentialTestResult {
@@ -185,6 +185,15 @@ export function useHttpPreview(ws: string) {
 }
 
 // ---------------- 모델·비용 ----------------
+/** v0.6: AI 공급자 목록(기본 5종 + OpenAI 호환 preset) */
+export function useLlmPresets() {
+  return useQuery({
+    queryKey: ["llm-presets"],
+    queryFn: () => api.get<ProviderPreset[]>("/llm/providers"),
+    staleTime: 60 * 60_000,
+  });
+}
+
 export function useLlmCatalog() {
   return useQuery({
     queryKey: ["llm-catalog"],
