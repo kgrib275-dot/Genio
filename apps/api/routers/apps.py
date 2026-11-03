@@ -4,15 +4,17 @@ from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Depends, Response
 from pydantic import BaseModel, Field, ValidationError
-from sqlalchemy import select
+from sqlalchemy import or_, select
 
 from api.core.audit import audit
 from api.core.errors import AppError, not_found
 from api.deps import ANY_MEMBER, EDIT_APPS, VIEW_RUNS, Ctx, require_role
 from api.models import App, Run, WorkflowVersion
+from api.routers.projects import check_project_target
 from api.routers.workspaces import run_dict
 from api.schemas.graph import Graph
 from api.services import apps as svc
+from api.services.projects import hidden_project_ids
 from api.services.queue import enqueue_run
 
 router = APIRouter(tags=["apps"])
@@ -26,10 +28,17 @@ AppType = Literal["chat", "workflow", "form"]
 
 
 @router.get("/workspaces/{ws}/apps")
-def list_apps(ws: str, ctx: WsMembers) -> list[dict[str, Any]]:
+def list_apps(ws: str, ctx: WsMembers, project: str | None = None) -> list[dict[str, Any]]:
     q = select(App).where(App.workspace_id == ws).order_by(App.updated_at.desc())
     if ctx.role == "member":
         q = q.where(App.status == "published")
+    if project == "none":
+        q = q.where(App.project_id.is_(None))
+    elif project:
+        q = q.where(App.project_id == project)
+    hidden = hidden_project_ids(ctx.db, ws, ctx.user.id, ctx.role)
+    if hidden:
+        q = q.where(or_(App.project_id.is_(None), App.project_id.not_in(hidden)))
     apps = list(ctx.db.scalars(q))
     latest = svc.latest_versions(ctx.db, [a.id for a in apps])
     return [svc.app_dict(a, latest.get(a.id)) for a in apps]
@@ -41,10 +50,12 @@ class AppIn(BaseModel):
     description: str = Field(default="", max_length=2000)
     icon: str = Field(default="🤖", max_length=40)
     template_key: str | None = None
+    project_id: str | None = None
 
 
 @router.post("/workspaces/{ws}/apps", status_code=201)
 def create_app(ws: str, body: AppIn, ctx: WsBuilders) -> dict[str, Any]:
+    check_project_target(ctx, ws, body.project_id)
     app = svc.create_app(
         ctx.db,
         workspace_id=ws,
@@ -54,6 +65,7 @@ def create_app(ws: str, body: AppIn, ctx: WsBuilders) -> dict[str, Any]:
         description=body.description,
         icon=body.icon,
         template_key=body.template_key,
+        project_id=body.project_id,
     )
     ctx.db.flush()
     audit(
@@ -79,12 +91,17 @@ class AppPatch(BaseModel):
     description: str | None = Field(default=None, max_length=2000)
     icon: str | None = Field(default=None, max_length=40)
     type: AppType | None = None
+    # 빈 문자열이면 '프로젝트 없음'으로 옮긴다
+    project_id: str | None = None
 
 
 @router.patch("/apps/{app_id}")
 def update_app(app_id: str, body: AppPatch, ctx: AppBuilders) -> dict[str, Any]:
     app = svc.get_app(ctx.db, app_id)
     changes = body.model_dump(exclude_none=True)
+    if "project_id" in changes:
+        check_project_target(ctx, app.workspace_id, changes["project_id"])
+        changes["project_id"] = changes["project_id"] or None
     for k, v in changes.items():
         setattr(app, k, v)
     audit(

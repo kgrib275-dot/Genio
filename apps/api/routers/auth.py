@@ -2,7 +2,7 @@
 
 import re
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import APIRouter
 from pydantic import BaseModel, EmailStr, Field
@@ -198,5 +198,82 @@ def me(user: CurrentUser, db: DbDep) -> dict[str, Any]:
         "id": user.id,
         "email": user.email,
         "name": user.name,
+        "preferences": preferences_of(user),
         "workspaces": [{"id": w.id, "name": w.name, "slug": w.slug, "role": r} for w, r in rows],
     }
+
+
+# ---------------- 개인 설정 ----------------
+PREF_DEFAULTS: dict[str, Any] = {
+    "theme": "system",  # light | dark | system
+    "font_size": "normal",  # normal | large
+    "default_workspace_id": None,
+    "enter_to_send": True,
+}
+
+
+def preferences_of(user: User) -> dict[str, Any]:
+    return {
+        **PREF_DEFAULTS,
+        **{k: v for k, v in (user.preferences or {}).items() if k in PREF_DEFAULTS},
+    }
+
+
+class PreferencesIn(BaseModel):
+    theme: Literal["light", "dark", "system"] | None = None
+    font_size: Literal["normal", "large"] | None = None
+    default_workspace_id: str | None = None
+    enter_to_send: bool | None = None
+
+
+class MePatch(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=100)
+    preferences: PreferencesIn | None = None
+
+
+@router.patch("/me")
+def update_me(body: MePatch, user: CurrentUser, db: DbDep) -> dict[str, Any]:
+    if body.name:
+        user.name = body.name.strip()
+    if body.preferences is not None:
+        patch = body.preferences.model_dump(exclude_unset=True)
+        ws = patch.get("default_workspace_id")
+        if (
+            ws
+            and db.scalar(
+                select(Membership).where(
+                    Membership.user_id == user.id, Membership.workspace_id == ws
+                )
+            )
+            is None
+        ):
+            raise AppError(
+                404, "그 워크스페이스의 멤버가 아니에요.", "목록에 있는 워크스페이스를 고르세요."
+            )
+        user.preferences = {**preferences_of(user), **patch}
+    db.commit()
+    return me(user, db)
+
+
+class PasswordIn(BaseModel):
+    current_password: str
+    new_password: str = Field(min_length=8, max_length=128)
+
+
+@router.post("/me/password")
+def change_password(body: PasswordIn, user: CurrentUser, db: DbDep) -> dict[str, bool]:
+    if not verify_password(body.current_password, user.password_hash):
+        raise AppError(400, "지금 비밀번호가 맞지 않아요.", "한/영 키를 확인하고 다시 입력하세요.")
+    if body.current_password == body.new_password:
+        raise AppError(400, "새 비밀번호가 지금과 같아요.", "다른 비밀번호를 정하세요.")
+    user.password_hash = hash_password(body.new_password)
+    audit(
+        db,
+        workspace_id=None,
+        user_id=user.id,
+        action="auth.password_change",
+        target_type="user",
+        target_id=user.id,
+    )
+    db.commit()
+    return {"ok": True}

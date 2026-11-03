@@ -272,3 +272,31 @@ settings = {
 | GET | `/admin/system` | 로그인 | | `{is_instance_admin, allow_signup, show_demo_accounts}` |
 | PATCH | `/admin/system` | 인스턴스 관리자 | `{allow_signup?, show_demo_accounts?}` | 같은 형식 |
 `POST /auth/signup`은 `allow_signup=false`면 403. `GET /auth/demo-accounts`는 `show_demo_accounts=false`면 `enabled:false`.
+
+---
+
+# v0.3 추가: 개인 설정·프로젝트
+
+## 개인 설정
+`GET /me` 응답에 `preferences: {theme: "light"|"dark"|"system", font_size: "normal"|"large", default_workspace_id: string|null, enter_to_send: bool}` 추가.
+| PATCH | `/me` | 로그인 | `{name?, preferences?: {theme?, font_size?, default_workspace_id?, enter_to_send?}}` | `/me`와 같은 형식 |
+| POST | `/me/password` | 로그인 | `{current_password, new_password(8자+)}` | `{ok}` (지금 비밀번호가 틀리면 400) |
+
+## 프로젝트
+워크스페이스 안에서 앱·지식베이스를 묶는 단위. `visibility="private"`이면 만든 사람·프로젝트 멤버·소유자·관리자만 보고, 다른 사람에게는 그 프로젝트의 앱·지식베이스·실행 기록이 404로 숨겨진다.
+```
+Project = {id, workspace_id, name, description, color: indigo|sky|emerald|amber|rose|violet|slate,
+           visibility: workspace|private, created_by, created_by_name, created_at,
+           app_count, knowledge_base_count, members: [{user_id, name, email}], can_manage: bool}
+```
+| GET | `/workspaces/{ws}/projects` | 모든 역할 | | `[Project]` (볼 수 있는 것만) |
+| POST | `/workspaces/{ws}/projects` | owner, admin, builder | `{name, description?, color?, visibility?}` | 201 `Project` |
+| PATCH | `/projects/{id}` | 만든 사람·owner·admin | `{name?, description?, color?, visibility?}` | `Project` |
+| DELETE | `/projects/{id}` | 만든 사람·owner·admin | | 204 (앱·KB는 지우지 않고 '프로젝트 없음'으로) |
+| PUT | `/projects/{id}/members` | 만든 사람·owner·admin | `{user_ids: [워크스페이스 멤버 user_id]}` | `Project` |
+
+기존 API 변경:
+- `App`, `KnowledgeBase` 응답에 `project_id` 추가.
+- `GET /workspaces/{ws}/apps?project=<id>|none`, `GET /workspaces/{ws}/knowledge-bases?project=<id>|none` 필터.
+- `POST /workspaces/{ws}/apps`, `POST /workspaces/{ws}/knowledge-bases` 요청에 `project_id?`.
+- `PATCH /apps/{id}`, `PATCH /knowledge-bases/{id}` 요청에 `project_id` (빈 문자열 `""`이면 '프로젝트 없음'으로 옮김).

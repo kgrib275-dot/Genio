@@ -2,7 +2,7 @@
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 
 from fastapi import Depends, Request
 from sqlalchemy import select
@@ -22,6 +22,7 @@ from api.models import (
     Document,
     KnowledgeBase,
     Membership,
+    Project,
     Run,
     User,
 )
@@ -89,6 +90,7 @@ Via = Literal[
     "annotation",
     "api_key",
     "chunk",
+    "project",
 ]
 
 
@@ -140,10 +142,58 @@ def _workspace_of(db: Session, via: Via, key: str) -> str:
         if ch is None:
             raise not_found("조각")
         return _workspace_of(db, "kb", ch.kb_id)
+    if via == "project":
+        proj = db.get(Project, key)
+        if proj is None:
+            raise not_found("프로젝트")
+        return proj.workspace_id
     dep = db.get(Deployment, key)
     if dep is None:
         raise not_found("배포")
     return _workspace_of(db, "app", dep.app_id)
+
+
+def _app_id_of(db: Session, via: Via, key: str) -> str | None:
+    """경로 대상이 속한 앱 id(앱과 관계없는 대상이면 None)."""
+    if via == "app":
+        return key
+    obj: Any = None
+    if via == "run":
+        obj = db.get(Run, key)
+    elif via == "session":
+        obj = db.get(BuilderSession, key)
+    elif via == "conversation":
+        obj = db.get(Conversation, key)
+    elif via == "annotation":
+        obj = db.get(Annotation, key)
+    elif via == "api_key":
+        obj = db.get(AppApiKey, key)
+    elif via == "deployment":
+        obj = db.get(Deployment, key)
+    return getattr(obj, "app_id", None)
+
+
+def _project_of(db: Session, via: Via, key: str) -> Project | None:
+    """경로 대상이 속한 프로젝트(없으면 None = 워크스페이스 공용)."""
+    if via == "project":
+        return db.get(Project, key)
+    kb_id: str | None = None
+    if via == "kb":
+        kb_id = key
+    elif via == "document":
+        doc = db.get(Document, key)
+        kb_id = doc.kb_id if doc else None
+    elif via == "chunk":
+        ch = db.get(Chunk, key)
+        kb_id = ch.kb_id if ch else None
+    if kb_id is not None:
+        kb = db.get(KnowledgeBase, kb_id)
+        return db.get(Project, kb.project_id) if kb and kb.project_id else None
+    app_id = _app_id_of(db, via, key)
+    if app_id is None:
+        return None
+    app = db.get(App, app_id)
+    return db.get(Project, app.project_id) if app and app.project_id else None
 
 
 _PARAM = {
@@ -158,6 +208,7 @@ _PARAM = {
     "annotation": "annotation_id",
     "api_key": "key_id",
     "chunk": "chunk_id",
+    "project": "project_id",
 }
 
 
@@ -184,6 +235,12 @@ def require_role(roles: tuple[Role, ...], via: Via = "ws") -> Callable[..., Ctx]
             raise not_found("대상")
         if role not in roles:
             raise forbidden()
+        if via != "ws":
+            # 비공개 프로젝트에 속한 대상은 만든 사람·프로젝트 멤버·소유자·관리자만(존재도 숨김)
+            from api.services.projects import can_access
+
+            if not can_access(db, _project_of(db, via, str(key)), user.id, role):
+                raise not_found("대상")
         return Ctx(user=user, workspace_id=workspace_id, role=role, db=db)
 
     return dep

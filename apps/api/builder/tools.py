@@ -15,6 +15,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from api.builder.graph_summary import summarize
+from api.deps import membership_role
 from api.llm.base import ToolDef
 from api.market.service import installed_items, installed_keys, market_node_types
 from api.models import (
@@ -29,6 +30,7 @@ from api.models import (
 )
 from api.schemas.graph import Graph, GraphEdge, GraphNode, Position, empty_graph
 from api.services import apps as app_service
+from api.services.projects import hidden_project_ids
 from api.services.queue import enqueue_run
 from nodes import registry
 
@@ -258,6 +260,18 @@ class BuilderToolbox:
             .where(KnowledgeBase.workspace_id == ws)
             .group_by(KnowledgeBase.id, KnowledgeBase.name)
         ).all()
+        role = membership_role(self.db, self.user_id, ws) or "member"
+        hidden_kbs = set(
+            self.db.scalars(
+                select(KnowledgeBase.id).where(
+                    KnowledgeBase.workspace_id == ws,
+                    KnowledgeBase.project_id.in_(
+                        hidden_project_ids(self.db, ws, self.user_id, role)
+                    ),
+                )
+            )
+        )
+        kb_rows = [k for k in kb_rows if k[0] not in hidden_kbs]
         installed = installed_keys(self.db, ws)
         market = [
             {"key": m.key, "type": m.type, "name": m.name, "summary": m.summary}

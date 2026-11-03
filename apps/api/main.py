@@ -21,6 +21,7 @@ from api.routers import (
     deployments,
     knowledge,
     market,
+    projects,
     runs,
     service,
     workspaces,
@@ -71,6 +72,7 @@ for r in (
     knowledge,
     deployments,
     market,
+    projects,
     service,
 ):
     app.include_router(r.router, prefix="/api/v1")

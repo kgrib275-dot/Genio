@@ -109,6 +109,7 @@ def create_app(
     description: str,
     icon: str,
     template_key: str | None,
+    project_id: str | None = None,
 ) -> App:
     graph = starter_graph()
     if template_key:
@@ -128,6 +129,7 @@ def create_app(
         status="draft",
         created_by=user_id,
         draft_graph=graph,
+        project_id=project_id or None,
     )
     db.add(app)
     return app
@@ -177,6 +179,7 @@ def app_dict(app: App, latest: int | None) -> dict[str, Any]:
         "created_by": app.created_by,
         "updated_at": app.updated_at,
         "latest_version": latest,
+        "project_id": app.project_id,
     }
 
 

@@ -6,7 +6,7 @@ from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Depends, Query, Request, Response
 from pydantic import BaseModel, EmailStr, Field
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 
 from api.core.audit import audit
 from api.core.crypto import decrypt_str, encrypt_str, mask
@@ -27,6 +27,7 @@ from api.market import service as market
 from api.models import App, AuditLog, Invitation, LlmProvider, Membership, Run, User
 from api.routers.common import public_origin
 from api.schemas.graph import Graph
+from api.services.projects import hidden_project_ids
 from nodes import registry
 
 router = APIRouter(tags=["workspaces"])
@@ -308,6 +309,9 @@ def list_runs(
     to: str | None = None,
 ) -> list[dict[str, Any]]:
     q = select(Run, App.name).join(App, App.id == Run.app_id).where(App.workspace_id == ws)
+    hidden = hidden_project_ids(ctx.db, ws, ctx.user.id, ctx.role)
+    if hidden:
+        q = q.where(or_(App.project_id.is_(None), App.project_id.not_in(hidden)))
     if app:
         q = q.where(Run.app_id == app)
     if status:

@@ -13,7 +13,9 @@ from api.core.errors import AppError, not_found
 from api.deps import EDIT_APPS, VIEW_RUNS, Ctx, require_role
 from api.engine import safe_http
 from api.models import Chunk, Document, KnowledgeBase
+from api.routers.projects import check_project_target
 from api.services import knowledge as svc
+from api.services.projects import hidden_project_ids
 from api.services.queue import enqueue_document
 from nodes import NodeError
 
@@ -28,6 +30,7 @@ DocBuilders = Annotated[Ctx, Depends(require_role(EDIT_APPS, via="document"))]
 def _kb(kb: KnowledgeBase, count: int) -> dict[str, Any]:
     return {
         "settings": svc.kb_settings(kb),
+        "project_id": kb.project_id,
         "id": kb.id,
         "name": kb.name,
         "embedding_model": kb.embedding_model,
@@ -38,25 +41,34 @@ def _kb(kb: KnowledgeBase, count: int) -> dict[str, Any]:
 
 
 @router.get("/workspaces/{ws}/knowledge-bases")
-def list_kbs(ws: str, ctx: WsViewers) -> list[dict[str, Any]]:
-    rows = ctx.db.execute(
+def list_kbs(ws: str, ctx: WsViewers, project: str | None = None) -> list[dict[str, Any]]:
+    q = (
         select(KnowledgeBase, func.count(Document.id))
         .outerjoin(Document, Document.kb_id == KnowledgeBase.id)
         .where(KnowledgeBase.workspace_id == ws)
         .group_by(KnowledgeBase.id)
         .order_by(KnowledgeBase.created_at)
-    ).all()
-    return [_kb(kb, n) for kb, n in rows]
+    )
+    if project == "none":
+        q = q.where(KnowledgeBase.project_id.is_(None))
+    elif project:
+        q = q.where(KnowledgeBase.project_id == project)
+    hidden = hidden_project_ids(ctx.db, ws, ctx.user.id, ctx.role)
+    rows = ctx.db.execute(q).all()
+    return [_kb(kb, n) for kb, n in rows if kb.project_id not in hidden]
 
 
 class KbIn(BaseModel):
     name: str = Field(min_length=1, max_length=100)
     chunk_size: int = Field(default=800, ge=200, le=4000)
+    project_id: str | None = None
 
 
 @router.post("/workspaces/{ws}/knowledge-bases")
 def create_kb(ws: str, body: KbIn, ctx: WsBuilders) -> dict[str, Any]:
+    check_project_target(ctx, ws, body.project_id)
     kb = KnowledgeBase(
+        project_id=body.project_id or None,
         workspace_id=ws,
         name=body.name,
         embedding_model=get_settings().genio_embedding_model,
@@ -213,6 +225,7 @@ def search(kb_id: str, body: SearchIn, ctx: KbBuilders) -> list[dict[str, Any]]:
 class KbPatch(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=100)
     settings: dict[str, Any] | None = None
+    project_id: str | None = None
 
 
 @router.patch("/knowledge-bases/{kb_id}")
@@ -224,6 +237,9 @@ def update_kb(kb_id: str, body: KbPatch, ctx: KbBuilders) -> dict[str, Any]:
         kb.name = body.name
     if body.settings is not None:
         svc.patch_kb_settings(kb, body.settings)
+    if body.project_id is not None:
+        check_project_target(ctx, kb.workspace_id, body.project_id)
+        kb.project_id = body.project_id or None
     audit(
         ctx.db,
         workspace_id=kb.workspace_id,

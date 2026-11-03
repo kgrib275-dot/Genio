@@ -66,6 +66,8 @@ class User(Base):
     password_hash: Mapped[str] = mapped_column(String(200))
     name: Mapped[str] = mapped_column(String(200))
     created_at: Mapped[datetime] = _created()
+    # v0.3: 개인 설정(테마·글자 크기·기본 워크스페이스)
+    preferences: Mapped[dict[str, Any]] = mapped_column(JsonType, default=dict, server_default="{}")
 
 
 class Membership(Base):
@@ -109,6 +111,10 @@ class App(Base):
     )
     # ADR 0002
     draft_graph: Mapped[dict[str, Any] | None] = mapped_column(JsonType, nullable=True)
+    # v0.3: 프로젝트(없으면 워크스페이스 공용)
+    project_id: Mapped[str | None] = mapped_column(
+        ForeignKey("projects.id", ondelete="SET NULL"), nullable=True, index=True
+    )
     # v0.2: 앱 기능(App Toolkit)·환경 변수(비밀은 value_enc에 암호화)
     features: Mapped[dict[str, Any]] = mapped_column(JsonType, default=dict, server_default="{}")
     env_vars: Mapped[list[dict[str, Any]]] = mapped_column(
@@ -224,6 +230,10 @@ class KnowledgeBase(Base):
     name: Mapped[str] = mapped_column(String(200))
     embedding_model: Mapped[str] = mapped_column(String(100))
     chunk_size: Mapped[int] = mapped_column(Integer, default=800)
+    # v0.3: 프로젝트(없으면 워크스페이스 공용)
+    project_id: Mapped[str | None] = mapped_column(
+        ForeignKey("projects.id", ondelete="SET NULL"), nullable=True, index=True
+    )
     # v0.2: 청킹·검색 설정
     settings: Mapped[dict[str, Any]] = mapped_column(JsonType, default=dict, server_default="{}")
     created_at: Mapped[datetime] = _created()
@@ -453,3 +463,32 @@ class SystemSetting(Base):
     __tablename__ = "system_settings"
     key: Mapped[str] = mapped_column(String(100), primary_key=True)
     value: Mapped[Any] = mapped_column(JsonType)
+
+
+# ---------- v0.3 ----------
+class Project(Base):
+    """워크스페이스 안에서 앱·지식베이스를 묶는 단위. private이면 만든 사람·멤버(+소유자·관리자)만 본다."""
+
+    __tablename__ = "projects"
+    id: Mapped[str] = _id()
+    workspace_id: Mapped[str] = mapped_column(
+        ForeignKey("workspaces.id", ondelete="CASCADE"), index=True
+    )
+    name: Mapped[str] = mapped_column(String(100))
+    description: Mapped[str] = mapped_column(Text, default="", server_default="")
+    color: Mapped[str] = mapped_column(String(20), default="indigo", server_default="indigo")
+    visibility: Mapped[str] = mapped_column(
+        String(20), default="workspace", server_default="workspace"
+    )
+    created_by: Mapped[str | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    created_at: Mapped[datetime] = _created()
+
+
+class ProjectMember(Base):
+    __tablename__ = "project_members"
+    __table_args__ = (UniqueConstraint("project_id", "user_id"),)
+    id: Mapped[str] = _id()
+    project_id: Mapped[str] = mapped_column(
+        ForeignKey("projects.id", ondelete="CASCADE"), index=True
+    )
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
