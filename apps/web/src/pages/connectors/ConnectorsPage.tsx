@@ -1,4 +1,5 @@
 import { HelpButton } from "@/help/HelpButton";
+import { CheckCircle2, PlugZap, XCircle } from "lucide-react";
 import { useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { PageContainer } from "@/app/Layout";
@@ -7,7 +8,7 @@ import { ListPager, ListToolbar, NoMatch } from "@/components/ListControls";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody, CardHeader, Empty, PageHeader } from "@/components/ui/card";
-import { Field, Input, Select } from "@/components/ui/input";
+import { Field, Input, Select, Textarea } from "@/components/ui/input";
 import { toast } from "@/components/ui/toast-store";
 import { ko } from "@/i18n/ko";
 import {
@@ -17,6 +18,12 @@ import {
   useDeleteCredential,
 } from "@/lib/api/resources";
 import { formatDate } from "@/lib/cn";
+import {
+  usePrivateHosts,
+  useSetPrivateHosts,
+  useTestCredential,
+  type CredentialTestResult,
+} from "@/lib/api/v5b";
 import { optionsFrom, useListControls } from "@/lib/useListControls";
 import { canEdit, canManage, useSession } from "@/store/session";
 
@@ -83,12 +90,16 @@ function NewCredentialForm({ ws }: { ws: string }) {
         <Input id="cred-name" required value={name} onChange={(e) => setName(e.target.value)} />
       </Field>
       {fields.map((f) => (
-        <Field key={f.key} label={f.label} htmlFor={`sec-${f.key}`}>
+        <Field
+          key={f.key}
+          label={(f as { required?: boolean }).required === false ? `${f.label} (선택)` : f.label}
+          htmlFor={`sec-${f.key}`}
+        >
           <Input
             id={`sec-${f.key}`}
             type={f.secret ? "password" : "text"}
             autoComplete="off"
-            required
+            required={(f as { required?: boolean }).required !== false}
             value={secrets[f.key] ?? ""}
             onChange={(e) => setSecrets({ ...secrets, [f.key]: e.target.value })}
           />
@@ -102,10 +113,80 @@ function NewCredentialForm({ ws }: { ws: string }) {
   );
 }
 
+function TestResult({ r }: { r: CredentialTestResult }) {
+  return (
+    <p
+      role="status"
+      className={`basis-full rounded-md px-3 py-2 text-xs ${
+        r.ok ? "bg-emerald-50 text-emerald-800" : "bg-red-50 text-red-800"
+      }`}
+    >
+      <span className="inline-flex items-center gap-1 font-medium">
+        {r.ok ? <CheckCircle2 className="h-3.5 w-3.5" /> : <XCircle className="h-3.5 w-3.5" />}
+        {r.ok ? (r.checked ? "연결이 잘 돼요" : "확인 기능 없음") : "연결에 실패했어요"}
+      </span>
+      <span className="ml-1">{r.message}</span>
+    </p>
+  );
+}
+
+/** 사내망(내부 IP)의 DB 등을 쓰려면 관리자가 호스트를 허용한다. */
+function PrivateHostsCard({ ws }: { ws: string }) {
+  const hosts = usePrivateHosts(ws);
+  const save = useSetPrivateHosts(ws);
+  const [text, setText] = useState<string | null>(null);
+  const value = text ?? (hosts.data?.hosts ?? []).join("\n");
+  return (
+    <Card>
+      <CardHeader
+        title="허용할 내부 주소"
+        description="사내 DB처럼 내부망에 있는 서버를 연결할 때만 적어요. 여기에 없는 내부 주소는 언제나 막혀 있어요."
+      />
+      <CardBody className="space-y-3">
+        <Field
+          label="호스트(한 줄에 하나)"
+          htmlFor="private-hosts"
+          hint="예: db.internal.example.com, 10.0.0.5"
+        >
+          <Textarea
+            id="private-hosts"
+            rows={3}
+            value={value}
+            onChange={(e) => setText(e.target.value)}
+          />
+        </Field>
+        <ErrorBox error={save.error} />
+        <Button
+          size="sm"
+          disabled={save.isPending}
+          onClick={() =>
+            save.mutate(
+              value
+                .split(/[\n,]/)
+                .map((h) => h.trim())
+                .filter(Boolean),
+              {
+                onSuccess: () => {
+                  setText(null);
+                  toast.success("허용할 내부 주소를 저장했어요.");
+                },
+              },
+            )
+          }
+        >
+          저장
+        </Button>
+      </CardBody>
+    </Card>
+  );
+}
+
 export default function ConnectorsPage() {
   const { workspaceId: ws, role } = useSession();
   const creds = useCredentials(ws, canEdit(role));
   const del = useDeleteCredential(ws);
+  const test = useTestCredential(ws);
+  const [results, setResults] = useState<Record<string, CredentialTestResult>>({});
   const manage = canManage(role);
   const cc = useListControls(creds.data, {
     key: "credentials",
@@ -164,6 +245,20 @@ export default function ConnectorsPage() {
                       .join(" · ")}
                   </span>
                   <span className="ml-auto text-xs text-slate-400">{formatDate(c.created_at)}</span>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={test.isPending && test.variables === c.id}
+                    onClick={() =>
+                      test.mutate(c.id, {
+                        onSuccess: (r) => setResults((m) => ({ ...m, [c.id]: r })),
+                        onError: (err) => toast.error(err),
+                      })
+                    }
+                  >
+                    <PlugZap className="h-3.5 w-3.5" />
+                    {test.isPending && test.variables === c.id ? "확인 중…" : "연결 테스트"}
+                  </Button>
                   {manage && (
                     <Button
                       size="sm"
@@ -182,6 +277,7 @@ export default function ConnectorsPage() {
                       삭제
                     </Button>
                   )}
+                  {results[c.id] && <TestResult r={results[c.id] as CredentialTestResult} />}
                 </li>
               ))}
             </ul>
@@ -190,16 +286,19 @@ export default function ConnectorsPage() {
             )}
           </CardBody>
         </Card>
-        <Card>
-          <CardHeader title="새 연결 정보" />
-          <CardBody>
-            {manage ? (
-              <NewCredentialForm ws={ws} />
-            ) : (
-              <p className="text-sm text-slate-500">{ko.common.noPermission}</p>
-            )}
-          </CardBody>
-        </Card>
+        <div className="space-y-6">
+          <Card>
+            <CardHeader title="새 연결 정보" />
+            <CardBody>
+              {manage ? (
+                <NewCredentialForm ws={ws} />
+              ) : (
+                <p className="text-sm text-slate-500">{ko.common.noPermission}</p>
+              )}
+            </CardBody>
+          </Card>
+          {manage && <PrivateHostsCard ws={ws} />}
+        </div>
       </div>
     </PageContainer>
   );

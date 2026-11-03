@@ -3,10 +3,12 @@
 import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from typing import Any
 
 from anyio import to_thread
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from sqlalchemy import text
 
 from api.config import get_settings
@@ -28,6 +30,7 @@ from api.routers import (
     projects,
     runs,
     service,
+    tasks,
     triggers,
     workspaces,
 )
@@ -69,13 +72,41 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
 
 app = FastAPI(title="Genio API", version="0.1.0", lifespan=lifespan)
 install_error_handlers(app)
+
+
+def _cors_origins() -> list[str]:
+    """API를 부를 수 있는 브라우저 주소: 공개 웹 주소 + GENIO_CORS_ORIGINS(남의 *.ts.net은 막음)."""
+    st = get_settings()
+    out = [st.genio_public_web_url.rstrip("/")]
+    out += [o.strip().rstrip("/") for o in st.genio_cors_origins.split(",") if o.strip()]
+    return [o for o in dict.fromkeys(out) if o]
+
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origin_regex=r"https?://(localhost|127\.0\.0\.1)(:\d+)?|https://[a-z0-9-]+\.[a-z0-9-]+\.ts\.net(:\d+)?",
+    allow_origins=_cors_origins(),
+    allow_origin_regex=r"https?://(localhost|127\.0\.0\.1)(:\d+)?",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.middleware("http")
+async def _reject_nul(request: Request, call_next: Any) -> Any:
+    """주소의 검색어 등에 NUL 문자(%00)가 있으면 DB 오류(500) 대신 400으로 막는다."""
+    if "%00" in request.url.query or "%00" in request.url.path:
+        return JSONResponse(
+            status_code=400,
+            content={
+                "detail": {
+                    "message": "주소에 쓸 수 없는 글자가 들어 있어요.",
+                    "hint": "검색어에서 보이지 않는 특수 문자를 지우고 다시 시도하세요.",
+                }
+            },
+        )
+    return await call_next(request)
+
 
 for r in (
     admin,
@@ -93,6 +124,7 @@ for r in (
     market,
     projects,
     service,
+    tasks,
     triggers,
 ):
     app.include_router(r.router, prefix="/api/v1")

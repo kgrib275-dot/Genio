@@ -36,10 +36,13 @@ def _item(m: MarketItem, installed: set[str] | None, detail: bool = False) -> di
         "tags": m.tags or [],
         "installs": m.installs,
         "installed": (m.key in installed) if installed is not None else None,
+        "category": svc.category_of(m),
     }
     if detail:
         out["description_md"] = m.description_md
         out["manifest"] = m.manifest
+        if m.type == "template":
+            out["preview"] = svc.template_preview(m)
     return out
 
 
@@ -56,6 +59,7 @@ def list_items(
     type: str | None = None,
     q: str | None = None,
     workspace_id: str | None = None,
+    category: str | None = None,
 ) -> list[dict[str, Any]]:
     query = select(MarketItem).order_by(MarketItem.type, MarketItem.name)
     if type:
@@ -70,7 +74,10 @@ def list_items(
             )
         )
     installed = _installed_for(db, user.id, workspace_id)
-    return [_item(m, installed) for m in db.scalars(query)]
+    out = [_item(m, installed) for m in db.scalars(query)]
+    if category:
+        out = [i for i in out if i["category"] == category]
+    return out
 
 
 @router.get("/market/items/{key}")
@@ -88,15 +95,30 @@ class InstallIn(BaseModel):
 
 
 def _installation(inst: Installation, item: MarketItem | None) -> dict[str, Any]:
+    latest = item.version if item else inst.version
     return {
         "id": inst.id,
         "item_key": item.key if item else "",
         "item_name": item.name if item else "",
         "type": item.type if item else "",
         "version": inst.version,
+        "latest_version": latest,
+        "update_available": _newer(latest, inst.version),
         "status": inst.status,
         "installed_at": inst.installed_at,
     }
+
+
+def _ver(v: str) -> tuple[int, ...]:
+    out = []
+    for part in str(v).split("."):
+        digits = "".join(ch for ch in part if ch.isdigit())
+        out.append(int(digits) if digits else 0)
+    return tuple(out)
+
+
+def _newer(latest: str, current: str) -> bool:
+    return _ver(latest) > _ver(current)
 
 
 @router.post("/workspaces/{ws}/market/install")
@@ -120,3 +142,9 @@ def installations(ws: str, ctx: Members) -> list[dict[str, Any]]:
 def uninstall(ws: str, installation_id: str, ctx: MarketManagers) -> Response:
     svc.uninstall(ctx.db, ws, installation_id, ctx.user.id)
     return Response(status_code=204)
+
+
+@router.post("/workspaces/{ws}/market/installations/{installation_id}/update")
+def update_installation(ws: str, installation_id: str, ctx: MarketManagers) -> dict[str, Any]:
+    inst = svc.update_installation(ctx.db, ws, installation_id, ctx.user.id)
+    return _installation(inst, ctx.db.get(MarketItem, inst.item_id))

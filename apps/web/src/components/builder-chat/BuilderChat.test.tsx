@@ -87,7 +87,7 @@ describe("BuilderChatView", () => {
 
     expect(await screen.findByText("분류 노드를 추가할게요.")).toBeInTheDocument();
     expect(screen.getByText("문의를 분류해 줘")).toBeInTheDocument();
-    expect(screen.getByText("노드 추가")).toBeInTheDocument();
+    expect(screen.getByText("단계 추가")).toBeInTheDocument();
     expect(screen.getByText("어느 채널로 보낼까요?")).toBeInTheDocument();
     expect(useCanvas.getState().graph.nodes.map((n) => n.id)).toEqual(["n2"]);
     expect(useCanvas.getState().highlights.n2).toBeDefined();

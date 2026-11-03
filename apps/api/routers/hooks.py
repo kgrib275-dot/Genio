@@ -64,8 +64,16 @@ def _rate_limited(db: Any, app: App, ip: str, trigger_id: str) -> bool:
     return not ratelimit.allow(f"hook:{trigger_id}:{ip}", int(limit) if limit else None)
 
 
-def _start(token: str, run_input: dict[str, Any], ip: str) -> tuple[str, str]:
-    """(run_id, mode)"""
+def _start(
+    token: str,
+    run_input: dict[str, Any] | None,
+    ip: str,
+    headers: dict[str, str] | None = None,
+    raw: bytes = b"",
+    content_type: str = "",
+    query: dict[str, str] | None = None,
+) -> tuple[str, str]:
+    """(run_id, mode). 서명을 켠 웹훅은 본문을 풀기 전에 서명부터 확인한다."""
     with SessionLocal() as db:
         t = db.scalar(
             select(AppTrigger).where(AppTrigger.token == token, AppTrigger.kind == "webhook")
@@ -82,8 +90,25 @@ def _start(token: str, run_input: dict[str, Any], ip: str) -> tuple[str, str]:
                 "1분쯤 기다린 뒤 다시 보내거나 관리자에게 한도를 늘려 달라고 하세요.",
             )
         mode = str((t.config or {}).get("mode") or "async")
+        hdrs = {k.lower(): v for k, v in (headers or {}).items()}
+        if (t.config or {}).get("require_signature"):
+            problem = svc.verify_signature(t, hdrs, raw)
+            if problem:
+                svc.record_payload(t, headers=hdrs, body=raw, accepted=False, note=problem)
+                db.commit()
+                raise AppError(
+                    401,
+                    f"서명을 확인하지 못했어요: {problem}.",
+                    "자동 실행 화면의 서명 비밀값으로 X-Genio-Signature를 만들어 보내세요.",
+                )
+        if run_input is None:
+            run_input = _parse_body(raw, content_type)
+            for k, v in (query or {}).items():
+                run_input.setdefault(k, v)
         run = svc.create_trigger_run(db, t, run_input)
         run_id = run.id
+        svc.record_payload(t, headers=hdrs, body=raw, accepted=True, run_id=run_id)
+        db.commit()
     enqueue_run(run_id)
     return run_id, mode
 
@@ -108,10 +133,18 @@ def _result(run_id: str, wait: float) -> tuple[bool, dict[str, Any]]:
 
 
 async def _handle(token: str, request: Request, raw: bytes) -> JSONResponse:
-    run_input = _parse_body(raw, request.headers.get("content-type", ""))
-    for k, v in request.query_params.items():
-        run_input.setdefault(k, v)
-    run_id, mode = await run_in_threadpool(_start, token, run_input, client_ip(request))
+    if len(raw) > MAX_BODY_BYTES:
+        raise AppError(413, "보낸 내용이 너무 커요(256KB 초과).", "필요한 값만 담아 다시 보내세요.")
+    run_id, mode = await run_in_threadpool(
+        _start,
+        token,
+        None,
+        client_ip(request),
+        dict(request.headers),
+        raw,
+        request.headers.get("content-type", ""),
+        dict(request.query_params),
+    )
     if mode != "sync":
         return JSONResponse({"run_id": run_id, "status": "queued"}, status_code=202)
     done, body = await run_in_threadpool(_result, run_id, SYNC_WAIT_SECONDS)

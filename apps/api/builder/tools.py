@@ -16,6 +16,8 @@ from sqlalchemy.orm import Session
 
 from api.builder.graph_summary import summarize
 from api.deps import membership_role
+from api.engine.describe import describe_run, describe_step
+from api.engine.executor import load_graph
 from api.llm.base import ToolDef
 from api.market.service import installed_items, installed_keys, market_node_types
 from api.models import (
@@ -32,7 +34,7 @@ from api.schemas.graph import Graph, GraphEdge, GraphNode, Position, empty_graph
 from api.services import apps as app_service
 from api.services.projects import hidden_project_ids
 from api.services.queue import enqueue_run
-from nodes import registry
+from nodes import NodeError, registry
 
 TOOL_DEFS: list[ToolDef] = [
     ToolDef(
@@ -134,6 +136,15 @@ TOOL_DEFS: list[ToolDef] = [
             "type": "object",
             "properties": {"input": {"type": "object", "description": "입력 노드 항목 키별 값"}},
             "required": ["input"],
+            "additionalProperties": False,
+        },
+    ),
+    ToolDef(
+        "get_run",
+        "이 앱의 실행 결과를 읽는다. run_id를 주면 그 실행, 없으면 가장 최근 실행. 상태·오류·단계별 한 줄 설명(story)·단계별 짧은 결과를 돌려준다. '왜 실패했어?', '방금 결과 설명해 줘' 같은 요청이나 고쳐 달라는 요청에 쓴다.",
+        {
+            "type": "object",
+            "properties": {"run_id": {"type": "string", "description": "실행 id(없으면 최근)"}},
             "additionalProperties": False,
         },
     ),
@@ -512,6 +523,69 @@ class BuilderToolbox:
             event=("market_suggestion", {"item": item, "reason": reason}),
         )
 
+    def t_get_run(self, run_id: str | None = None) -> ToolOutcome:
+        q = select(Run).where(Run.app_id == self.app.id)
+        if run_id:
+            run = self.db.get(Run, run_id)
+            if run is None or run.app_id != self.app.id:
+                raise ToolError("이 앱의 실행 기록에서 그 실행을 찾지 못했어요")
+        else:
+            run = self.db.scalar(q.order_by(Run.created_at.desc()).limit(1))
+            if run is None:
+                return ToolOutcome(
+                    True,
+                    {"found": False, "message": "아직 실행한 적이 없어요"},
+                    "실행 기록 없음",
+                )
+        try:
+            graph = load_graph(self.db, run).dump()
+        except NodeError:
+            graph = self.graph().dump()
+        nodes = {n["id"]: n for n in graph.get("nodes", [])}
+        steps_out: list[dict[str, Any]] = []
+        for s in self.db.scalars(
+            select(RunStep).where(RunStep.run_id == run.id).order_by(RunStep.seq)
+        ):
+            node = nodes.get(s.node_id)
+            label = str(((node or {}).get("data") or {}).get("label") or s.node_id)
+            d = {
+                "status": s.status,
+                "output": s.output,
+                "logs": s.logs,
+                "started_at": s.started_at,
+                "finished_at": s.finished_at,
+                "input": s.input,
+            }
+            steps_out.append(
+                {
+                    "node_id": s.node_id,
+                    "label": label,
+                    "type": (node or {}).get("type"),
+                    "status": s.status,
+                    "summary": describe_step(node, d, label),
+                    # 비밀값이 섞일 수 있는 단계 설정(input)은 넘기지 않고 결과만 짧게
+                    "output": _clip(s.output, 300),
+                    "logs": (s.logs or "")[-300:],
+                }
+            )
+        story = describe_run({"status": run.status}, steps_out)
+        result = {
+            "found": True,
+            "run_id": run.id,
+            "status": run.status,
+            "trigger": run.trigger,
+            "error": run.error,
+            "input": _clip(run.input, 300),
+            "output": _clip(run.output, 300),
+            "story": story,
+            "steps": steps_out,
+            "uses_draft": run.version_id is None,
+        }
+        status_ko = {"succeeded": "성공", "failed": "실패", "waiting_approval": "승인 대기"}.get(
+            run.status, run.status
+        )
+        return ToolOutcome(True, result, f"실행 결과 읽음({status_ko})")
+
     def t_validate(self) -> ToolOutcome:
         result = app_service.validate_for_app(self.db, self.app, self.graph().dump())
         self.validated_ok = result.valid
@@ -601,6 +675,8 @@ def _exits(node: GraphNode) -> list[str] | None:
         ]
     if node.type == "question_classifier":
         return [str(c.get("id")) for c in node.data.get("classes", []) if c.get("id")]
+    if node.type == "approval" and node.data.get("branch"):
+        return ["approved", "rejected"]  # 승인 / 반려(엔진 APPROVAL_HANDLES와 같음)
     return None
 
 

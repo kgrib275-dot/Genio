@@ -1,4 +1,6 @@
 import {
+  Eye,
+  EyeOff,
   FileText,
   Globe,
   Layers,
@@ -20,7 +22,6 @@ import { Field, Input, Select } from "@/components/ui/input";
 import { toast } from "@/components/ui/toast-store";
 import { HelpButton } from "@/help/HelpButton";
 import {
-  useCreateKnowledgeBase,
   useDeleteDocument,
   useDeleteKnowledgeBase,
   useDocuments,
@@ -45,6 +46,7 @@ import {
 } from "@/pages/knowledge/KbDialogs";
 import { ProjectDot } from "@/components/projects/ProjectDialog";
 import { useProjects } from "@/lib/api/v3";
+import { useCreateKnowledgeBaseV5, useEmbeddingModels, useToggleDocument } from "@/lib/api/v5b";
 import { canEdit, useSession } from "@/store/session";
 
 const METHOD_LABEL: Record<RetrievalMethod, string> = {
@@ -69,6 +71,7 @@ function DocRow({
   onMeta,
   onReprocess,
   onDelete,
+  onToggle,
   reprocessing,
 }: {
   d: KbDocumentV2;
@@ -77,10 +80,16 @@ function DocRow({
   onMeta: () => void;
   onReprocess: () => void;
   onDelete: () => void;
+  onToggle: (enabled: boolean) => void;
   reprocessing: boolean;
 }) {
+  const enabled = (d as KbDocumentV2 & { enabled?: boolean }).enabled !== false;
   return (
-    <li className="flex flex-wrap items-center gap-x-3 gap-y-1.5 px-4 py-3 text-sm sm:px-5">
+    <li
+      className={`flex flex-wrap items-center gap-x-3 gap-y-1.5 px-4 py-3 text-sm sm:px-5 ${
+        enabled ? "" : "bg-slate-50 text-slate-400"
+      }`}
+    >
       <span className="flex min-w-0 flex-1 basis-48 items-center gap-1.5">
         {d.source === "url" ? (
           <Globe className="h-3.5 w-3.5 shrink-0 text-slate-400" />
@@ -100,6 +109,7 @@ function DocRow({
         {formatBytes(d.size)} · 조각 {d.chunk_count}
       </span>
       <StatusBadge status={d.status} />
+      {!enabled && <Badge tone="gray">검색에서 뺌</Badge>}
       {d.error && (
         <span className="basis-full text-xs text-red-600" title={d.error}>
           {d.error}
@@ -117,6 +127,15 @@ function DocRow({
         </Button>
         {editable && (
           <>
+            <Button
+              size="sm"
+              variant="ghost"
+              aria-label={enabled ? "검색에서 빼기" : "검색에 다시 쓰기"}
+              title={enabled ? "검색에서 빼기(끄기)" : "검색에 다시 쓰기(켜기)"}
+              onClick={() => onToggle(!enabled)}
+            >
+              {enabled ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+            </Button>
             <Button size="sm" variant="ghost" aria-label="꼬리표" title="꼬리표" onClick={onMeta}>
               <Tags className="h-3.5 w-3.5" />
             </Button>
@@ -250,6 +269,8 @@ function SearchCard({ kb }: { kb: KnowledgeBaseV2 }) {
 function KbDetail({ ws, kb, editable }: { ws: string; kb: KnowledgeBaseV2; editable: boolean }) {
   const docs = useDocuments(kb.id);
   const upload = useUploadDocument(kb.id);
+  const toggle = useToggleDocument(kb.id);
+  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
   const delDoc = useDeleteDocument(kb.id);
   const reprocess = useReprocessDocument(kb.id);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -306,27 +327,39 @@ function KbDetail({ ws, kb, editable }: { ws: string; kb: KnowledgeBaseV2; edita
                 <input
                   ref={fileRef}
                   type="file"
-                  accept=".pdf,.txt,.md,application/pdf,text/plain,text/markdown"
+                  accept=".pdf,.txt,.md,.docx,.pptx,.xlsx,.html,.htm,application/pdf,text/plain,text/markdown,text/html,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.presentationml.presentation,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                  multiple
                   className="hidden"
                   aria-label="문서 파일"
                   onChange={(e) => {
-                    const f = e.target.files?.[0];
-                    if (f)
-                      upload.mutate(f, {
-                        onSuccess: () =>
-                          toast.success("올렸어요. 처리가 끝나면 '준비됨'으로 바뀌어요."),
-                        onError: (err) => toast.error(err),
-                      });
+                    const files = Array.from(e.target.files ?? []);
                     e.target.value = "";
+                    if (!files.length) return;
+                    // 여러 파일을 차례로 올리고 진행 상황을 보여 준다
+                    void (async () => {
+                      let ok = 0;
+                      for (let i = 0; i < files.length; i++) {
+                        setProgress({ done: i, total: files.length });
+                        try {
+                          await upload.mutateAsync(files[i] as File);
+                          ok += 1;
+                        } catch (err) {
+                          toast.error(err);
+                        }
+                      }
+                      setProgress(null);
+                      if (ok)
+                        toast.success(`${ok}개를 올렸어요. 처리가 끝나면 '준비됨'으로 바뀌어요.`);
+                    })();
                   }}
                 />
                 <Button
                   size="sm"
-                  disabled={upload.isPending}
+                  disabled={Boolean(progress) || upload.isPending}
                   onClick={() => fileRef.current?.click()}
                 >
                   <Upload className="h-3.5 w-3.5" />
-                  {upload.isPending ? "올리는 중…" : "문서 올리기"}
+                  {progress ? `올리는 중 ${progress.done + 1}/${progress.total}` : "문서 올리기"}
                 </Button>
               </div>
             )
@@ -337,7 +370,8 @@ function KbDetail({ ws, kb, editable }: { ws: string; kb: KnowledgeBaseV2; edita
           <ErrorBox error={docs.error} />
           {docs.data?.length === 0 && (
             <p className="px-5 py-6 text-sm text-slate-500">
-              PDF, TXT, MD 파일을 올리거나 웹 페이지를 가져오면 질문에 답할 때 써요.
+              PDF·DOCX·PPTX·XLSX·HTML·TXT·MD 파일을 올리거나 웹 페이지를 가져오면 질문에 답할 때
+              써요. 여러 파일을 한 번에 고를 수 있어요.
             </p>
           )}
           {docList.length > 0 && (
@@ -366,6 +400,16 @@ function KbDetail({ ws, kb, editable }: { ws: string; kb: KnowledgeBaseV2; edita
                 onDelete={() => {
                   if (window.confirm(`'${d.filename}'을(를) 지울까요?`)) delDoc.mutate(d.id);
                 }}
+                onToggle={(on) =>
+                  toggle.mutate(
+                    { id: d.id, enabled: on },
+                    {
+                      onSuccess: () =>
+                        toast.success(on ? "검색에 다시 써요." : "이 문서는 검색에서 빠져요."),
+                      onError: (err) => toast.error(err),
+                    },
+                  )
+                }
               />
             ))}
           </ul>
@@ -393,7 +437,9 @@ export default function KnowledgePage() {
   const projectList = projects.data ?? [];
   const [projectFilter, setProjectFilter] = useState("");
   const kbs = useKnowledgeBases(ws, projectFilter || undefined);
-  const create = useCreateKnowledgeBase(ws);
+  const create = useCreateKnowledgeBaseV5(ws);
+  const embedModels = useEmbeddingModels();
+  const [embedModel, setEmbedModel] = useState("");
   const del = useDeleteKnowledgeBase(ws);
   const [selected, setSelected] = useState<string>("");
   const [name, setName] = useState("");
@@ -434,7 +480,11 @@ export default function KnowledgePage() {
                 e.preventDefault();
                 if (!name.trim()) return;
                 create.mutate(
-                  { name, project_id: newProject || undefined },
+                  {
+                    name,
+                    project_id: newProject || undefined,
+                    embedding_model: embedModel || undefined,
+                  },
                   {
                     onSuccess: (k) => {
                       setName("");
@@ -456,6 +506,24 @@ export default function KnowledgePage() {
                     만들기
                   </Button>
                 </div>
+              </Field>
+              <Field
+                label="임베딩 모델"
+                htmlFor="kb-embed"
+                hint="글을 숫자로 바꾸는 모델이에요. 만든 뒤에는 바꿀 수 없어요."
+              >
+                <Select
+                  id="kb-embed"
+                  value={embedModel}
+                  onChange={(e) => setEmbedModel(e.target.value)}
+                >
+                  <option value="">기본(text-embedding-3-small)</option>
+                  {(embedModels.data ?? []).map((m) => (
+                    <option key={m.model} value={m.model}>
+                      {m.label}
+                    </option>
+                  ))}
+                </Select>
               </Field>
               {projectList.length > 0 && (
                 <Select

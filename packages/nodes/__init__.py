@@ -3,6 +3,7 @@
 from nodes.builtin import BUILTIN_SPECS, register_builtins
 from nodes.builtin_v02 import register_v02
 from nodes.builtin_v04 import register_v04
+from nodes.builtin_v05 import register_v05
 from nodes.spec import (
     LlmResult,
     NodeContext,
@@ -11,12 +12,14 @@ from nodes.spec import (
     NodeResult,
     NodeServices,
     NodeSpec,
+    quote_block,
     registry,
 )
 
 register_builtins(registry)
 register_v02(registry)
 register_v04(registry)
+register_v05(registry)
 
 __all__ = [
     "BUILTIN_SPECS",
@@ -27,5 +30,6 @@ __all__ = [
     "NodeResult",
     "NodeServices",
     "NodeSpec",
+    "quote_block",
     "registry",
 ]

@@ -30,6 +30,10 @@ class ValidationEnv:
     errors: list[GraphError] = field(default_factory=list)
 
 
+# 승인 단계의 갈림길(branch를 켰을 때): 승인 / 반려
+APPROVAL_HANDLES = ("approved", "rejected")
+
+
 def branch_handles(node_type: str, data: dict[str, Any]) -> set[str] | None:
     """갈림길 노드의 출구 이름. 갈림길이 아니면 None."""
     if node_type == "condition":
@@ -38,6 +42,8 @@ def branch_handles(node_type: str, data: dict[str, Any]) -> set[str] | None:
         return h
     if node_type == "question_classifier":
         return {str(c.get("id")) for c in data.get("classes", []) if c.get("id")}
+    if node_type == "approval" and data.get("branch"):
+        return set(APPROVAL_HANDLES)
     return None
 
 
@@ -48,6 +54,8 @@ def ordered_branch_handles(node_type: str, data: dict[str, Any]) -> list[str]:
         return [*ids, str(data.get("else") or "else")]
     if node_type == "question_classifier":
         return [str(c.get("id")) for c in data.get("classes", []) if c.get("id")]
+    if node_type == "approval" and data.get("branch"):
+        return list(APPROVAL_HANDLES)
     return []
 
 

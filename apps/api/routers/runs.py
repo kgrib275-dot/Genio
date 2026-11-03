@@ -19,9 +19,10 @@ from api.deps import EDIT_APPS, VIEW_RUNS, Ctx, require_role
 from api.engine import events
 from api.engine.describe import describe_run, describe_step
 from api.engine.executor import load_graph
-from api.models import App, Run, RunStep
+from api.models import App, HumanTask, Run, RunStep
 from api.routers.common import sse_frame, sse_response
 from api.routers.workspaces import run_dict
+from api.services import tasks as tasks_svc
 from api.services.queue import enqueue_run
 from nodes import NodeError
 
@@ -157,31 +158,48 @@ def approve(run_id: str, body: ApproveIn, ctx: RunViewers) -> dict[str, Any]:
         raise AppError(
             409, "승인을 기다리는 실행이 아니에요.", "실행 상태를 새로고침해 확인하세요."
         )
-    if "approved" in run.approval:
+    if "approved" in run.approval or run.approval.get("completed"):
         raise AppError(409, "이미 결정된 승인 요청이에요.", "실행 결과를 확인하세요.")
+    if str(run.approval.get("kind") or "approval") != "approval":
+        raise AppError(409, "승인 요청이 아니라 사람에게 맡긴 일이에요.", "작업함에서 처리하세요.")
     roles = run.approval.get("approver_roles") or []
     if roles and ctx.role not in roles and ctx.role != "owner":
         raise forbidden()
-    run.approval = {
-        **run.approval,
-        "approved": body.approved,
-        "comment": body.comment,
-        "decided_by": ctx.user.id,
-        "decided_by_name": ctx.user.name,
-        "decided_at": datetime.now(UTC).isoformat(),
-    }
-    app = ctx.db.get(App, run.app_id)
-    audit(
-        ctx.db,
-        workspace_id=app.workspace_id if app else None,
-        user_id=ctx.user.id,
-        action="run.approve" if body.approved else "run.reject",
-        target_type="run",
-        target_id=run.id,
-        meta={"comment": body.comment},
-    )
-    ctx.db.commit()
-    enqueue_run(run.id)
+    task = ctx.db.get(HumanTask, str(run.approval.get("task_id") or "")) or None
+    if task is not None and task.status == "open":
+        resumed = tasks_svc.complete(
+            ctx.db,
+            task,
+            approved=body.approved,
+            values={},
+            comment=body.comment,
+            user=ctx.user,
+            via="app",
+        )
+        if resumed is not None:
+            enqueue_run(resumed.id)
+    else:
+        # v0.5 이전에 멈춘 실행(할 일이 없는 경우)
+        run.approval = {
+            **run.approval,
+            "approved": body.approved,
+            "comment": body.comment,
+            "decided_by": ctx.user.id,
+            "decided_by_name": ctx.user.name,
+            "decided_at": datetime.now(UTC).isoformat(),
+        }
+        app = ctx.db.get(App, run.app_id)
+        audit(
+            ctx.db,
+            workspace_id=app.workspace_id if app else None,
+            user_id=ctx.user.id,
+            action="run.approve" if body.approved else "run.reject",
+            target_type="run",
+            target_id=run.id,
+            meta={"comment": body.comment},
+        )
+        ctx.db.commit()
+        enqueue_run(run.id)
     ctx.db.expire_all()
     fresh = ctx.db.get(Run, run_id)
     if fresh is None:
@@ -192,6 +210,8 @@ def approve(run_id: str, body: ApproveIn, ctx: RunViewers) -> dict[str, Any]:
 # ---------------- v0.4 다시 실행 ----------------
 class RerunIn(BaseModel):
     input: dict[str, Any] | None = None
+    # v0.5: 이 단계부터 다시(앞 단계 결과는 지난 실행 것을 그대로 쓴다)
+    from_node: str | None = Field(default=None, max_length=64)
 
 
 @router.post("/runs/{run_id}/rerun", status_code=201)
@@ -214,6 +234,8 @@ def rerun(run_id: str, body: RerunIn, ctx: RunEditors) -> dict[str, Any]:
         raise AppError(
             409, "다시 실행할 흐름을 찾지 못했어요.", "빌더에서 테스트 실행을 새로 해 보세요."
         )
+    if body.from_node:
+        run.context = _context_before(ctx.db, old, body.from_node)
     ctx.db.add(run)
     ctx.db.commit()
     enqueue_run(run.id)
@@ -222,3 +244,31 @@ def rerun(run_id: str, body: RerunIn, ctx: RunEditors) -> dict[str, Any]:
     if fresh is None:
         raise not_found("실행 기록")
     return run_dict(fresh)
+
+
+def _context_before(db: Session, old: Run, node_id: str) -> dict[str, Any]:
+    """지난 실행에서 node_id보다 먼저 끝난 단계의 결과를 모아 새 실행의 출발점으로 쓴다."""
+    try:
+        graph = load_graph(db, old)
+    except NodeError as exc:
+        raise AppError(409, exc.message, "빌더에서 테스트 실행을 새로 해 보세요.") from None
+    if graph.node(node_id) is None:
+        raise AppError(
+            422, "다시 시작할 단계를 흐름에서 찾지 못했어요.", "실행 화면에서 단계를 다시 고르세요."
+        )
+    outputs: dict[str, Any] = {}
+    reached = False
+    for st in _steps(db, old.id):
+        if st.node_id == node_id:
+            reached = True
+            break
+        if st.status in ("succeeded", "skipped") and isinstance(st.output, dict):
+            outputs[st.node_id] = st.output
+    if not reached:
+        raise AppError(
+            422,
+            "지난 실행에서 그 단계까지 가지 않았어요.",
+            "그 단계까지 간 실행에서 다시 시작하거나 처음부터 실행하세요.",
+        )
+    conv = ((old.context or {}).get("conv")) or {}
+    return {"outputs": outputs, "start_node": node_id, "conv": conv}

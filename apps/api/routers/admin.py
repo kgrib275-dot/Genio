@@ -13,6 +13,7 @@ from sqlalchemy import func, select
 
 from api.core.audit import audit
 from api.core.errors import AppError, forbidden, not_found
+from api.core.password_policy import check_password
 from api.core.security import hash_password
 from api.deps import ANY_MEMBER, MANAGE_MEMBERS, Ctx, CurrentUser, DbDep, Role, require_role
 from api.models import (
@@ -374,6 +375,8 @@ def create_account(ws: str, body: AccountIn, ctx: Managers) -> dict[str, Any]:
             "그 사람을 이 워크스페이스에 넣으려면 멤버 화면의 초대하기를 쓰세요.",
         )
     generated = body.password is None
+    if body.password is not None:
+        check_password(body.password, email)  # 가입·비밀번호 바꾸기와 같은 규칙
     password = body.password or temporary_password()
     u = User(
         email=email,

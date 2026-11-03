@@ -1,4 +1,5 @@
 import {
+  ClipboardList,
   Gauge,
   BookMarked,
   BookOpen,
@@ -28,6 +29,7 @@ import { ProjectDialog, ProjectDot } from "@/components/projects/ProjectDialog";
 import { ko } from "@/i18n/ko";
 import { useMe } from "@/lib/api/auth";
 import { signOut } from "@/lib/api/client";
+import { useOpenTaskCount } from "@/lib/api/v5a";
 import type { Me, Role } from "@/lib/api/types";
 import { useProjects } from "@/lib/api/v3";
 import { cn } from "@/lib/cn";
@@ -45,6 +47,7 @@ interface NavItem {
 
 const NAV: NavItem[] = [
   { to: "/", label: ko.nav.dashboard, icon: LayoutGrid, end: true },
+  { to: "/tasks", label: "작업함", icon: ClipboardList },
   { to: "/knowledge", label: ko.nav.knowledge, icon: BookOpen },
   { to: "/data", label: "데이터 표", icon: Table2 },
   { to: "/connectors", label: ko.nav.connectors, icon: Plug },
@@ -76,11 +79,14 @@ function NavItems({
   compact,
   role,
   onNavigate,
+  badges = {},
 }: {
   items: NavItem[];
   compact: boolean;
   role: Role | null;
   onNavigate?: () => void;
+  /** 메뉴 옆 숫자(예: 작업함의 열린 일 수) */
+  badges?: Record<string, number>;
 }) {
   return (
     <>
@@ -103,8 +109,21 @@ function NavItems({
               )
             }
           >
-            <n.icon className="h-[18px] w-[18px] shrink-0" strokeWidth={2} />
-            {!compact && n.label}
+            <span className="relative inline-flex shrink-0">
+              <n.icon className="h-[18px] w-[18px] shrink-0" strokeWidth={2} />
+              {compact && (badges[n.to] ?? 0) > 0 && (
+                <span className="absolute -right-1.5 -top-1.5 h-2 w-2 rounded-full bg-red-500" />
+              )}
+            </span>
+            {!compact && <span className="min-w-0 flex-1 truncate">{n.label}</span>}
+            {!compact && (badges[n.to] ?? 0) > 0 && (
+              <span
+                className="ml-auto rounded-full bg-red-500 px-1.5 text-[11px] font-semibold leading-5 text-white"
+                aria-label={`처리할 일 ${badges[n.to]}개`}
+              >
+                {(badges[n.to] ?? 0) > 99 ? "99+" : badges[n.to]}
+              </span>
+            )}
           </NavLink>
         ))}
     </>
@@ -125,6 +144,7 @@ function SidebarBody({
   onNavigate?: () => void;
 }) {
   const { workspaceId, role, setWorkspace } = useSession();
+  const openTasks = useOpenTaskCount(workspaceId);
   const navigate = useNavigate();
   const workspaces = me?.workspaces ?? [];
   const current = workspaces.find((w) => w.id === workspaceId);
@@ -154,7 +174,13 @@ function SidebarBody({
       )}
 
       <nav className={cn("flex-1 space-y-0.5 overflow-y-auto", compact ? "px-2" : "px-3")}>
-        <NavItems items={NAV} compact={compact} role={role} onNavigate={onNavigate} />
+        <NavItems
+          items={NAV}
+          compact={compact}
+          role={role}
+          onNavigate={onNavigate}
+          badges={{ "/tasks": openTasks.data?.open ?? 0 }}
+        />
         {!compact && <ProjectsSection myUserId={me?.id} onNavigate={onNavigate} />}
       </nav>
 

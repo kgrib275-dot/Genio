@@ -27,3 +27,16 @@ def post_message(params: dict[str, Any], secrets: dict[str, Any], net: Any) -> d
         code = body.get("error", "unknown") if isinstance(body, dict) else "unknown"
         raise NodeError(ERRORS.get(code, "슬랙에 메시지를 보내지 못했어요(" + str(code) + ")."), retryable=code == "ratelimited")
     return {"ts": body.get("ts", ""), "channel": body.get("channel", params["channel"])}
+
+
+def test(secrets: dict[str, Any], net: Any) -> dict[str, Any]:
+    res = net.http(
+        "POST",
+        "https://slack.com/api/auth.test",
+        headers={"Authorization": "Bearer " + str(secrets.get("bot_token", ""))},
+    )
+    body = res.get("body") or {}
+    if not isinstance(body, dict) or not body.get("ok"):
+        code = body.get("error", "unknown") if isinstance(body, dict) else "unknown"
+        raise NodeError(ERRORS.get(code, "슬랙 연결을 확인하지 못했어요(" + str(code) + ")."))
+    return {"message": "슬랙에 연결됐어요: " + str(body.get("team", "")) + " / " + str(body.get("user", ""))}

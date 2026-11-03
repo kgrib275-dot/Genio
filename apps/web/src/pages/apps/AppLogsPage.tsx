@@ -1,5 +1,8 @@
 import {
   ArrowLeft,
+  CheckCircle2,
+  Headset,
+  Send,
   ChevronLeft,
   ChevronRight,
   Search,
@@ -13,6 +16,7 @@ import {
   ThumbsUp,
   Trash2,
 } from "lucide-react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { ErrorBox, Loading } from "@/components/ErrorBox";
@@ -38,6 +42,7 @@ import { cn, formatDate, timeAgo } from "@/lib/cn";
 import { PAGE_SIZES, useListControls, type FilterDef } from "@/lib/useListControls";
 import { AppNav } from "@/pages/apps/AppNav";
 import { canEdit, useSession } from "@/store/session";
+import { useAgentReply, useCloseHandoff, useHandoffConversations } from "@/lib/api/v5a";
 
 function ratingOf(m: ConversationMessage): Rating | null {
   const f = m.feedback;
@@ -145,12 +150,17 @@ function ConversationView({
               className={cn("flex", m.role === "user" ? "justify-end" : "justify-start")}
             >
               <div className="max-w-[88%] space-y-1">
+                {(m.role as string) === "agent" && (
+                  <p className="text-[11px] font-semibold text-emerald-700">상담원</p>
+                )}
                 <div
                   className={cn(
                     "whitespace-pre-wrap rounded-2xl px-3.5 py-2 text-sm",
                     m.role === "user"
                       ? "rounded-br-md bg-indigo-600 text-white"
-                      : "rounded-bl-md border border-slate-200 bg-white text-slate-800",
+                      : (m.role as string) === "agent"
+                        ? "rounded-bl-md border border-emerald-200 bg-emerald-50 text-slate-800"
+                        : "rounded-bl-md border border-slate-200 bg-white text-slate-800",
                   )}
                 >
                   {m.content}
@@ -207,6 +217,117 @@ function ConversationView({
         <AnnotationDialog appId={appId} open onClose={() => setDraft(null)} initial={draft} />
       )}
     </Card>
+  );
+}
+
+// ---------------- v0.5 상담원 응대 ----------------
+function Handoffs({ appId, editable }: { appId: string; editable: boolean }) {
+  const list = useHandoffConversations(appId);
+  const [open, setOpen] = useState<string | null>(null);
+  const [text, setText] = useState("");
+  const reply = useAgentReply(appId);
+  const close = useCloseHandoff(appId);
+  const qc = useQueryClient();
+  // 방문자가 새로 쓴 말을 보도록 열린 대화는 5초마다 다시 읽는다
+  useEffect(() => {
+    if (!open) return;
+    const t = window.setInterval(
+      () => void qc.invalidateQueries({ queryKey: ["conversation-messages", open] }),
+      5000,
+    );
+    return () => window.clearInterval(t);
+  }, [open, qc]);
+
+  if (open)
+    return (
+      <div className="space-y-3">
+        <ConversationView
+          appId={appId}
+          conversationId={open}
+          onBack={() => setOpen(null)}
+          editable={editable}
+        />
+        <Card className="p-3">
+          <form
+            className="flex items-end gap-2"
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (!text.trim()) return;
+              reply.mutate(
+                { conversationId: open, content: text },
+                { onSuccess: () => setText(""), onError: (err) => toast.error(err) },
+              );
+            }}
+          >
+            <Textarea
+              aria-label="상담원 답"
+              rows={2}
+              className="min-h-[44px] flex-1"
+              placeholder="방문자에게 보낼 답을 적으세요"
+              value={text}
+              onChange={(e) => setText(e.target.value)}
+            />
+            <Button type="submit" disabled={reply.isPending || !text.trim()}>
+              <Send className="h-4 w-4" /> 보내기
+            </Button>
+          </form>
+          <div className="mt-2 flex justify-end">
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={close.isPending}
+              onClick={() =>
+                close.mutate(open, {
+                  onSuccess: () => {
+                    toast.success("상담을 마쳤어요. 이제 챗봇이 다시 답해요.");
+                    setOpen(null);
+                  },
+                  onError: (err) => toast.error(err),
+                })
+              }
+            >
+              <CheckCircle2 className="h-4 w-4" /> 상담 마치기
+            </Button>
+          </div>
+        </Card>
+      </div>
+    );
+  return (
+    <div className="space-y-3">
+      {list.isLoading && <Loading />}
+      <ErrorBox error={list.error} />
+      {list.data && list.data.length === 0 ? (
+        <Empty icon={<Headset className="h-6 w-6" />}>
+          상담원을 기다리는 대화가 없어요. 앱의 기능 설정에서 '상담원 연결'을 켜면 방문자가 사람에게
+          넘길 수 있어요.
+        </Empty>
+      ) : (
+        <Card className="overflow-hidden">
+          <ul className="divide-y divide-slate-100">
+            {(list.data ?? []).map((c) => (
+              <li key={c.id}>
+                <button
+                  type="button"
+                  onClick={() => setOpen(c.id)}
+                  className="flex w-full flex-wrap items-center gap-x-3 gap-y-1 px-4 py-3 text-left hover:bg-slate-50"
+                >
+                  <Badge tone="amber">
+                    <Headset className="h-3 w-3" /> 기다리는 중
+                  </Badge>
+                  <span className="min-w-0 flex-1 basis-48 truncate text-sm font-medium">
+                    {c.first_question || "(첫 질문 없음)"}
+                  </span>
+                  <span className="text-xs text-slate-500">{c.user_name ?? "방문자"}</span>
+                  <span className="text-xs text-slate-400">
+                    {timeAgo(c.last_message_at ?? c.created_at)}
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      )}
+    </div>
   );
 }
 
@@ -513,8 +634,9 @@ export default function AppLogsPage() {
   const { id: appId = "" } = useParams();
   const role = useSession((s) => s.role);
   const app = useApp(appId);
-  const [tab, setTab] = useState<"conversations" | "annotations">("conversations");
+  const [tab, setTab] = useState<"conversations" | "handoff" | "annotations">("conversations");
   const editable = canEdit(role);
+  const waiting = useHandoffConversations(appId).data?.length ?? 0;
   return (
     <div className="flex min-h-full flex-col">
       <AppNav appId={appId} title={app.data?.name ?? ""} icon={app.data?.icon} help="logs" />
@@ -525,6 +647,10 @@ export default function AppLogsPage() {
             onChange={setTab}
             items={[
               { value: "conversations", label: "대화" },
+              {
+                value: "handoff" as const,
+                label: waiting > 0 ? `상담원 응대 (${waiting})` : "상담원 응대",
+              },
               ...(editable ? [{ value: "annotations" as const, label: "주석" }] : []),
             ]}
           />
@@ -537,6 +663,8 @@ export default function AppLogsPage() {
         </div>
         {tab === "conversations" ? (
           <Conversations appId={appId} editable={editable} />
+        ) : tab === "handoff" ? (
+          <Handoffs appId={appId} editable={editable} />
         ) : (
           <Annotations appId={appId} editable={editable} />
         )}

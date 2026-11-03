@@ -20,6 +20,7 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from api.builder import metrics
 from api.builder.graph_summary import summarize
 from api.builder.tools import STOP_TOOLS, TOOL_DEFS, BuilderToolbox
 from api.config import get_settings
@@ -184,6 +185,8 @@ def _agent(
         session_id=session_id, role="user", content=_user_text(db, content, event)
     )
     db.add(user_msg)
+    if not (event and event.get("type") == "installed" and not content.strip()):
+        metrics.on_user_turn(sess)  # 설치 알림만 온 경우는 사용자 차례로 세지 않는다
     db.commit()
     emit("user_message", message_dict(user_msg))
 
@@ -280,11 +283,13 @@ def _agent(
             )
             if ops:
                 record["ops"].extend(ops)
+                metrics.on_builder_ops(sess, len(ops))
                 changed_since_validate = True
                 db.refresh(app)
                 emit("graph_patch", {"ops": ops, "graph": app.draft_graph})
             if call.name == "validate" and outcome_ok and result.get("valid"):
                 changed_since_validate = False
+                metrics.on_validate_ok(sess)
             if ev is not None:
                 name, payload = ev
                 emit(name, payload)

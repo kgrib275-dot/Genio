@@ -27,3 +27,17 @@ def send_email(params: dict[str, Any], secrets: dict[str, Any], net: Any) -> dic
         subject=str(params["subject"]),
         body=str(params["body"]),
     )
+
+
+def test(secrets: dict[str, Any], net: Any) -> dict[str, Any]:
+    try:
+        port = int(secrets.get("port", 587))
+    except (TypeError, ValueError) as exc:
+        raise NodeError("메일 서버 포트는 숫자여야 해요. 연결 정보를 확인하세요.") from exc
+    net.check_mail(
+        host=str(secrets.get("host", "")),
+        port=port,
+        username=str(secrets.get("username", "")),
+        password=str(secrets.get("password", "")),
+    )
+    return {"message": "메일 서버에 로그인했어요."}

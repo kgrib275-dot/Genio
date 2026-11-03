@@ -132,8 +132,8 @@ export function FailureSettings({
           )}
           {onError === "branch" && (
             <p className="text-slate-500">
-              노드 오른쪽에 &apos;실패 시&apos; 출구가 생겨요. 실패 내용은 {"{{노드id.error}}"}로 쓸
-              수 있어요.
+              단계 오른쪽에 &apos;실패 시&apos; 출구가 생겨요. 실패 내용은 &apos;값 끌어오기&apos;의
+              오류 항목으로 쓸 수 있어요.
             </p>
           )}
         </div>

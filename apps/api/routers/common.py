@@ -1,9 +1,11 @@
 """라우터 공통 도우미."""
 
+import ipaddress
 import json
 from collections.abc import Iterator
 from datetime import datetime
 from decimal import Decimal
+from functools import lru_cache
 from typing import Any
 from urllib.parse import urlparse
 
@@ -43,11 +45,41 @@ def sse_response(frames: Iterator[str]) -> StreamingResponse:
     )
 
 
+@lru_cache(maxsize=8)
+def _trusted_networks(spec: str) -> tuple[ipaddress.IPv4Network | ipaddress.IPv6Network, ...]:
+    nets = []
+    for part in spec.split(","):
+        part = part.strip()
+        if not part:
+            continue
+        try:
+            nets.append(ipaddress.ip_network(part, strict=False))
+        except ValueError:
+            continue
+    return tuple(nets)
+
+
+def _is_trusted(ip: str) -> bool:
+    try:
+        addr = ipaddress.ip_address(ip.strip().strip("[]"))
+    except ValueError:
+        return False
+    return any(addr in n for n in _trusted_networks(get_settings().genio_trusted_proxies))
+
+
 def client_ip(request: Request) -> str:
-    fwd = request.headers.get("x-forwarded-for")
-    if fwd:
-        return fwd.split(",")[0].strip()
-    return request.client.host if request.client else "unknown"
+    """요청한 사람의 IP. X-Forwarded-For는 믿을 수 있는 프록시(nginx·tailscale 등)를
+    거쳐 온 경우에만 쓰고, 오른쪽부터 처음 만나는 믿을 수 없는 주소를 고른다.
+    클라이언트가 헤더를 꾸며 보내도 속도 제한을 피할 수 없다(부하 시험 보고서 §4)."""
+    peer = request.client.host if request.client else "unknown"
+    if not _is_trusted(peer):
+        return peer
+    fwd = request.headers.get("x-forwarded-for", "")
+    hops = [h.strip() for h in fwd.split(",") if h.strip()]
+    for hop in reversed(hops):
+        if not _is_trusted(hop):
+            return hop
+    return hops[0] if hops else peer
 
 
 def public_origin(request: Request) -> str:

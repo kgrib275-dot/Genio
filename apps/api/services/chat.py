@@ -244,7 +244,9 @@ def run_chat(
         if app is None or graph is None or conv is None:
             early = [("error", {"message": "앱을 찾을 수 없어요.", "hint": "링크를 확인하세요."})]
         else:
-            early = _answer_without_run(db, app, conv, message, started)
+            early = _handoff_events(db, app, conv, message, started)
+            if early is None:
+                early = _answer_without_run(db, app, conv, message, started)
             if early is None:
                 run_id, stream_deltas = _start_run(
                     db, app, version, conv, graph, inputs, message, files, trigger, user_id
@@ -274,6 +276,54 @@ def _save_reply(db: Session, conv_id: str, text: str, started: float, **extra: A
     db.add(m)
     db.commit()
     return m
+
+
+def wants_handoff(features: dict[str, Any], message: str) -> bool:
+    cfg = features.get("handoff") or {}
+    if not cfg.get("enabled") or not message:
+        return False
+    text = message.replace(" ", "")
+    return any(str(k).replace(" ", "") in text for k in cfg.get("keywords") or [] if str(k).strip())
+
+
+def start_handoff(db: Session, app: App, conv: Conversation, started: float) -> Message:
+    """대화를 상담원에게 넘긴다: 상태를 바꾸고 안내 답을 남긴다."""
+    features = merged_features(app.features)
+    msg = str((features.get("handoff") or {}).get("message") or "상담원을 연결해 드릴게요.")
+    conv.status = "handoff"
+    m = _save_reply(db, conv.id, msg, started)
+    from api.core.audit import audit
+
+    audit(
+        db,
+        workspace_id=app.workspace_id,
+        user_id=None,
+        action="conversation.handoff",
+        target_type="conversation",
+        target_id=conv.id,
+    )
+    db.commit()
+    return m
+
+
+def _handoff_events(
+    db: Session, app: App, conv: Conversation, message: str, started: float
+) -> list[Event] | None:
+    """상담원 전환 중이면 봇은 답하지 않는다(받은 말은 이미 저장돼 상담원이 본다)."""
+    done_base = {"session_id": conv.external_session_id, "run_id": None}
+    if conv.status == "handoff":
+        return [
+            ("handoff", {"message": "상담원에게 전달했어요. 답이 오면 여기에 보여 드릴게요."}),
+            ("done", {**done_base, "status": "handoff", "message_id": None}),
+        ]
+    features = merged_features(app.features)
+    if wants_handoff(features, message):
+        m = start_handoff(db, app, conv, started)
+        return [
+            ("handoff", {"message": m.content, "message_id": m.id}),
+            ("done", {**done_base, "status": "handoff", "message_id": m.id}),
+        ]
+    return None
 
 
 def _answer_without_run(
@@ -444,7 +494,12 @@ def _check_run(
     if status == "succeeded":
         answer = str((r.output or {}).get("text", "")) or "(답이 비어 있어요)"
     elif status == "waiting_approval":
-        answer = "담당자의 승인을 기다리고 있어요. 승인되면 처리돼요."
+        kind = str((r.approval or {}).get("kind") or "approval")
+        answer = (
+            "담당자의 승인을 기다리고 있어요. 결과가 나오면 이 대화에 알려 드릴게요."
+            if kind == "approval"
+            else "담당자의 확인을 기다리고 있어요. 끝나면 이 대화에 결과를 알려 드릴게요."
+        )
     else:
         answer = ""
     if not answer:
@@ -488,6 +543,9 @@ def _check_run(
     ]
     if cites:
         events_out.append(("citations", cites))
+    if status == "waiting_approval":
+        # 챗 화면은 이 신호를 받으면 지난 메시지를 주기적으로 다시 읽어 늦게 온 결과를 보여 준다
+        events_out.append(("pending", {"run_id": run_id, "message": answer}))
     follow = (
         (app.workspace_id, answer)
         if features["follow_up"]["enabled"] and status == "succeeded" and not was_moderated

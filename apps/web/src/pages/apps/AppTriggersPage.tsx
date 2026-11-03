@@ -43,6 +43,8 @@ import {
   type SchedulePreset,
 } from "@/lib/cron";
 import { useListControls } from "@/lib/useListControls";
+import { DataView } from "@/components/DataView";
+import { useRotateTriggerSecret, useTriggerPayloads, type TriggerWithSecret } from "@/lib/api/v5b";
 import { AppNav } from "@/pages/apps/AppNav";
 import { canEdit, canViewRuns, useSession } from "@/store/session";
 
@@ -110,6 +112,75 @@ function when(iso: string | null): string {
 function curlExample(url: string, fields: string[]): string {
   const body = Object.fromEntries((fields.length ? fields : ["message"]).map((k) => [k, "값"]));
   return `curl -X POST '${url}' \\\n  -H 'Content-Type: application/json' \\\n  -d '${JSON.stringify(body)}'`;
+}
+
+function signedCurlExample(url: string, fields: string[]): string {
+  const body = JSON.stringify(
+    Object.fromEntries((fields.length ? fields : ["message"]).map((k) => [k, "값"])),
+  );
+  return [
+    "# 1) 보낼 내용과 지금 시각(초)",
+    `BODY='${body}'`,
+    "TS=$(date +%s)",
+    "# 2) 서명 = HMAC-SHA256(비밀값, 시각.내용)",
+    'SIG=$(printf "%s.%s" "$TS" "$BODY" | openssl dgst -sha256 -hmac "$GENIO_SECRET" | sed "s/^.* //")',
+    `curl -X POST '${url}' \\`,
+    "  -H 'Content-Type: application/json' \\",
+    '  -H "X-Genio-Timestamp: $TS" \\',
+    '  -H "X-Genio-Signature: sha256=$SIG" \\',
+    '  -d "$BODY"',
+  ].join("\n");
+}
+
+/** 서명 비밀값: 이번 한 번만 보여 준다 */
+function SecretOnce({ secret, onDone }: { secret: string; onDone?: () => void }) {
+  return (
+    <div className="space-y-2 rounded-lg border border-amber-300 bg-amber-50 p-3">
+      <p className="text-xs font-medium text-amber-900">
+        서명 비밀값이에요. 이 창을 닫으면 다시 볼 수 없어요. 보내는 쪽 서비스에 저장해 두세요.
+      </p>
+      <CopyBox text={secret} label="비밀값" />
+      {onDone && (
+        <Button size="sm" onClick={onDone}>
+          저장해 뒀어요
+        </Button>
+      )}
+    </div>
+  );
+}
+
+/** 최근 받은 값(최대 5개). 인증·서명 헤더는 저장하지 않아요. */
+function Payloads({ triggerId }: { triggerId: string }) {
+  const q = useTriggerPayloads(triggerId);
+  if (q.isLoading) return <Loading />;
+  if (q.error) return <ErrorBox error={q.error} />;
+  const list = q.data ?? [];
+  if (list.length === 0)
+    return (
+      <p className="text-xs text-slate-500">아직 받은 값이 없어요. 위 예시로 한 번 보내 보세요.</p>
+    );
+  return (
+    <ul className="space-y-2">
+      {list.map((p, i) => (
+        <li key={`${p.received_at}-${i}`} className="rounded-lg border border-slate-200 p-2">
+          <div className="mb-1 flex flex-wrap items-center gap-2 text-xs">
+            <Badge tone={p.accepted ? "green" : "red"}>{p.accepted ? "받음" : "거절"}</Badge>
+            <span className="text-slate-500">
+              {new Date(p.received_at).toLocaleString("ko-KR")}
+            </span>
+            {p.note && <span className="text-red-700">{p.note}</span>}
+            {p.run_id && (
+              <Link to={`/runs/${p.run_id}`} className="text-indigo-600 hover:underline">
+                실행 보기
+              </Link>
+            )}
+            {p.truncated && <span className="text-slate-400">(4KB까지만 저장)</span>}
+          </div>
+          <DataView value={p.body} />
+        </li>
+      ))}
+    </ul>
+  );
 }
 
 function Toggle({
@@ -187,6 +258,10 @@ function TriggerDialog({
   const cfg = editing?.config ?? {};
   const [name, setName] = useState(editing?.name ?? "");
   const [mode, setMode] = useState<"async" | "sync">(cfg.mode ?? "async");
+  const [signed, setSigned] = useState<boolean>(
+    Boolean((cfg as { require_signature?: boolean }).require_signature),
+  );
+  const [secret, setSecret] = useState<string | null>(null);
   const [version, setVersion] = useState<string>(cfg.version ? String(cfg.version) : "");
   const [sched, setSched] = useState<ScheduleForm>(
     cfg.cron ? formFromCron(cfg.cron) : DEFAULT_SCHEDULE,
@@ -204,11 +279,13 @@ function TriggerDialog({
     const ver = version ? Number(version) : null;
     const config: NewTrigger["config"] =
       kind === "webhook"
-        ? { mode, version: ver }
+        ? ({ mode, version: ver, require_signature: signed } as NewTrigger["config"])
         : { cron, timezone: tz, input: inputFrom(rows), version: ver };
-    const done = () => {
+    const done = (t: Trigger) => {
       toast.success(editing ? "자동 실행을 고쳤어요." : "자동 실행을 만들었어요.");
-      onClose();
+      const sec = (t as TriggerWithSecret).secret;
+      if (sec) setSecret(sec);
+      else onClose();
     };
     if (editing) update.mutate({ id: editing.id, name, config }, { onSuccess: done });
     else create.mutate({ kind, name, enabled: true, config }, { onSuccess: done });
@@ -247,6 +324,24 @@ function TriggerDialog({
           />
         </Field>
 
+        {secret && <SecretOnce secret={secret} onDone={onClose} />}
+        {kind === "webhook" && (
+          <label className="flex cursor-pointer items-start gap-2 rounded-lg border border-slate-200 px-3 py-2">
+            <input
+              type="checkbox"
+              checked={signed}
+              onChange={(e) => setSigned(e.target.checked)}
+              className="mt-0.5 accent-indigo-600"
+            />
+            <span>
+              <span className="block text-sm font-medium text-slate-800">서명 확인 켜기(추천)</span>
+              <span className="block text-xs text-slate-500">
+                보내는 쪽이 비밀값으로 만든 서명(X-Genio-Signature)이 맞을 때만 받아요. 주소가 새어
+                나가도 남이 흐름을 실행할 수 없어요.
+              </span>
+            </span>
+          </label>
+        )}
         {kind === "webhook" ? (
           <fieldset className="space-y-1.5">
             <legend className="mb-1 text-xs font-medium text-slate-600">응답 방식</legend>
@@ -472,6 +567,10 @@ function TriggerItem({
   const runNow = useRunTriggerNow(appId);
   const del = useDeleteTrigger(appId);
   const [showCurl, setShowCurl] = useState(false);
+  const [showPayloads, setShowPayloads] = useState(false);
+  const [secret, setSecret] = useState<string | null>(null);
+  const rotateSecret = useRotateTriggerSecret(appId);
+  const signed = Boolean((t.config as { require_signature?: boolean }).require_signature);
   const isHook = t.kind === "webhook";
   const Icon = isHook ? Webhook : CalendarClock;
   const input = (t.config.input ?? {}) as Record<string, unknown>;
@@ -539,7 +638,62 @@ function TriggerItem({
               </Button>
             )}
           </div>
-          {showCurl && <CopyBox text={curlExample(t.url, inputKeys)} label="예시" />}
+          {showCurl && (
+            <CopyBox
+              text={signed ? signedCurlExample(t.url, inputKeys) : curlExample(t.url, inputKeys)}
+              label="예시"
+            />
+          )}
+          <div className="flex flex-wrap items-center gap-2 rounded-lg bg-slate-50 px-3 py-2 text-xs">
+            <span className="font-medium text-slate-700">서명 확인</span>
+            <Toggle
+              label={signed ? "서명 확인 끄기" : "서명 확인 켜기"}
+              checked={signed}
+              disabled={!editable || update.isPending}
+              onChange={(v) =>
+                update.mutate(
+                  { id: t.id, config: { require_signature: v } as NewTrigger["config"] },
+                  {
+                    onSuccess: (res) => {
+                      const sec = (res as TriggerWithSecret).secret;
+                      if (sec) setSecret(sec);
+                    },
+                    onError: (err) => toast.error(err),
+                  },
+                )
+              }
+            />
+            <span className="text-slate-500">
+              {signed ? "서명이 맞는 요청만 받아요." : "주소만 알면 누구나 보낼 수 있어요."}
+            </span>
+            {editable && signed && (
+              <Button
+                size="sm"
+                variant="ghost"
+                disabled={rotateSecret.isPending}
+                onClick={() => {
+                  if (
+                    window.confirm(
+                      "비밀값을 새로 만들까요? 예전 비밀값으로 만든 서명은 바로 거절돼요.",
+                    )
+                  )
+                    rotateSecret.mutate(t.id, {
+                      onSuccess: (res) => setSecret(res.secret ?? null),
+                      onError: (err) => toast.error(err),
+                    });
+                }}
+              >
+                <RefreshCw className="h-3.5 w-3.5" /> 비밀값 새로 만들기
+              </Button>
+            )}
+          </div>
+          {secret && <SecretOnce secret={secret} onDone={() => setSecret(null)} />}
+          {editable && (
+            <Button size="sm" variant="ghost" onClick={() => setShowPayloads((v) => !v)}>
+              {showPayloads ? "받은 값 접기" : "최근 받은 값 보기"}
+            </Button>
+          )}
+          {showPayloads && <Payloads triggerId={t.id} />}
           <p className="text-[11px] text-slate-400">
             이 주소를 아는 누구나 흐름을 실행할 수 있어요. 비밀번호처럼 다루세요.
           </p>

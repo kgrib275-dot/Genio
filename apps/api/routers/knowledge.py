@@ -1,6 +1,7 @@
 """지식베이스: 목록·생성·삭제, 문서 업로드(→ 워커에서 청킹·임베딩), 디버그 검색."""
 
 import json
+import re
 from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Depends, File, Response, UploadFile
@@ -10,8 +11,9 @@ from sqlalchemy import func, select
 from api.config import get_settings
 from api.core.audit import audit
 from api.core.errors import AppError, not_found
-from api.deps import EDIT_APPS, VIEW_RUNS, Ctx, require_role
+from api.deps import EDIT_APPS, VIEW_RUNS, Ctx, CurrentUser, require_role
 from api.engine import safe_http
+from api.llm.catalog import catalog
 from api.models import Chunk, Document, KnowledgeBase
 from api.routers.projects import check_project_target
 from api.services import knowledge as svc
@@ -62,6 +64,26 @@ class KbIn(BaseModel):
     name: str = Field(min_length=1, max_length=100)
     chunk_size: int = Field(default=800, ge=200, le=4000)
     project_id: str | None = None
+    # 지식베이스마다 고정(만든 뒤에는 바꿀 수 없음 — 바꾸면 이미 만든 조각과 비교할 수 없다)
+    embedding_model: str | None = Field(default=None, max_length=100)
+
+
+def _embedding_model(name: str | None) -> str:
+    model = (name or "").strip() or get_settings().genio_embedding_model
+    if not re.fullmatch(r"[A-Za-z0-9._:/-]{1,100}", model):
+        raise AppError(
+            422,
+            "임베딩 모델 이름이 올바르지 않아요.",
+            "목록에서 고르거나 영문 모델 이름을 적으세요.",
+        )
+    return model
+
+
+@router.get("/llm/embedding-models")
+def embedding_models(user: CurrentUser) -> list[dict[str, Any]]:
+    """지식베이스를 만들 때 고를 수 있는 임베딩 모델(카탈로그)."""
+    del user
+    return [m for m in catalog() if m["embedding"]]
 
 
 @router.post("/workspaces/{ws}/knowledge-bases")
@@ -71,7 +93,7 @@ def create_kb(ws: str, body: KbIn, ctx: WsBuilders) -> dict[str, Any]:
         project_id=body.project_id or None,
         workspace_id=ws,
         name=body.name,
-        embedding_model=get_settings().genio_embedding_model,
+        embedding_model=_embedding_model(body.embedding_model),
         chunk_size=body.chunk_size,
     )
     ctx.db.add(kb)
@@ -121,6 +143,7 @@ def _doc(d: Document, chunks: int) -> dict[str, Any]:
         "metadata": d.doc_metadata or {},
         "source": d.source,
         "url": d.url,
+        "enabled": d.enabled,
     }
 
 
@@ -132,7 +155,9 @@ async def upload_document(
     mime = file.content_type or "application/octet-stream"
     if svc.kind_of(filename, mime) is None:
         raise AppError(
-            415, "PDF, TXT, MD 파일만 올릴 수 있어요.", "파일 형식을 바꿔서 다시 올려 주세요."
+            415,
+            "PDF·DOCX·PPTX·XLSX·HTML·TXT·MD 파일만 올릴 수 있어요.",
+            "파일 형식을 바꿔서 다시 올려 주세요.",
         )
     content = await file.read(svc.MAX_UPLOAD_BYTES + 1)
     if len(content) > svc.MAX_UPLOAD_BYTES:
@@ -306,7 +331,9 @@ def import_url(kb_id: str, body: UrlIn, ctx: KbBuilders) -> dict[str, Any]:
 
 
 class DocPatch(BaseModel):
-    metadata: dict[str, str] = Field(default_factory=dict)
+    metadata: dict[str, str] | None = None
+    # 문서 켜기·끄기(끄면 검색에서 빠짐)
+    enabled: bool | None = None
 
 
 @router.patch("/documents/{document_id}")
@@ -314,9 +341,21 @@ def update_document(document_id: str, body: DocPatch, ctx: DocBuilders) -> dict[
     doc = ctx.db.get(Document, document_id)
     if doc is None:
         raise not_found("문서")
-    doc.doc_metadata = {
-        str(k)[:50]: str(v)[:200] for k, v in list(body.metadata.items())[:30] if str(k).strip()
-    }
+    if body.metadata is not None:
+        doc.doc_metadata = {
+            str(k)[:50]: str(v)[:200] for k, v in list(body.metadata.items())[:30] if str(k).strip()
+        }
+    if body.enabled is not None:
+        doc.enabled = body.enabled
+        audit(
+            ctx.db,
+            workspace_id=ctx.workspace_id,
+            user_id=ctx.user.id,
+            action="kb.document_toggle",
+            target_type="document",
+            target_id=doc.id,
+            meta={"filename": doc.filename, "enabled": body.enabled},
+        )
     ctx.db.commit()
     count = ctx.db.scalar(select(func.count(Chunk.id)).where(Chunk.document_id == doc.id)) or 0
     return _doc(doc, count)

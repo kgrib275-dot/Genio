@@ -1,4 +1,4 @@
-import { Copy, Download, Palette, RotateCcw } from "lucide-react";
+import { Copy, Download, Palette, RotateCcw, UserCheck } from "lucide-react";
 import { useEffect, useState, type FormEvent } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { JsonView } from "@/components/canvas/RunPanel";
@@ -14,7 +14,6 @@ import { ko } from "@/i18n/ko";
 import {
   fetchVersion,
   useApp,
-  useCreateDeployment,
   useDeleteApp,
   useDeleteDeployment,
   useDeployments,
@@ -34,6 +33,12 @@ import { copyText, downloadJson, formatDate } from "@/lib/cn";
 import { useListControls } from "@/lib/useListControls";
 import type { DeploymentV4 } from "@/lib/api/chat";
 import { useProjects } from "@/lib/api/v3";
+import {
+  useCreateDeploymentWithUsers,
+  useUpdateDeploymentAccess,
+  type DeploymentWithUsers,
+} from "@/lib/api/v5a";
+import { useMembers } from "@/lib/api/workspace";
 import { canEdit, useSession } from "@/store/session";
 import { AppNav } from "@/pages/apps/AppNav";
 
@@ -45,7 +50,7 @@ const CHANNEL_LABEL: Record<Channel, string> = {
 
 const ACCESS_LABEL: Record<Access, string> = {
   workspace: "우리 워크스페이스 멤버",
-  roles: "정한 역할만",
+  roles: "정한 역할·사람만",
   public: "누구나(로그인 없이)",
 };
 
@@ -65,6 +70,128 @@ function CopyRow({ label, value }: { label: string; value: string }) {
           }}
         >
           {ko.common.copy}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+/** 배포 대상: 역할 + 특정 사람(둘 중 하나만 맞아도 쓸 수 있음) */
+function AudiencePicker({
+  roles,
+  onRoles,
+  users,
+  onUsers,
+}: {
+  roles: Role[];
+  onRoles: (r: Role[]) => void;
+  users: string[];
+  onUsers: (u: string[]) => void;
+}) {
+  const ws = useSession((s) => s.workspaceId);
+  const members = useMembers(ws);
+  const [q, setQ] = useState("");
+  const list = (members.data ?? []).filter((m) =>
+    `${m.name} ${m.email}`.toLowerCase().includes(q.trim().toLowerCase()),
+  );
+  return (
+    <div className="space-y-3">
+      <fieldset>
+        <legend className="text-sm font-medium text-slate-700">허용할 역할</legend>
+        <div className="mt-1 flex flex-wrap gap-3">
+          {ROLES.map((r) => (
+            <label key={r} className="flex items-center gap-1 text-sm">
+              <input
+                type="checkbox"
+                checked={roles.includes(r)}
+                onChange={(e) =>
+                  onRoles(e.target.checked ? [...roles, r] : roles.filter((x) => x !== r))
+                }
+              />
+              {ko.roles[r]}
+            </label>
+          ))}
+        </div>
+      </fieldset>
+      <fieldset>
+        <legend className="text-sm font-medium text-slate-700">
+          허용할 사람 <span className="font-normal text-slate-400">({users.length}명 고름)</span>
+        </legend>
+        <Input
+          className="mt-1"
+          aria-label="사람 찾기"
+          placeholder="이름·이메일로 찾기"
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+        />
+        <ul className="mt-1 max-h-40 overflow-y-auto rounded-md border border-slate-200 bg-white">
+          {list.map((m) => (
+            <li key={m.user_id}>
+              <label className="flex cursor-pointer items-center gap-2 px-2.5 py-1.5 text-sm hover:bg-slate-50">
+                <input
+                  type="checkbox"
+                  checked={users.includes(m.user_id)}
+                  onChange={(e) =>
+                    onUsers(
+                      e.target.checked
+                        ? [...users, m.user_id]
+                        : users.filter((x) => x !== m.user_id),
+                    )
+                  }
+                />
+                <span className="min-w-0 flex-1 truncate">{m.name}</span>
+                <span className="truncate text-xs text-slate-400">{m.email}</span>
+              </label>
+            </li>
+          ))}
+          {members.data && list.length === 0 && (
+            <li className="px-2.5 py-2 text-xs text-slate-400">찾는 사람이 없어요.</li>
+          )}
+        </ul>
+        <p className="mt-1 text-xs text-slate-500">
+          고른 역할이거나 고른 사람이면 쓸 수 있어요. 소유자는 늘 쓸 수 있어요.
+        </p>
+      </fieldset>
+    </div>
+  );
+}
+
+function AccessEditor({
+  appId,
+  dep,
+  onClose,
+}: {
+  appId: string;
+  dep: DeploymentWithUsers;
+  onClose: () => void;
+}) {
+  const update = useUpdateDeploymentAccess(appId);
+  const [roles, setRoles] = useState<Role[]>(dep.allowed_roles ?? []);
+  const [users, setUsers] = useState<string[]>(dep.allowed_users ?? []);
+  return (
+    <div className="mt-3 space-y-2 rounded-md bg-slate-50 p-3">
+      <AudiencePicker roles={roles} onRoles={setRoles} users={users} onUsers={setUsers} />
+      <ErrorBox error={update.error} />
+      <div className="flex justify-end gap-2">
+        <Button size="sm" variant="outline" onClick={onClose}>
+          취소
+        </Button>
+        <Button
+          size="sm"
+          disabled={update.isPending}
+          onClick={() =>
+            update.mutate(
+              { id: dep.id, access: "roles", allowed_roles: roles, allowed_users: users },
+              {
+                onSuccess: () => {
+                  toast.success("쓸 수 있는 사람을 바꿨어요.");
+                  onClose();
+                },
+              },
+            )
+          }
+        >
+          저장
         </Button>
       </div>
     </div>
@@ -102,7 +229,9 @@ function DeploymentsCard({ appId, editable }: { appId: string; editable: boolean
     ],
   });
   const versions = useVersions(appId);
-  const create = useCreateDeployment(appId);
+  const create = useCreateDeploymentWithUsers(appId);
+  const [editingAccess, setEditingAccess] = useState<string | null>(null);
+  const [users, setUsers] = useState<string[]>([]);
   const remove = useDeleteDeployment(appId);
   const [channel, setChannel] = useState<Channel>("share_link");
   const [access, setAccess] = useState<Access>("workspace");
@@ -116,6 +245,7 @@ function DeploymentsCard({ appId, editable }: { appId: string; editable: boolean
         channel,
         access,
         allowed_roles: access === "roles" ? roles : undefined,
+        allowed_users: access === "roles" ? users : undefined,
         version: version ? Number(version) : undefined,
       },
       { onSuccess: () => toast.success("배포했어요.") },
@@ -165,23 +295,9 @@ function DeploymentsCard({ appId, editable }: { appId: string; editable: boolean
               </Select>
             </Field>
             {access === "roles" && (
-              <fieldset>
-                <legend className="text-sm font-medium text-slate-700">허용할 역할</legend>
-                <div className="mt-1 flex flex-wrap gap-3">
-                  {ROLES.map((r) => (
-                    <label key={r} className="flex items-center gap-1 text-sm">
-                      <input
-                        type="checkbox"
-                        checked={roles.includes(r)}
-                        onChange={(e) =>
-                          setRoles(e.target.checked ? [...roles, r] : roles.filter((x) => x !== r))
-                        }
-                      />
-                      {ko.roles[r]}
-                    </label>
-                  ))}
-                </div>
-              </fieldset>
+              <div className="md:col-span-2">
+                <AudiencePicker roles={roles} onRoles={setRoles} users={users} onUsers={setUsers} />
+              </div>
             )}
             <div className="md:col-span-2">
               <ErrorBox error={create.error} />
@@ -208,9 +324,25 @@ function DeploymentsCard({ appId, editable }: { appId: string; editable: boolean
               <Badge>버전 {d.version}</Badge>
               <span className="text-sm text-slate-600">
                 {ACCESS_LABEL[d.access]}
-                {d.access === "roles" && ` (${d.allowed_roles.map((r) => ko.roles[r]).join(", ")})`}
+                {d.access === "roles" &&
+                  ` (${[
+                    ...d.allowed_roles.map((r) => ko.roles[r]),
+                    ...((d as DeploymentWithUsers).allowed_users?.length
+                      ? [`${(d as DeploymentWithUsers).allowed_users?.length}명`]
+                      : []),
+                  ].join(", ")})`}
               </span>
               <span className="ml-auto text-xs text-slate-400">{formatDate(d.created_at)}</span>
+              {editable && d.access === "roles" && (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  aria-expanded={editingAccess === d.id}
+                  onClick={() => setEditingAccess(editingAccess === d.id ? null : d.id)}
+                >
+                  <UserCheck className="h-3.5 w-3.5" /> 쓸 수 있는 사람
+                </Button>
+              )}
               {editable && d.channel !== "api" && (
                 <Button
                   size="sm"
@@ -244,6 +376,13 @@ function DeploymentsCard({ appId, editable }: { appId: string; editable: boolean
               </>
             )}
             {d.channel === "api" && <CopyRow label="API 주소(POST, SSE)" value={d.api_url} />}
+            {editingAccess === d.id && (
+              <AccessEditor
+                appId={appId}
+                dep={d as DeploymentWithUsers}
+                onClose={() => setEditingAccess(null)}
+              />
+            )}
             {styling === d.id && (
               <AppearanceEditor
                 appId={appId}

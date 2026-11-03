@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from "react";
+import { PASSWORD_HINT, passwordProblem } from "@/lib/passwordRule";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { ErrorBox } from "@/components/ErrorBox";
 import { Button } from "@/components/ui/button";
@@ -33,7 +34,7 @@ export default function SignupPage() {
         <Field label="이메일" htmlFor="email">
           <Input id="email" type="email" required value={form.email} onChange={set("email")} />
         </Field>
-        <Field label="비밀번호" htmlFor="password" hint="8자 이상으로 정해 주세요.">
+        <Field label="비밀번호" htmlFor="password" hint={PASSWORD_HINT}>
           <Input
             id="password"
             type="password"
@@ -41,8 +42,12 @@ export default function SignupPage() {
             required
             autoComplete="new-password"
             value={form.password}
+            aria-invalid={Boolean(passwordProblem(form.password))}
             onChange={set("password")}
           />
+          {passwordProblem(form.password) && (
+            <p className="text-xs text-amber-700">{passwordProblem(form.password)}</p>
+          )}
         </Field>
         <Field
           label="팀(워크스페이스) 이름"

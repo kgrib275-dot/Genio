@@ -55,3 +55,18 @@ def append_rows(params: dict[str, Any], secrets: dict[str, Any], net: Any) -> di
     body = _check(net.http("POST", url, headers=headers, json={"values": params["values"]}))
     updates = body.get("updates", {})
     return {"updated_rows": int(updates.get("updatedRows", 0))}
+
+
+def test(secrets: dict[str, Any], net: Any) -> dict[str, Any]:
+    """없는 시트를 읽어 본다: 404면 키·토큰은 맞고, 401·403·400(키 오류)이면 틀렸다."""
+    headers, query = _auth(secrets, write=False)
+    url = BASE + "genio-connection-check/values/A1" + ("?" + query if query else "")
+    res = net.http("GET", url, headers=headers)
+    status = int(res.get("status", 0))
+    body = res.get("body")
+    text = str(body)[:300]
+    if status in (401, 403) or (status == 400 and "API key" in text):
+        raise NodeError("구글 시트 토큰이나 API 키가 올바르지 않아요. 연결 정보를 확인하세요.")
+    if status in (404, 200):
+        return {"message": "구글 시트에 연결됐어요(키·토큰 확인)."}
+    raise NodeError("구글 시트 연결을 확인하지 못했어요(" + str(status) + ").")

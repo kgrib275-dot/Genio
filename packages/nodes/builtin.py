@@ -2,7 +2,7 @@
 
 from typing import Any
 
-from nodes.spec import NodeContext, NodeError, NodeRegistry, NodeResult, NodeSpec
+from nodes.spec import NodeContext, NodeError, NodeRegistry, NodeResult, NodeSpec, quote_block
 
 LABEL = {"type": "string", "title": "이름"}
 
@@ -83,8 +83,9 @@ def _run_llm(data: dict[str, Any], ctx: NodeContext) -> NodeResult:
     prompt = ctx.render(str(data.get("prompt", "")))
     history = str(ctx.run_input.get("history") or "")
     if data.get("memory") and history.strip():
-        # 챗 앱: 앱 기능의 기억 창(memory.window)만큼 이전 대화를 붙인다
-        prompt = f"이전 대화:\n{history}\n\n{prompt}"
+        # 챗 앱: 앱 기능의 기억 창(memory.window)만큼 이전 대화를 붙인다.
+        # 이전 대화는 지시가 아니라 자료라는 것이 드러나게 구분해 넣는다(프롬프트 인젝션 기본 방어).
+        prompt = f"{quote_block('이전 대화', history)}\n\n{prompt}"
     if not prompt.strip():
         raise NodeError("프롬프트가 비어 있어요. 노드 설정에서 프롬프트를 채워 주세요.")
     temp = data.get("temperature")
@@ -207,13 +208,83 @@ CONDITION = NodeSpec(
 
 
 # ---------------- http ----------------
+MAX_PAGES = 10
+
+
+def _dig(value: Any, path: str) -> Any:
+    """'data.next' 처럼 점으로 이은 경로의 값을 꺼낸다."""
+    cur = value
+    for part in [x for x in path.split(".") if x]:
+        if isinstance(cur, dict):
+            cur = cur.get(part)
+        elif isinstance(cur, list) and part.isdigit() and int(part) < len(cur):
+            cur = cur[int(part)]
+        else:
+            return None
+    return cur
+
+
+def _items_of(body: Any, items_path: str) -> list[Any] | None:
+    found = _dig(body, items_path) if items_path else body
+    return found if isinstance(found, list) else None
+
+
+def _with_param(url: str, param: str, value: Any) -> str:
+    from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
+
+    parts = urlsplit(url)
+    query = [(k, v) for k, v in parse_qsl(parts.query, keep_blank_values=True) if k != param]
+    query.append((param, str(value)))
+    return urlunsplit(parts._replace(query=urlencode(query)))
+
+
 def _run_http(data: dict[str, Any], ctx: NodeContext) -> NodeResult:
     method = str(data.get("method") or "GET").upper()
     url = ctx.render(str(data.get("url", "")))
     headers = {str(k): ctx.render(str(v)) for k, v in (data.get("headers") or {}).items()}
     body = ctx.render_value(data.get("body"))
-    res = ctx.services.http_request(method=method, url=url, headers=headers, body=body)
-    return NodeResult(output=res)
+    raw_auth = data.get("auth")
+    auth: dict[str, Any] | None = raw_auth if isinstance(raw_auth, dict) else None
+    if auth and str(auth.get("type") or "none") == "none":
+        auth = None
+    raw_pag = data.get("pagination")
+    pag: dict[str, Any] = raw_pag if isinstance(raw_pag, dict) else {}
+    kind = str(pag.get("type") or "none")
+    if kind == "none":
+        res = ctx.services.http_request(
+            method=method, url=url, headers=headers, body=body, auth=auth
+        )
+        return NodeResult(output=res)
+    # 여러 쪽(페이지)을 차례로 받아 목록을 합친다(최대 10쪽)
+    max_pages = max(1, min(int(pag.get("max_pages") or 3), MAX_PAGES))
+    items_path = str(pag.get("items_path") or "")
+    merged: list[Any] = []
+    pages = 0
+    status = 0
+    next_url: str | None = url
+    page_no = int(pag.get("start") or 1)
+    while next_url and pages < max_pages:
+        res = ctx.services.http_request(
+            method=method, url=next_url, headers=headers, body=body, auth=auth
+        )
+        pages += 1
+        status = int(res.get("status") or 0)
+        items = _items_of(res.get("body"), items_path)
+        if items is None:
+            raise NodeError(
+                "페이지 넘김 설정의 '목록 위치'에서 목록을 찾지 못했어요. 응답 모양을 확인해 주세요."
+            )
+        merged.extend(items)
+        if kind == "next_url":
+            nxt = _dig(res.get("body"), str(pag.get("path") or "next"))
+            next_url = str(nxt) if isinstance(nxt, str) and nxt.strip() else None
+        else:  # page: 쪽 번호를 하나씩 늘린다. 빈 쪽이 오면 끝
+            if not items:
+                break
+            page_no += 1
+            next_url = _with_param(url, str(pag.get("param") or "page"), page_no)
+    ctx.log(f"{pages}쪽을 받아 {len(merged)}개 항목을 모았어요.")
+    return NodeResult(output={"status": status, "body": merged, "pages": pages})
 
 
 HTTP = NodeSpec(
@@ -237,16 +308,63 @@ HTTP = NodeSpec(
                 "additionalProperties": {"type": "string"},
             },
             body={"title": "본문"},
+            auth={
+                "type": "object",
+                "title": "인증",
+                "description": "비밀값은 '연결 정보'에서 골라요. 값은 화면·기록에 나오지 않아요.",
+                "properties": {
+                    "type": {
+                        "type": "string",
+                        "title": "방식",
+                        "enum": ["none", "bearer", "basic", "header"],
+                        "enumNames": ["없음", "토큰(Bearer)", "아이디·비밀번호", "헤더에 키 넣기"],
+                        "default": "none",
+                    },
+                    "credential_id": {"type": "string", "title": "연결 정보"},
+                    "header_name": {
+                        "type": "string",
+                        "title": "헤더 이름",
+                        "default": "X-API-Key",
+                    },
+                },
+            },
+            pagination={
+                "type": "object",
+                "title": "여러 쪽 받기",
+                "properties": {
+                    "type": {
+                        "type": "string",
+                        "title": "방식",
+                        "enum": ["none", "next_url", "page"],
+                        "enumNames": ["한 번만", "응답의 다음 주소 따라가기", "쪽 번호 늘리기"],
+                        "default": "none",
+                    },
+                    "items_path": {"type": "string", "title": "목록 위치(예: data.items)"},
+                    "path": {"type": "string", "title": "다음 주소 위치(예: next)"},
+                    "param": {"type": "string", "title": "쪽 번호 이름", "default": "page"},
+                    "max_pages": {
+                        "type": "integer",
+                        "title": "최대 쪽 수",
+                        "minimum": 1,
+                        "maximum": MAX_PAGES,
+                        "default": 3,
+                    },
+                },
+            },
         ),
         "required": ["url"],
     },
     output_schema={
         "type": "object",
-        "properties": {"status": {"type": "integer"}, "body": {}},
+        "properties": {"status": {"type": "integer"}, "body": {}, "pages": {"type": "integer"}},
     },
-    ui_schema={"body": {"ui:widget": "json"}, "headers": {"ui:widget": "json"}},
+    ui_schema={
+        "body": {"ui:widget": "json"},
+        "headers": {"ui:widget": "json"},
+        "auth": {"credential_id": {"ui:widget": "credential"}},
+    },
     run=_run_http,
-    outputs=lambda d: ["status", "body"],
+    outputs=lambda d: ["status", "body", "pages"],
     retries=2,
 )
 
@@ -257,7 +375,10 @@ def _run_code(data: dict[str, Any], ctx: NodeContext) -> NodeResult:
     if not code.strip():
         raise NodeError("코드가 비어 있어요.")
     inputs = {str(k): ctx.render_value(v) for k, v in (data.get("inputs") or {}).items()}
-    result = ctx.services.run_code(code=code, inputs=inputs)
+    language = str(data.get("language") or "python")
+    if language not in ("python", "javascript"):
+        raise NodeError("코드 언어는 파이썬이나 자바스크립트만 쓸 수 있어요.")
+    result = ctx.services.run_code(code=code, inputs=inputs, language=language)
     return NodeResult(output=result)
 
 
@@ -265,10 +386,20 @@ CODE = NodeSpec(
     type="code",
     label="코드",
     category="고급",
-    description="파이썬 코드로 값을 가공해요. inputs로 값을 받고 result 변수에 결과(dict)를 넣어요.",
+    description=(
+        "파이썬이나 자바스크립트 코드로 값을 가공해요. inputs로 값을 받고 result에 결과(객체)를 넣어요. "
+        "파일·인터넷에는 접근할 수 없어요."
+    ),
     input_schema={
         "type": "object",
         "properties": _props(
+            language={
+                "type": "string",
+                "title": "언어",
+                "enum": ["python", "javascript"],
+                "enumNames": ["파이썬", "자바스크립트"],
+                "default": "python",
+            },
             inputs={
                 "type": "object",
                 "title": "입력값",
@@ -426,11 +557,67 @@ CONNECTOR = NodeSpec(
 
 
 # ---------------- approval ----------------
+def notify_config(data: dict[str, Any], ctx: NodeContext) -> dict[str, Any]:
+    """사람에게 보낼 알림 설정(이메일·슬랙). 받는 사람 칸은 값 끌어오기를 쓸 수 있다."""
+    got = data.get("notify")
+    raw: dict[str, Any] = got if isinstance(got, dict) else {}
+    out: dict[str, Any] = {}
+    e = raw.get("email")
+    email: dict[str, Any] = e if isinstance(e, dict) else {}
+    if email.get("credential_id") and email.get("to"):
+        out["email"] = {
+            "credential_id": str(email["credential_id"]),
+            "to": [x.strip() for x in ctx.render(str(email["to"])).split(",") if x.strip()][:20],
+        }
+    sl = raw.get("slack")
+    slack: dict[str, Any] = sl if isinstance(sl, dict) else {}
+    if slack.get("credential_id") and slack.get("channel"):
+        out["slack"] = {
+            "credential_id": str(slack["credential_id"]),
+            "channel": ctx.render(str(slack["channel"])),
+        }
+    return out
+
+
+NOTIFY_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "title": "알림 보내기",
+    "description": "요청을 이메일·슬랙으로 보내요. 받은 사람은 링크에서 바로 처리할 수 있어요.",
+    "properties": {
+        "email": {
+            "type": "object",
+            "title": "이메일",
+            "properties": {
+                "credential_id": {"type": "string", "title": "보내는 메일 연결 정보"},
+                "to": {"type": "string", "title": "받는 사람(쉼표로 여러 명)"},
+            },
+        },
+        "slack": {
+            "type": "object",
+            "title": "슬랙",
+            "properties": {
+                "credential_id": {"type": "string", "title": "슬랙 연결 정보"},
+                "channel": {"type": "string", "title": "채널(예: #approvals)"},
+            },
+        },
+    },
+}
+NOTIFY_UI: dict[str, Any] = {
+    "email": {"credential_id": {"ui:widget": "credential"}},
+    "slack": {"credential_id": {"ui:widget": "credential"}},
+}
+
+
 def _run_approval(data: dict[str, Any], ctx: NodeContext) -> NodeResult:
     message = ctx.render(str(data.get("message") or "승인이 필요해요."))
     return NodeResult(
         output={},
-        wait_approval={"message": message, "approver_roles": data.get("approver_roles") or []},
+        wait_approval={
+            "kind": "approval",
+            "message": message,
+            "approver_roles": data.get("approver_roles") or [],
+            "notify": notify_config(data, ctx),
+        },
     )
 
 
@@ -438,7 +625,10 @@ APPROVAL = NodeSpec(
     type="approval",
     label="사람 승인",
     category="흐름",
-    description="사람이 승인할 때까지 흐름을 멈춰요. 승인하면 다음 단계로, 거절하면 멈춰요.",
+    description=(
+        "사람이 승인할 때까지 흐름을 멈춰요. 이메일·슬랙으로 요청을 보내고, 받은 사람은 링크에서 "
+        "승인·반려와 한마디를 남겨요. 승인·반려 길을 따로 이을 수 있어요."
+    ),
     input_schema={
         "type": "object",
         "properties": _props(
@@ -448,14 +638,25 @@ APPROVAL = NodeSpec(
                 "title": "승인할 수 있는 역할",
                 "items": {"type": "string", "enum": ["owner", "admin", "builder", "operator"]},
             },
+            branch={
+                "type": "boolean",
+                "title": "승인·반려 길 나누기",
+                "description": "켜면 '승인'·'반려' 출구가 생겨요. 끄면 반려될 때 흐름이 멈춰요.",
+                "default": True,
+            },
+            notify=NOTIFY_SCHEMA,
         ),
         "required": ["message"],
     },
     output_schema={
         "type": "object",
-        "properties": {"approved": {"type": "boolean"}, "comment": {"type": "string"}},
+        "properties": {
+            "approved": {"type": "boolean"},
+            "comment": {"type": "string"},
+            "approver": {"type": "string"},
+        },
     },
-    ui_schema={"message": {"ui:widget": "textarea"}},
+    ui_schema={"message": {"ui:widget": "textarea"}, "notify": NOTIFY_UI},
     run=_run_approval,
     outputs=lambda d: ["approved", "comment", "approver"],
 )

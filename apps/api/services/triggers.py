@@ -1,7 +1,11 @@
 """자동 실행(ADR 0008): 웹훅·예약. 웹훅 토큰은 비밀값처럼 다룬다(로그·오류에 남기지 않음)."""
 
+import hashlib
+import hmac
+import json
 import logging
 import secrets
+import time
 from datetime import UTC, datetime
 from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -10,6 +14,7 @@ from croniter import CroniterBadCronError, CroniterBadDateError, croniter
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from api.core.crypto import decrypt_str, encrypt_str
 from api.core.errors import AppError
 from api.models import App, AppTrigger, Run, WorkflowVersion
 
@@ -53,6 +58,8 @@ def trigger_dict(t: AppTrigger, origin: str | None) -> dict[str, Any]:
         "last_run_id": t.last_run_id,
         "last_status": t.last_status,
         "created_at": _aware(t.created_at),
+        # 서명 검증용 비밀값이 있는지(값은 만들 때 한 번만 보여 준다)
+        "has_secret": bool(t.secret_encrypted),
     }
 
 
@@ -121,7 +128,7 @@ def clean_webhook(config: dict[str, Any]) -> dict[str, Any]:
             "웹훅 응답 방식을 알 수 없어요.",
             "바로 응답(async) 또는 결과까지 기다림(sync)을 고르세요.",
         )
-    out: dict[str, Any] = {"mode": mode}
+    out: dict[str, Any] = {"mode": mode, "require_signature": bool(config.get("require_signature"))}
     if config.get("version") is not None:
         out["version"] = _version_number(config["version"])
     return out
@@ -255,3 +262,92 @@ def sync_last_status(db: Session, run: Run) -> None:
     t = db.scalar(select(AppTrigger).where(AppTrigger.last_run_id == run.id))
     if t is not None:
         t.last_status = run.status
+
+
+# ---------------- 외부에서 받기: 서명 검증·받은 값 미리 보기 ----------------
+SIGNATURE_TOLERANCE_SECONDS = 300
+MAX_PAYLOADS = 5
+PAYLOAD_BODY_BYTES = 4096
+_HIDDEN_HEADERS = {
+    "authorization",
+    "cookie",
+    "x-genio-signature",
+    "proxy-authorization",
+    "x-api-key",
+}
+
+
+def new_secret() -> str:
+    return "whsec_" + secrets.token_urlsafe(32)
+
+
+def set_secret(t: AppTrigger) -> str:
+    """새 서명 비밀값을 만들어 암호화 저장하고 원문을 돌려준다(이번 한 번만 보여 줌)."""
+    raw = new_secret()
+    t.secret_encrypted = encrypt_str(raw).decode()
+    return raw
+
+
+def trigger_secret(t: AppTrigger) -> str | None:
+    if not t.secret_encrypted:
+        return None
+    try:
+        return decrypt_str(t.secret_encrypted.encode())
+    except ValueError:
+        return None
+
+
+def sign(secret: str, timestamp: str, body: bytes) -> str:
+    mac = hmac.new(secret.encode(), timestamp.encode() + b"." + body, hashlib.sha256)
+    return "sha256=" + mac.hexdigest()
+
+
+def verify_signature(
+    t: AppTrigger, headers: dict[str, str], body: bytes, now: float | None = None
+) -> str | None:
+    """서명이 맞으면 None, 틀리면 이유(사람이 읽는 문구)."""
+    secret = trigger_secret(t)
+    if not secret:
+        return "서명 비밀값이 아직 없어요"
+    ts = headers.get("x-genio-timestamp", "")
+    sig = headers.get("x-genio-signature", "")
+    if not ts or not sig:
+        return "서명 헤더(X-Genio-Timestamp, X-Genio-Signature)가 없어요"
+    try:
+        sent = float(ts)
+    except ValueError:
+        return "X-Genio-Timestamp가 숫자(초)가 아니에요"
+    current = time.time() if now is None else now
+    if abs(current - sent) > SIGNATURE_TOLERANCE_SECONDS:
+        return "보낸 시각이 5분 넘게 차이 나요(다시 보내기 공격 방지)"
+    expected = sign(secret, ts, body)
+    if not hmac.compare_digest(expected, sig.strip()):
+        return "서명이 맞지 않아요"
+    return None
+
+
+def record_payload(
+    t: AppTrigger,
+    *,
+    headers: dict[str, str],
+    body: bytes,
+    accepted: bool,
+    note: str = "",
+    run_id: str | None = None,
+) -> None:
+    """최근 받은 값 5개를 남긴다. 인증·서명 헤더는 빼고, 본문은 4KB까지."""
+    text = body[:PAYLOAD_BODY_BYTES].decode("utf-8", "replace")
+    try:
+        parsed: Any = json.loads(text) if text.strip() and len(body) <= PAYLOAD_BODY_BYTES else text
+    except json.JSONDecodeError:
+        parsed = text
+    entry = {
+        "received_at": now_utc().isoformat(),
+        "accepted": accepted,
+        "note": note,
+        "run_id": run_id,
+        "headers": {k: v[:200] for k, v in headers.items() if k.lower() not in _HIDDEN_HEADERS},
+        "body": parsed,
+        "truncated": len(body) > PAYLOAD_BODY_BYTES,
+    }
+    t.last_payloads = [entry, *list(t.last_payloads or [])][:MAX_PAYLOADS]

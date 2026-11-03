@@ -8,7 +8,52 @@ import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { toast } from "@/components/ui/toast-store";
 import { ko } from "@/i18n/ko";
 import { useInstallMarketItem, useMarketItem } from "@/lib/api/resources";
+import type { TemplatePreview } from "@/lib/api/v5b";
 import { canManage, useSession } from "@/store/session";
+
+/** 템플릿 미리 보기: 어떤 단계로 이루어졌는지, 설치 뒤 채울 빈칸은 무엇인지 */
+function PreviewCard({ preview }: { preview: TemplatePreview }) {
+  return (
+    <Card>
+      <CardHeader
+        title="미리 보기"
+        description={`${preview.app_type === "chat" ? "챗봇" : "흐름"} · 단계 ${preview.steps.length}개`}
+      />
+      <CardBody className="space-y-4">
+        <ol className="space-y-1.5">
+          {preview.steps.map((st, i) => (
+            <li key={st.id} className="flex items-center gap-2 text-sm">
+              <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-indigo-50 text-[11px] font-semibold text-indigo-700">
+                {i + 1}
+              </span>
+              <span className="font-medium text-slate-800">{st.label}</span>
+              <span className="text-xs text-slate-500">{st.kind}</span>
+              {st.service && <Badge tone="blue">{st.service}</Badge>}
+            </li>
+          ))}
+        </ol>
+        {preview.requires.length > 0 && (
+          <p className="text-xs text-slate-600">
+            함께 필요한 서비스: <b>{preview.requires.join(", ")}</b> (설치할 때 같이 확인해요)
+          </p>
+        )}
+        {preview.blanks.length > 0 && (
+          <div className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-900">
+            <p className="mb-1 font-medium">설치한 뒤 빌더가 이것만 물어봐요</p>
+            <ul className="list-disc space-y-0.5 pl-4">
+              {preview.blanks.map((b) => (
+                <li key={b.key}>
+                  {b.label}
+                  {b.example ? ` (예: ${b.example})` : ""}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </CardBody>
+    </Card>
+  );
+}
 
 export default function MarketDetailPage() {
   const { key = "" } = useParams();
@@ -25,20 +70,27 @@ export default function MarketDetailPage() {
       <ErrorBox error={item.error} />
       {item.data && (
         <div className="mt-4 grid gap-6 lg:grid-cols-[2fr_1fr]">
-          <Card>
-            <CardHeader
-              title={item.data.name}
-              description={item.data.summary}
-              action={
-                <Badge tone="indigo">{ko.marketTypes[item.data.type] ?? item.data.type}</Badge>
-              }
-            />
-            <CardBody>
-              <div className="whitespace-pre-wrap text-sm leading-relaxed text-slate-800">
-                {item.data.description_md || "설명이 없어요."}
-              </div>
-            </CardBody>
-          </Card>
+          <div className="space-y-6">
+            <Card>
+              <CardHeader
+                title={item.data.name}
+                description={item.data.summary}
+                action={
+                  <Badge tone="indigo">{ko.marketTypes[item.data.type] ?? item.data.type}</Badge>
+                }
+              />
+              <CardBody>
+                <div className="whitespace-pre-wrap text-sm leading-relaxed text-slate-800">
+                  {item.data.description_md || "설명이 없어요."}
+                </div>
+              </CardBody>
+            </Card>
+            {(item.data as { preview?: TemplatePreview }).preview && (
+              <PreviewCard
+                preview={(item.data as { preview?: TemplatePreview }).preview as TemplatePreview}
+              />
+            )}
+          </div>
           <div className="space-y-4">
             <Card>
               <CardBody className="space-y-2 text-sm">
@@ -51,6 +103,9 @@ export default function MarketDetailPage() {
                   </b>
                 </p>
                 <p>제공: {item.data.publisher}</p>
+                {(item.data as { category?: string }).category && (
+                  <p>분류: {(item.data as { category?: string }).category}</p>
+                )}
                 <p>버전: {item.data.version}</p>
                 <p>설치 수: {item.data.installs}</p>
                 {item.data.tags.length > 0 && (

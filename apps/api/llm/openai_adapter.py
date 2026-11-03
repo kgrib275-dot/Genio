@@ -17,6 +17,23 @@ from api.llm.base import (
 )
 from nodes import LlmResult
 
+AZURE_API_VERSION = "2024-10-21"
+EMBEDDING_DIM = 1536
+
+
+def azure_endpoint(base_url: str) -> tuple[str, str]:
+    """'https://x.openai.azure.com/?api-version=2024-10-21' → (주소, api-version)."""
+    from urllib.parse import parse_qs, urlparse
+
+    u = urlparse(base_url.strip())
+    if u.scheme != "https" or not u.netloc:
+        raise LlmError(
+            "Azure 주소가 올바르지 않아요.",
+            "예: https://my-resource.openai.azure.com/ (api-version은 ?api-version=... 로 덧붙여요)",
+        )
+    version = (parse_qs(u.query).get("api-version") or [AZURE_API_VERSION])[0]
+    return f"https://{u.netloc}/", version
+
 
 def _map_error(exc: Exception) -> LlmError:
     if isinstance(exc, openai.AuthenticationError):
@@ -57,10 +74,18 @@ class OpenAIAdapter:
     ) -> None:
         self.provider = provider
         kwargs: dict[str, Any] = {"api_key": api_key, "max_retries": 2, "timeout": 120.0}
-        if base_url:
-            kwargs["base_url"] = base_url
         if http_client is not None:  # 테스트용 전송 계층 주입
             kwargs["http_client"] = http_client
+        if provider == "azure":
+            # Azure OpenAI: base_url = https://<리소스>.openai.azure.com/ (?api-version=... 선택)
+            # 모델 이름 자리에는 Azure의 '배포 이름'을 쓴다.
+            endpoint, api_version = azure_endpoint(base_url or "")
+            self.client: openai.OpenAI = openai.AzureOpenAI(
+                azure_endpoint=endpoint, api_version=api_version, **kwargs
+            )
+            return
+        if base_url:
+            kwargs["base_url"] = base_url
         self.client = openai.OpenAI(**kwargs)
 
     def complete(
@@ -214,7 +239,11 @@ class OpenAIAdapter:
 
     def embed(self, *, model: str, texts: list[str]) -> list[list[float]]:
         try:
-            resp = self.client.embeddings.create(model=model, input=texts)
+            extra: dict[str, Any] = {}
+            if model.startswith("text-embedding-3"):
+                # 저장 칸이 1536차원이라 large도 1536으로 줄여 받는다(OpenAI 기능)
+                extra["dimensions"] = EMBEDDING_DIM
+            resp = self.client.embeddings.create(model=model, input=texts, **extra)
         except openai.OpenAIError as exc:
             raise _map_error(exc) from exc
         return [list(d.embedding) for d in resp.data]

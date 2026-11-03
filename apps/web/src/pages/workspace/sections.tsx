@@ -46,6 +46,12 @@ import { optionsFrom, useListControls } from "@/lib/useListControls";
 import type { AuditLog } from "@/lib/api/types";
 import { useSession } from "@/store/session";
 import { useMe } from "@/lib/api/auth";
+import {
+  CostEstimateCard,
+  LimitsCard,
+  ModelCatalogCard,
+  UsageByUserList,
+} from "@/pages/workspace/costSections";
 
 // ---------------- 멤버 ----------------
 function CreateAccountDialog({
@@ -538,6 +544,8 @@ const PROVIDERS: { value: ProviderKind; label: string; model: string }[] = [
   { value: "openai", label: "OpenAI", model: "gpt-4o-mini" },
   { value: "google", label: "Google (Gemini)", model: "gemini-2.0-flash" },
   { value: "openai-compatible", label: "OpenAI 호환 API", model: "" },
+  // Azure OpenAI: 모델 칸에는 Azure의 배포 이름
+  { value: "azure" as ProviderKind, label: "Azure OpenAI", model: "" },
 ];
 
 function DefaultModels({ ws }: { ws: string }) {
@@ -575,7 +583,7 @@ function DefaultModels({ ws }: { ws: string }) {
             <Select id="dm-emb" value={embedding} onChange={(e) => setEmbedding(e.target.value)}>
               <option value="">자동(OpenAI 연결)</option>
               {list
-                .filter((p) => p.provider === "openai" || p.provider === "openai-compatible")
+                .filter((p) => ["openai", "openai-compatible", "azure"].includes(p.provider))
                 .map((p) => (
                   <option key={p.id} value={p.id}>
                     {p.label}
@@ -756,12 +764,27 @@ export function LlmSection({
                     onChange={(e) => setForm({ ...form, default_model: e.target.value })}
                   />
                 </Field>
-                {form.provider === "openai-compatible" && (
-                  <Field label="주소(base URL)" htmlFor="llm-base">
+                {(form.provider === "openai-compatible" ||
+                  (form.provider as string) === "azure") && (
+                  <Field
+                    label={
+                      (form.provider as string) === "azure" ? "Azure 리소스 주소" : "주소(base URL)"
+                    }
+                    htmlFor="llm-base"
+                    hint={
+                      (form.provider as string) === "azure"
+                        ? "예: https://my-resource.openai.azure.com/ · 기본 모델 칸에는 배포 이름을 적어요."
+                        : undefined
+                    }
+                  >
                     <Input
                       id="llm-base"
                       required
-                      placeholder="https://example.com/v1"
+                      placeholder={
+                        (form.provider as string) === "azure"
+                          ? "https://my-resource.openai.azure.com/"
+                          : "https://example.com/v1"
+                      }
                       value={form.base_url}
                       onChange={(e) => setForm({ ...form, base_url: e.target.value })}
                     />
@@ -785,12 +808,15 @@ export function LlmSection({
         )}
       </div>
       {showDefaults && manage && <DefaultModels ws={ws} />}
+      <ModelCatalogCard />
     </div>
   );
 }
 
 // ---------------- 사용량 ----------------
 export function UsageSection({ ws }: { ws: string }) {
+  const role = useSession((st) => st.role);
+  const [group, setGroup] = useState<"app" | "user">("app");
   const usage = useUsage(ws);
   const uc = useListControls(usage.data?.by_app, {
     key: "usage",
@@ -808,7 +834,34 @@ export function UsageSection({ ws }: { ws: string }) {
         <StatTile label="출력 토큰" value={u.total_output_tokens.toLocaleString()} />
         <StatTile label="비용" value={formatCost(u.total_cost)} />
       </div>
-      {u.by_app.length === 0 ? (
+      <div
+        role="tablist"
+        aria-label="사용량 보기"
+        className="inline-flex rounded-lg bg-slate-100 p-1"
+      >
+        {(
+          [
+            ["app", "앱별"],
+            ["user", "사람별"],
+          ] as const
+        ).map(([v, label]) => (
+          <button
+            key={v}
+            type="button"
+            role="tab"
+            aria-selected={group === v}
+            onClick={() => setGroup(v)}
+            className={`rounded-md px-3 py-1 text-sm ${
+              group === v ? "bg-white font-medium text-slate-900 shadow-sm" : "text-slate-500"
+            }`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+      {group === "user" ? (
+        <UsageByUserList ws={ws} />
+      ) : u.by_app.length === 0 ? (
         <Empty>아직 사용 기록이 없어요.</Empty>
       ) : (
         <div className="space-y-3">
@@ -852,6 +905,10 @@ export function UsageSection({ ws }: { ws: string }) {
           <ListPager c={uc} />
         </div>
       )}
+      <div className="grid gap-6 lg:grid-cols-2">
+        <CostEstimateCard ws={ws} />
+        {(role === "owner" || role === "admin") && <LimitsCard ws={ws} />}
+      </div>
     </div>
   );
 }

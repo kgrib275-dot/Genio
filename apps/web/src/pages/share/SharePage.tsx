@@ -3,6 +3,7 @@ import { Link, useParams, useSearchParams } from "react-router-dom";
 import { useLoggedIn } from "@/app/useAuthState";
 import { AppIcon } from "@/components/AppIcon";
 import { ChatView } from "@/components/chat/ChatView";
+import { WorkflowFormView } from "@/components/chat/WorkflowFormView";
 import { ErrorBox, Loading } from "@/components/ErrorBox";
 import { HelpButton } from "@/help/HelpButton";
 import { ko } from "@/i18n/ko";
@@ -62,6 +63,22 @@ export default function SharePage() {
       </div>
     );
   }
+
+  // 워크플로우 앱은 대화가 아니라 입력 폼 → 결과로 쓴다
+  if (info.type === "workflow")
+    return (
+      <div className="h-[100dvh]">
+        <WorkflowFormView
+          token={token}
+          title={title}
+          icon={info.icon}
+          description={info.description}
+          fields={info.input_fields}
+          accent={look.primary_color}
+          headerActions={<HelpButton page="share" fullLink={false} />}
+        />
+      </div>
+    );
 
   return (
     <div className="h-[100dvh]">

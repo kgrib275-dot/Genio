@@ -1,0 +1,40 @@
+{
+  "key": "biz_inquiry_assign",
+  "type": "template",
+  "name": "고객 문의 분류·배정",
+  "summary": "들어온 문의를 결제·기술·일반으로 나누고 담당 팀 슬랙 채널로 배정해요.",
+  "version": "1.0.0",
+  "publisher": "platform",
+  "price": 0,
+  "category": "업무",
+  "app_type": "workflow",
+  "tags": [
+    "문의",
+    "분류",
+    "배정",
+    "고객지원",
+    "업무"
+  ],
+  "requires": {
+    "items": [
+      "slack"
+    ]
+  },
+  "blanks": [
+    {
+      "key": "billing_channel",
+      "label": "결제 문의를 받을 슬랙 채널",
+      "node_id": "n4",
+      "field": "params.channel",
+      "example": "#billing"
+    },
+    {
+      "key": "tech_channel",
+      "label": "기술 문의를 받을 슬랙 채널",
+      "node_id": "n5",
+      "field": "params.channel",
+      "example": "#tech"
+    }
+  ],
+  "permissions": []
+}

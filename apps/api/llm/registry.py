@@ -13,7 +13,8 @@ from api.llm.google_adapter import GoogleAdapter
 from api.llm.openai_adapter import OpenAIAdapter
 from api.models import LlmProvider, Workspace
 
-PROVIDERS = ("openai", "anthropic", "google", "openai-compatible")
+PROVIDERS = ("openai", "anthropic", "google", "openai-compatible", "azure")
+EMBEDDING_PROVIDERS = ("openai", "openai-compatible", "azure")
 
 
 @dataclass
@@ -32,11 +33,11 @@ def default_factory(provider: str, api_key: str, base_url: str | None) -> ChatAd
         return AnthropicAdapter(api_key, base_url)
     if provider == "google":
         return GoogleAdapter(api_key, base_url)
-    if provider in ("openai", "openai-compatible"):
+    if provider in ("openai", "openai-compatible", "azure"):
         return OpenAIAdapter(api_key, base_url, provider=provider)
     raise LlmError(
         f"'{provider}' 공급자는 지원하지 않아요.",
-        "openai, anthropic, google, openai-compatible 중에서 고르세요.",
+        "openai, anthropic, google, openai-compatible, azure 중에서 고르세요.",
     )
 
 
@@ -75,12 +76,10 @@ def resolve_llm(
         pass
     elif purpose == "embedding":
         chosen = next(
-            (r for r in rows if r.provider in ("openai", "openai-compatible") and r.is_default),
+            (r for r in rows if r.provider in EMBEDDING_PROVIDERS and r.is_default),
             None,
         )
-        chosen = chosen or next(
-            (r for r in rows if r.provider in ("openai", "openai-compatible")), None
-        )
+        chosen = chosen or next((r for r in rows if r.provider in EMBEDDING_PROVIDERS), None)
         if chosen is None:
             raise LlmError(
                 "문서 임베딩에 쓸 OpenAI 연결이 없어요.",

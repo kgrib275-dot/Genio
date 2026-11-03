@@ -25,8 +25,8 @@ export function NodePalette({
           <Search className="h-3.5 w-3.5 text-slate-400" />
           <input
             autoFocus
-            aria-label="노드 검색"
-            placeholder="노드 검색"
+            aria-label="단계 검색"
+            placeholder="단계 검색"
             className="w-full bg-transparent text-sm placeholder:text-slate-400 focus:outline-none"
             value={q}
             onChange={(e) => setQ(e.target.value)}
@@ -71,7 +71,7 @@ export function NodePalette({
           </div>
         ))}
         {filtered.length === 0 && (
-          <p className="p-3 text-center text-xs text-slate-400">찾는 노드가 없어요.</p>
+          <p className="p-3 text-center text-xs text-slate-400">찾는 단계가 없어요.</p>
         )}
       </div>
     </div>

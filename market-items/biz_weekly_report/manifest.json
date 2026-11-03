@@ -1,0 +1,33 @@
+{
+  "key": "biz_weekly_report",
+  "type": "template",
+  "name": "주간 보고 자동 작성",
+  "summary": "한 주 동안 한 일을 붙여 넣으면 보고서 형식으로 정리해 메일로 보내요(보내기 전 승인).",
+  "version": "1.0.0",
+  "publisher": "platform",
+  "price": 0,
+  "category": "업무",
+  "app_type": "workflow",
+  "tags": [
+    "주간 보고",
+    "보고서",
+    "요약",
+    "메일",
+    "업무"
+  ],
+  "requires": {
+    "items": [
+      "email"
+    ]
+  },
+  "blanks": [
+    {
+      "key": "to",
+      "label": "보고서를 받을 사람 메일",
+      "node_id": "n1",
+      "field": "fields.to.default",
+      "example": "team-lead@example.com"
+    }
+  ],
+  "permissions": []
+}

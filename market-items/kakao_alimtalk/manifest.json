@@ -1,0 +1,83 @@
+{
+  "key": "kakao_alimtalk",
+  "type": "connector",
+  "name": "카카오 알림톡 (NHN Cloud)",
+  "summary": "승인된 템플릿으로 카카오 알림톡을 보내요(NHN Cloud 비즈메시지).",
+  "version": "1.0.0",
+  "publisher": "platform",
+  "price": 0,
+  "category": "메신저",
+  "tags": [
+    "kakao",
+    "카카오",
+    "알림톡",
+    "문자",
+    "알림",
+    "고객 안내"
+  ],
+  "requires": {
+    "credentials": [
+      {
+        "key": "app_key",
+        "label": "앱키(App Key)",
+        "secret": true,
+        "required": true
+      },
+      {
+        "key": "secret_key",
+        "label": "시크릿 키(X-Secret-Key)",
+        "secret": true,
+        "required": true
+      },
+      {
+        "key": "sender_key",
+        "label": "발신 프로필 키(Sender Key)",
+        "secret": false,
+        "required": true
+      }
+    ]
+  },
+  "actions": [
+    {
+      "key": "send",
+      "label": "알림톡 보내기",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "to": {
+            "type": "string",
+            "title": "받는 사람 휴대폰 번호(숫자만)"
+          },
+          "template_code": {
+            "type": "string",
+            "title": "템플릿 코드"
+          },
+          "parameters": {
+            "type": "object",
+            "title": "템플릿에 넣을 값",
+            "description": "예: {\"이름\": \"{{n1.name}}\"}"
+          }
+        },
+        "required": [
+          "to",
+          "template_code"
+        ]
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "request_id": {
+            "type": "string"
+          },
+          "sent": {
+            "type": "boolean"
+          }
+        },
+        "required": []
+      }
+    }
+  ],
+  "permissions": [
+    "network:api-alimtalk.cloud.toast.com"
+  ]
+}

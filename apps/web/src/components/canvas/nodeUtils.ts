@@ -22,6 +22,12 @@ export function branchHandles(type: string, data: Record<string, unknown>): Bran
       .filter((c): c is { id: string; name?: string } => Boolean(c.id))
       .map((c) => ({ id: c.id, label: c.name || c.id }));
   }
+  // 승인 단계: '반려 시 분기'를 켜면 승인/반려 두 출구(엔진 validator.APPROVAL_HANDLES와 같은 이름)
+  if (type === "approval" && data.branch)
+    return [
+      { id: "approved", label: "승인" },
+      { id: "rejected", label: "반려" },
+    ];
   return [];
 }
 

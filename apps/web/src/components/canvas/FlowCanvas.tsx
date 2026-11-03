@@ -264,14 +264,14 @@ function Inner({ specs, readOnly }: { specs: NodeType[]; readOnly?: boolean }) {
     if (r.skipped)
       toast.info(
         r.pasted
-          ? "시작 블록은 하나만 둘 수 있어 빼고 붙였어요."
-          : "시작 블록은 하나만 둘 수 있어 붙이지 않았어요.",
+          ? "시작 단계는 하나만 둘 수 있어 빼고 붙였어요."
+          : "시작 단계는 하나만 둘 수 있어 붙이지 않았어요.",
       );
   };
   const actions = {
     copy: () => {
       const n = useCanvas.getState().copy();
-      if (n) toast.success(`블록 ${n}개를 복사했어요.`);
+      if (n) toast.success(`단계 ${n}개를 복사했어요.`);
     },
     paste: () => reportPaste(useCanvas.getState().paste()),
     duplicate: () => reportPaste(useCanvas.getState().duplicate()),
@@ -441,7 +441,7 @@ function Inner({ specs, readOnly }: { specs: NodeType[]; readOnly?: boolean }) {
       {menu && (
         <div
           role="menu"
-          aria-label={menuNode ? "블록 메뉴" : "캔버스 메뉴"}
+          aria-label={menuNode ? "단계 메뉴" : "캔버스 메뉴"}
           className="absolute z-20 w-48 rounded-xl border border-slate-200 bg-white p-1 shadow-lift"
           style={{ left: Math.max(4, menu.x), top: Math.max(4, menu.y) }}
           onClick={(e) => e.stopPropagation()}

@@ -1,0 +1,69 @@
+{
+  "key": "jandi",
+  "type": "connector",
+  "name": "잔디(JANDI)",
+  "summary": "잔디 토픽에 메시지를 보내요(커넥트 웹훅).",
+  "version": "1.0.0",
+  "publisher": "platform",
+  "price": 0,
+  "category": "메신저",
+  "tags": [
+    "jandi",
+    "잔디",
+    "메신저",
+    "알림",
+    "협업"
+  ],
+  "requires": {
+    "credentials": [
+      {
+        "key": "webhook_url",
+        "label": "잔디 커넥트 Webhook URL(https://wh.jandi.com/...)",
+        "secret": true,
+        "required": true
+      }
+    ]
+  },
+  "actions": [
+    {
+      "key": "send_message",
+      "label": "메시지 보내기",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "body": {
+            "type": "string",
+            "title": "보낼 내용"
+          },
+          "title": {
+            "type": "string",
+            "title": "제목(선택)"
+          },
+          "description": {
+            "type": "string",
+            "title": "설명(선택)"
+          },
+          "color": {
+            "type": "string",
+            "title": "색(예: #FAC11B)"
+          }
+        },
+        "required": [
+          "body"
+        ]
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "sent": {
+            "type": "boolean"
+          }
+        },
+        "required": []
+      }
+    }
+  ],
+  "permissions": [
+    "network:wh.jandi.com"
+  ]
+}

@@ -1,0 +1,136 @@
+{
+  "key": "database",
+  "type": "connector",
+  "name": "데이터베이스 (PostgreSQL·MySQL)",
+  "summary": "회사 DB에서 값을 조회하거나 행을 추가·수정해요.",
+  "version": "1.0.0",
+  "publisher": "platform",
+  "price": 0,
+  "category": "데이터",
+  "tags": [
+    "database",
+    "db",
+    "postgresql",
+    "mysql",
+    "sql",
+    "데이터베이스",
+    "조회"
+  ],
+  "database": true,
+  "requires": {
+    "credentials": [
+      {
+        "key": "engine",
+        "label": "종류(postgresql 또는 mysql)",
+        "secret": false,
+        "required": true
+      },
+      {
+        "key": "host",
+        "label": "주소(예: db.example.com)",
+        "secret": false,
+        "required": true
+      },
+      {
+        "key": "port",
+        "label": "포트(PostgreSQL 5432, MySQL 3306)",
+        "secret": false,
+        "required": false
+      },
+      {
+        "key": "database",
+        "label": "데이터베이스 이름",
+        "secret": false,
+        "required": true
+      },
+      {
+        "key": "user",
+        "label": "아이디",
+        "secret": false,
+        "required": true
+      },
+      {
+        "key": "password",
+        "label": "비밀번호",
+        "secret": true,
+        "required": true
+      },
+      {
+        "key": "ssl",
+        "label": "암호화 접속(true/false)",
+        "secret": false,
+        "required": false
+      }
+    ]
+  },
+  "actions": [
+    {
+      "key": "query",
+      "label": "조회하기(SELECT)",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "sql": {
+            "type": "string",
+            "title": "조회 문장",
+            "description": "예: SELECT name, phone FROM customers WHERE id = %(id)s"
+          },
+          "params": {
+            "type": "object",
+            "title": "넣을 값",
+            "description": "예: {\"id\": \"{{n1.customer_id}}\"}"
+          }
+        },
+        "required": [
+          "sql"
+        ]
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "rows": {
+            "type": "array"
+          },
+          "count": {
+            "type": "integer"
+          },
+          "truncated": {
+            "type": "boolean"
+          }
+        },
+        "required": []
+      }
+    },
+    {
+      "key": "execute",
+      "label": "추가·수정·삭제하기",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "sql": {
+            "type": "string",
+            "title": "실행 문장",
+            "description": "INSERT·UPDATE·DELETE 한 문장"
+          },
+          "params": {
+            "type": "object",
+            "title": "넣을 값"
+          }
+        },
+        "required": [
+          "sql"
+        ]
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "affected_rows": {
+            "type": "integer"
+          }
+        },
+        "required": []
+      }
+    }
+  ],
+  "permissions": []
+}

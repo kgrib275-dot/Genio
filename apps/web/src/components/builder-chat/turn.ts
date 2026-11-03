@@ -60,11 +60,12 @@ export function reduceDraft(draft: DraftTurn, ev: SSEEvent): DraftTurn {
 
 export const TOOL_LABEL: Record<string, string> = {
   get_graph: "현재 흐름 확인",
-  list_available_nodes: "쓸 수 있는 노드 확인",
-  add_node: "노드 추가",
-  update_node: "노드 수정",
-  remove_node: "노드 삭제",
-  connect: "노드 연결",
+  list_available_nodes: "쓸 수 있는 단계 확인",
+  add_node: "단계 추가",
+  update_node: "단계 수정",
+  remove_node: "단계 삭제",
+  connect: "단계 연결",
+  get_run: "실행 결과 확인",
   ask_user: "질문하기",
   suggest_market_item: "마켓 추천",
   run_test: "테스트 실행",

@@ -58,6 +58,19 @@ def app_key(request: Request, db: DbDep) -> AppKeyCtx:
 
 KeyDep = Annotated[AppKeyCtx, Depends(app_key)]
 
+SCOPE_NAMES = {"chat": "대화", "run": "흐름 실행", "logs": "기록 읽기"}
+
+
+def need_scope(k: AppKeyCtx, scope: str) -> None:
+    """키 권한 범위 확인(v0.5). 예전 키는 chat·run 권한을 가진 것으로 본다."""
+    scopes = set(k.key.scopes or ["chat", "run"])
+    if scope not in scopes:
+        raise AppError(
+            403,
+            f"이 API 키에는 '{SCOPE_NAMES.get(scope, scope)}' 권한이 없어요.",
+            "앱의 API 화면에서 이 권한을 켠 키를 새로 만드세요.",
+        )
+
 
 @router.get("/parameters")
 def parameters(k: KeyDep) -> dict[str, Any]:
@@ -82,6 +95,7 @@ class ChatMessageIn(BaseModel):
 
 @router.post("/chat-messages")
 def chat_messages(body: ChatMessageIn, k: KeyDep, db: DbDep) -> dict[str, Any]:
+    need_scope(k, "chat")
     req = ChatRequest(
         app=k.app,
         version=k.version,
@@ -132,6 +146,7 @@ class WorkflowRunIn(BaseModel):
 
 @router.post("/workflows/run")
 def workflows_run(body: WorkflowRunIn, k: KeyDep, db: DbDep) -> dict[str, Any]:
+    need_scope(k, "run")
     started = time.time()
     run = Run(app_id=k.app.id, version_id=k.version.id, trigger="api", input=body.inputs)
     db.add(run)
@@ -158,3 +173,46 @@ def workflows_run(body: WorkflowRunIn, k: KeyDep, db: DbDep) -> dict[str, Any]:
         "error": None,
         "elapsed_ms": int((time.time() - started) * 1000),
     }
+
+
+@router.get("/runs/{run_id}")
+def service_run(run_id: str, k: KeyDep, db: DbDep) -> dict[str, Any]:
+    """이 앱의 실행 결과 하나(권한 범위 logs)."""
+    need_scope(k, "logs")
+    r = db.get(Run, run_id)
+    if r is None or r.app_id != k.app.id:
+        raise AppError(
+            404, "실행 기록을 찾을 수 없어요.", "run_id가 이 키의 앱 실행인지 확인하세요."
+        )
+    return {
+        "run_id": r.id,
+        "status": r.status,
+        "trigger": r.trigger,
+        "outputs": r.output or {},
+        "error": r.error,
+        "usage": _usage(db, r.id),
+        "created_at": r.created_at,
+        "finished_at": r.finished_at,
+    }
+
+
+@router.get("/runs")
+def service_runs(
+    k: KeyDep, db: DbDep, limit: int = 20, status: str | None = None
+) -> list[dict[str, Any]]:
+    """이 앱의 최근 실행 목록(권한 범위 logs, 최대 100개)."""
+    need_scope(k, "logs")
+    q = select(Run).where(Run.app_id == k.app.id)
+    if status:
+        q = q.where(Run.status == status)
+    rows = db.scalars(q.order_by(Run.created_at.desc()).limit(max(1, min(limit, 100))))
+    return [
+        {
+            "run_id": r.id,
+            "status": r.status,
+            "trigger": r.trigger,
+            "error": r.error,
+            "created_at": r.created_at,
+        }
+        for r in rows
+    ]

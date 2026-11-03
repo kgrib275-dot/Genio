@@ -29,13 +29,77 @@ MAX_UPLOAD_BYTES = 20 * 1024 * 1024
 EMBED_BATCH = 64
 
 
+DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+PPTX_MIME = "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+ALLOWED_MIME.update({DOCX_MIME: "docx", PPTX_MIME: "pptx", XLSX_MIME: "xlsx", "text/html": "html"})
+EXTENSIONS = {
+    ".pdf": "pdf",
+    ".txt": "txt",
+    ".md": "txt",
+    ".markdown": "txt",
+    ".docx": "docx",
+    ".pptx": "pptx",
+    ".xlsx": "xlsx",
+    ".html": "html",
+    ".htm": "html",
+}
+MAX_SHEET_ROWS = 5000
+
+
 def kind_of(filename: str, mime: str) -> str | None:
     lower = filename.lower()
-    if lower.endswith(".pdf"):
-        return "pdf"
-    if lower.endswith((".txt", ".md", ".markdown")):
-        return "txt"
+    for ext, kind in EXTENSIONS.items():
+        if lower.endswith(ext):
+            return kind
     return ALLOWED_MIME.get(mime)
+
+
+def _docx_text(content: bytes) -> str:
+    import docx
+
+    d = docx.Document(io.BytesIO(content))
+    parts = [p.text for p in d.paragraphs if p.text.strip()]
+    for table in d.tables:
+        for row in table.rows:
+            cells = [c.text.strip() for c in row.cells]
+            if any(cells):
+                parts.append(" | ".join(cells))
+    return "\n\n".join(parts)
+
+
+def _pptx_text(content: bytes) -> str:
+    from pptx import Presentation
+
+    prs = Presentation(io.BytesIO(content))
+    slides = []
+    for i, slide in enumerate(prs.slides, 1):
+        texts = []
+        for shape in slide.shapes:
+            if getattr(shape, "has_text_frame", False) and shape.text_frame.text.strip():
+                texts.append(shape.text_frame.text.strip())
+        if texts:
+            slides.append(f"[슬라이드 {i}]\n" + "\n".join(texts))
+    return "\n\n".join(slides)
+
+
+def _xlsx_text(content: bytes) -> str:
+    from openpyxl import load_workbook
+
+    wb = load_workbook(io.BytesIO(content), read_only=True, data_only=True)
+    out = []
+    for ws in wb.worksheets:
+        rows = []
+        for n, row in enumerate(ws.iter_rows(values_only=True)):
+            if n >= MAX_SHEET_ROWS:
+                break
+            cells = ["" if v is None else str(v) for v in row]
+            if any(c.strip() for c in cells):
+                rows.append(" | ".join(cells))
+        if rows:
+            out.append(f"[시트 {ws.title}]\n" + "\n".join(rows))
+    wb.close()
+    return "\n\n".join(out)
 
 
 def extract_text(content: bytes, filename: str, mime: str) -> str:
@@ -49,6 +113,24 @@ def extract_text(content: bytes, filename: str, mime: str) -> str:
                 "PDF를 읽지 못했어요. 암호가 걸려 있거나 손상된 파일인지 확인하세요."
             ) from exc
         return "\n\n".join(pages)
+    try:
+        if kind == "docx":
+            return _docx_text(content)
+        if kind == "pptx":
+            return _pptx_text(content)
+        if kind == "xlsx":
+            return _xlsx_text(content)
+    except Exception as exc:  # 손상·암호 걸린 오피스 파일
+        raise ValueError(
+            f"{(kind or '').upper()} 파일을 읽지 못했어요. 암호가 걸려 있거나 손상된 파일인지 확인하세요."
+        ) from exc
+    if kind == "html":
+        title, body = html_to_text(_decode(content))
+        return (title + "\n\n" + body).strip()
+    return _decode(content)
+
+
+def _decode(content: bytes) -> str:
     for enc in ("utf-8", "cp949"):
         try:
             return content.decode(enc)
@@ -84,13 +166,30 @@ def chunk_text(
     return chunks
 
 
-def _embed(db: Session, workspace_id: str, texts: list[str]) -> list[list[float]]:
+def _fit(vec: list[float], dim: int) -> list[float]:
+    """저장 칸(dim) 크기에 맞춘다. 작으면 0을 채운다(코사인 유사도는 그대로)."""
+    if len(vec) == dim:
+        return vec
+    if len(vec) < dim:
+        return [*vec, *([0.0] * (dim - len(vec)))]
+    raise LlmError(
+        f"이 임베딩 모델은 {len(vec)}차원이라 저장할 수 없어요(최대 {dim}).",
+        "1536차원 이하 모델(text-embedding-3-small 등)을 고르세요.",
+    )
+
+
+def _embed(
+    db: Session, workspace_id: str, texts: list[str], model: str | None = None
+) -> list[list[float]]:
+    """지식베이스마다 고정된 임베딩 모델(model)로 만든다. 없으면 기본 모델."""
     s = get_settings()
     llm = resolve_llm(db, workspace_id, purpose="embedding")
+    use = (model or "").strip() or s.genio_embedding_model
     vectors: list[list[float]] = []
     for i in range(0, len(texts), EMBED_BATCH):
         vectors.extend(
-            llm.adapter.embed(model=s.genio_embedding_model, texts=texts[i : i + EMBED_BATCH])
+            _fit(list(v), s.genio_embedding_dim)
+            for v in llm.adapter.embed(model=use, texts=texts[i : i + EMBED_BATCH])
         )
     return vectors
 
@@ -187,7 +286,7 @@ def process_document(db: Session, document_id: str) -> None:
             raise ValueError(
                 "문서에서 글자를 찾지 못했어요. 스캔 이미지 PDF는 아직 지원하지 않아요."
             )
-        vectors = _embed(db, kb.workspace_id, [p[0] for p in pieces])
+        vectors = _embed(db, kb.workspace_id, [p[0] for p in pieces], kb.embedding_model)
         db.execute(delete(Chunk).where(Chunk.document_id == doc.id))
         for i, ((piece, parent), vec) in enumerate(zip(pieces, vectors, strict=True)):
             db.add(
@@ -221,7 +320,7 @@ def reembed_chunk(db: Session, chunk: Chunk) -> None:
     if kb is None:
         return
     try:
-        chunk.embedding = _embed(db, kb.workspace_id, [chunk.content])[0]
+        chunk.embedding = _embed(db, kb.workspace_id, [chunk.content], kb.embedding_model)[0]
     except LlmError as exc:
         raise ValueError(f"{exc.message} {exc.hint}") from exc
 
@@ -249,7 +348,13 @@ def keyword_score(query_terms: set[str], content: str) -> float:
 def _allowed_docs(
     db: Session, kb_id: str, metadata_filter: dict[str, Any] | None
 ) -> dict[str, Document]:
-    docs = {d.id: d for d in db.scalars(select(Document).where(Document.kb_id == kb_id))}
+    # 꺼 둔 문서는 검색에서 뺀다(기능 정의서 §3 문서별 활성/비활성)
+    docs = {
+        d.id: d
+        for d in db.scalars(
+            select(Document).where(Document.kb_id == kb_id, Document.enabled.is_(True))
+        )
+    }
     if not metadata_filter:
         return docs
     want = {str(k): str(v) for k, v in metadata_filter.items() if str(k).strip()}
@@ -324,7 +429,7 @@ def search(
     vec_scores: dict[str, float] = {}
     if method in ("vector", "hybrid"):
         try:
-            qvec = _embed(db, workspace_id, [query])[0]
+            qvec = _embed(db, workspace_id, [query], kb.embedding_model)[0]
         except LlmError as exc:
             raise NodeError(f"{exc.message} {exc.hint}") from exc
         if is_postgres():

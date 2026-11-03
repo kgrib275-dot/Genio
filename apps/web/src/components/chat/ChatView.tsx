@@ -2,7 +2,9 @@
 import {
   ArrowDown,
   ArrowUp,
+  Clock,
   Download,
+  Headset,
   History,
   MessageSquare,
   Mic,
@@ -46,6 +48,7 @@ import {
   type SessionEntry,
 } from "@/lib/api/chat";
 import { errorLines } from "@/lib/api/client";
+import type { FeaturesWithHandoff } from "@/lib/api/v5a";
 import type { Citation, PublicApp, PublicFeatures, Rating, StoredFile } from "@/lib/api/types";
 import { cn } from "@/lib/cn";
 import { isSendKey, sendHint, useEnterToSend } from "@/lib/composer";
@@ -108,6 +111,11 @@ export function ChatView({
   );
   const [atBottom, setAtBottom] = useState(true);
   const [loadingSession, setLoadingSession] = useState(false);
+  // v0.5: 사람(승인·담당자)을 기다리는 중 / 상담원 연결 중 — 지난 메시지를 주기적으로 다시 읽는다
+  const [pending, setPending] = useState(false);
+  const [handoff, setHandoff] = useState(false);
+  const [handoffBusy, setHandoffBusy] = useState(false);
+  const serverCount = useRef(0);
 
   const sessionRef = useRef<string | undefined>(undefined);
   const abortRef = useRef<AbortController | null>(null);
@@ -320,6 +328,24 @@ export function ChatView({
             case "citations":
               if (Array.isArray(ev.data)) attach({ citations: ev.data as Citation[] });
               break;
+            case "pending":
+              setPending(true);
+              break;
+            case "handoff":
+              dropEmptyStream();
+              setHandoff(true);
+              if (d.message)
+                setLines((ls) => [
+                  ...ls,
+                  {
+                    id: nextId(),
+                    role: "assistant",
+                    text: String(d.message),
+                    serverId: d.message_id ? String(d.message_id) : undefined,
+                    createdAt: new Date().toISOString(),
+                  },
+                ]);
+              break;
             case "suggestions":
               if (Array.isArray(ev.data))
                 attach({ suggestions: (ev.data as unknown[]).map(String) });
@@ -381,6 +407,9 @@ export function ChatView({
     setMessage("");
     setFiles([]);
     setStatus("");
+    setPending(false);
+    setHandoff(false);
+    serverCount.current = 0;
     if (!sideBySide) setHistoryOpen(false);
     window.setTimeout(() => inputRef.current?.focus(), 0);
   };
@@ -410,12 +439,78 @@ export function ChatView({
       setSessionId(sid);
       atBottomRef.current = true;
       setLines(linesFromSession(msgs, nextId));
+      serverCount.current = msgs.length;
+      if (transport.sessionState) {
+        const st = await transport.sessionState(sid).catch(() => null);
+        setHandoff(st?.status === "handoff");
+        setPending(Boolean(st?.waiting));
+      }
     } catch (err) {
       const { message: m, hint } = errorLines(err);
       if (historyKey) setSessions(removeSession(historyKey, sid));
       setLines([{ id: nextId(), role: "error", text: m, hint }]);
     } finally {
       setLoadingSession(false);
+    }
+  };
+
+  // 늦게 온 결과·상담원 답: 기다리는 동안 8초마다 지난 메시지를 다시 읽는다
+  useEffect(() => {
+    if (!(pending || handoff) || !sessionId || !transport.loadSession) return;
+    const load = transport.loadSession;
+    const sid = sessionId;
+    let stopped = false;
+    const tick = async () => {
+      if (busyRef.current || stopped) return;
+      try {
+        const msgs = await load(sid);
+        if (stopped || busyRef.current || sessionRef.current !== sid) return;
+        if (msgs.length !== serverCount.current) {
+          serverCount.current = msgs.length;
+          setLines(linesFromSession(msgs, nextId));
+        }
+        if (transport.sessionState) {
+          const st = await transport.sessionState(sid);
+          if (stopped) return;
+          setHandoff(st.status === "handoff");
+          setPending(st.waiting);
+        }
+      } catch {
+        // 잠깐 끊겨도 다음 번에 다시 본다
+      }
+    };
+    const t = window.setInterval(() => void tick(), 8000);
+    return () => {
+      stopped = true;
+      window.clearInterval(t);
+    };
+  }, [pending, handoff, sessionId, transport]);
+
+  const handoffEnabled = Boolean((features as FeaturesWithHandoff).handoff?.enabled);
+  const askHuman = async () => {
+    if (!sessionId || !transport.requestHandoff || handoff) return;
+    setHandoffBusy(true);
+    try {
+      const res = (await transport.requestHandoff(sessionId)) as {
+        message?: { id: string; content: string } | null;
+      };
+      setHandoff(true);
+      if (res?.message)
+        setLines((ls) => [
+          ...ls,
+          {
+            id: nextId(),
+            role: "assistant",
+            text: res.message?.content ?? "",
+            serverId: res.message?.id,
+            createdAt: new Date().toISOString(),
+          },
+        ]);
+    } catch (err) {
+      const { message: m, hint } = errorLines(err);
+      setLines((ls) => [...ls, { id: nextId(), role: "error", text: m, hint }]);
+    } finally {
+      setHandoffBusy(false);
     }
   };
 
@@ -533,6 +628,26 @@ export function ChatView({
         >
           <Download className="h-[18px] w-[18px]" />
         </button>
+        {handoffEnabled && transport.requestHandoff && (
+          <button
+            type="button"
+            onClick={() => void askHuman()}
+            disabled={!sessionId || handoff || handoffBusy || busy}
+            title={
+              handoff
+                ? "상담원과 연결되어 있어요"
+                : sessionId
+                  ? "사람 상담원에게 대화를 넘겨요"
+                  : "먼저 한마디 남긴 뒤 연결할 수 있어요"
+            }
+            className="inline-flex h-8 shrink-0 items-center gap-1 rounded-lg border border-slate-200 px-2 text-xs font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+          >
+            <Headset className="h-3.5 w-3.5" />
+            <span className={cn(narrow && "sr-only")}>
+              {handoff ? "상담원 연결 중" : "상담원 연결"}
+            </span>
+          </button>
+        )}
         {headerActions}
         {onClose && (
           <button
@@ -666,6 +781,25 @@ export function ChatView({
             className="shrink-0 border-t border-slate-200 bg-white p-2.5 pb-[max(0.625rem,env(safe-area-inset-bottom))] sm:p-3"
           >
             <div className={cn("space-y-2", !narrow && "mx-auto max-w-3xl")}>
+              {(handoff || pending) && (
+                <p
+                  role="status"
+                  className="flex items-center gap-1.5 rounded-lg bg-amber-50 px-2.5 py-1.5 text-xs text-amber-800"
+                >
+                  {handoff ? (
+                    <>
+                      <Headset className="h-3.5 w-3.5 shrink-0" />
+                      상담원과 연결 중이에요. 적어 주신 말은 상담원에게 전달되고, 답이 오면 여기에
+                      보여요.
+                    </>
+                  ) : (
+                    <>
+                      <Clock className="h-3.5 w-3.5 shrink-0" />
+                      담당자 처리를 기다리고 있어요. 결과가 나오면 이 대화에 보여 드려요.
+                    </>
+                  )}
+                </p>
+              )}
               {extraFields.map((f) => (
                 <Input
                   key={f.key}

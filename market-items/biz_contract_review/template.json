@@ -1,0 +1,87 @@
+{
+  "version": 1,
+  "nodes": [
+    {
+      "id": "n1",
+      "type": "input",
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "data": {
+        "label": "계약서",
+        "fields": [
+          {
+            "key": "file",
+            "label": "계약서 파일(PDF·DOCX)",
+            "type": "file",
+            "required": true
+          },
+          {
+            "key": "focus",
+            "label": "특히 볼 점(선택)",
+            "type": "text",
+            "required": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "n2",
+      "type": "document_extractor",
+      "position": {
+        "x": 300,
+        "y": 0
+      },
+      "data": {
+        "label": "문서 읽기",
+        "file": "{{n1.file}}"
+      }
+    },
+    {
+      "id": "n3",
+      "type": "llm",
+      "position": {
+        "x": 600,
+        "y": 0
+      },
+      "data": {
+        "label": "검토",
+        "provider": "default",
+        "temperature": 0.1,
+        "system": "계약서 검토를 돕는 보조입니다. 1) 당사자·기간·금액 등 핵심 조건 2) 우리에게 불리하거나 모호한 조항(조항 번호와 이유) 3) 담당자가 확인할 질문 목록을 정리하세요. 마지막에 '법률 자문이 아니므로 최종 판단은 법무 담당자가 합니다'라고 덧붙이세요.",
+        "prompt": "특히 볼 점: {{n1.focus}}\n\n계약서:\n{{n2.text}}"
+      }
+    },
+    {
+      "id": "n4",
+      "type": "output",
+      "position": {
+        "x": 900,
+        "y": 0
+      },
+      "data": {
+        "label": "검토 결과",
+        "template": "{{n3.text}}"
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "e1",
+      "source": "n1",
+      "target": "n2"
+    },
+    {
+      "id": "e2",
+      "source": "n2",
+      "target": "n3"
+    },
+    {
+      "id": "e3",
+      "source": "n3",
+      "target": "n4"
+    }
+  ],
+  "variables": {}
+}

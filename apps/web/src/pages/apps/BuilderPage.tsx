@@ -9,7 +9,7 @@ import {
   X,
 } from "lucide-react";
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useParams, useSearchParams } from "react-router-dom";
 import { BuilderChat } from "@/components/builder-chat/BuilderChat";
 import { FlowCanvas } from "@/components/canvas/FlowCanvas";
 import { NodePalette } from "@/components/canvas/NodePalette";
@@ -25,6 +25,8 @@ import { streamRunEvents } from "@/lib/api/builder";
 import { ApiError } from "@/lib/api/client";
 import { normalizeGraph, type Run, type RunStep } from "@/lib/api/types";
 import { useNodeTypes } from "@/lib/api/workspace";
+import { fixRequestMessage } from "@/lib/api/v5c";
+import { setPendingPrompt } from "@/store/pendingPrompt";
 import { useCanvas } from "@/store/canvas";
 import { canEdit, useSession } from "@/store/session";
 import { AppNav } from "@/pages/apps/AppNav";
@@ -76,6 +78,20 @@ export default function BuilderPage() {
   const [logOpen, setLogOpen] = useState(false);
   // 좁은 화면(모바일·태블릿)에서는 패널을 탭으로 하나씩 보여 준다
   const [mobileTab, setMobileTab] = useState<"chat" | "canvas" | "settings">("chat");
+  // 실행 화면의 '빌더에게 고쳐 달라고 하기'(?fix=실행id): 빌더 챗에 고쳐 달라는 메시지를 보낸다
+  const [params, setParams] = useSearchParams();
+  const [promptNonce, setPromptNonce] = useState(0);
+  const fixRunId = params.get("fix");
+  useEffect(() => {
+    if (!fixRunId || !appId) return;
+    setPendingPrompt(appId, fixRequestMessage(fixRunId));
+    setMobileTab("chat");
+    setPromptNonce((n) => n + 1);
+    const next = new URLSearchParams(params);
+    next.delete("fix");
+    setParams(next, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fixRunId, appId]);
   const loadedFor = useRef<string>("");
   const abortRef = useRef<AbortController | null>(null);
   const readOnly = !canEdit(role);
@@ -116,7 +132,7 @@ export default function BuilderPage() {
       const res = await validateGraph(appId);
       useCanvas.getState().setErrors(res.errors);
       if (res.valid) toast.success("문제가 없어요. 버전으로 저장할 수 있어요.");
-      else toast.info(`고칠 곳이 ${res.errors.length}개 있어요. 빨간 테두리 노드를 확인하세요.`);
+      else toast.info(`고칠 곳이 ${res.errors.length}개 있어요. 빨간 테두리 단계를 확인하세요.`);
     } catch (err) {
       toast.error(err);
     }
@@ -264,7 +280,7 @@ export default function BuilderPage() {
           <section
             className={`w-full shrink-0 border-r border-slate-200 lg:block lg:w-[380px] ${mobileTab === "chat" ? "block" : "hidden"}`}
           >
-            <BuilderChat appId={appId} />
+            <BuilderChat appId={appId} promptNonce={promptNonce} />
           </section>
         )}
         <section
@@ -283,7 +299,7 @@ export default function BuilderPage() {
                     onClick={() => setShowPalette((v) => !v)}
                   >
                     {showPalette ? <X className="h-3.5 w-3.5" /> : <Plus className="h-3.5 w-3.5" />}
-                    노드 추가
+                    단계 추가
                   </Button>
                   {showPalette && (
                     <div className="mt-2 w-72 rounded-xl border border-slate-200 bg-white shadow-lift">
@@ -309,7 +325,7 @@ export default function BuilderPage() {
             </div>
             {mobileTab === "settings" && !selected && (
               <p className="flex-1 p-6 text-center text-sm text-slate-500 lg:hidden">
-                캔버스에서 노드를 누르면 여기에서 설정을 고칠 수 있어요.
+                캔버스에서 단계를 누르면 여기에서 설정을 고칠 수 있어요.
               </p>
             )}
             {selected && (

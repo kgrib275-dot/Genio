@@ -1,12 +1,14 @@
 // 노드 설정 폼의 사용자 정의 위젯(설계서 §9: JSON Schema → 폼 자동 생성)
 import { useIsDark } from "@/store/theme";
-import { lazy, Suspense, useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import type { FieldProps, IconButtonProps, WidgetProps } from "@rjsf/utils";
 import { Link } from "react-router-dom";
 import { useApps } from "@/lib/api/apps";
 import { useConnectorDefinitions, useCredentials, useKnowledgeBases } from "@/lib/api/resources";
 import { useDataTables } from "@/lib/api/v4";
 import { useCanvas } from "@/store/canvas";
+import { RawValueButton, ValueInput } from "@/components/canvas/ValueInput";
+import { wantsPicker } from "@/components/canvas/valueRefs";
 
 const MonacoEditor = lazy(() => import("@monaco-editor/react"));
 
@@ -25,12 +27,46 @@ function ctxOf(props: WidgetProps | FieldProps): NodeFormContext {
 
 export function TextareaWidget(props: WidgetProps) {
   return (
-    <textarea
+    <ValueInput
       id={props.id}
-      className={`${inputCls} min-h-[90px] font-mono text-xs`}
-      value={(props.value as string | undefined) ?? ""}
+      multiline
+      mono
+      wsId={ctxOf(props).wsId}
+      value={props.value as string | undefined}
       disabled={props.disabled || props.readonly}
-      onChange={(e) => props.onChange(e.target.value === "" ? undefined : e.target.value)}
+      onChange={(v) => props.onChange(v)}
+    />
+  );
+}
+
+/** 한 줄 글자 칸(rjsf 기본 TextWidget 대신). 값을 넣을 일이 있는 칸에만 '값 끌어오기'를 단다. */
+export function ValueTextWidget(props: WidgetProps) {
+  const type = (props.schema.type as string | undefined) ?? "string";
+  if (type !== "string" || !wantsPicker(props.id) || props.schema.format) {
+    return (
+      <input
+        id={props.id}
+        className={inputCls}
+        type={type === "number" || type === "integer" ? "number" : "text"}
+        value={(props.value as string | number | undefined) ?? ""}
+        placeholder={props.placeholder}
+        disabled={props.disabled || props.readonly}
+        onChange={(e) => {
+          const v = e.target.value;
+          if (v === "") return props.onChange(undefined);
+          props.onChange(type === "number" || type === "integer" ? Number(v) : v);
+        }}
+      />
+    );
+  }
+  return (
+    <ValueInput
+      id={props.id}
+      wsId={ctxOf(props).wsId}
+      value={props.value as string | undefined}
+      placeholder={props.placeholder}
+      disabled={props.disabled || props.readonly}
+      onChange={(v) => props.onChange(v)}
     />
   );
 }
@@ -212,6 +248,22 @@ export function JsonField(props: FieldProps) {
   const toText = (v: unknown) => (v === undefined ? "" : JSON.stringify(v, null, 2));
   const [text, setText] = useState(() => toText(props.formData));
   const [bad, setBad] = useState(false);
+  const areaRef = useRef<HTMLTextAreaElement | null>(null);
+
+  const apply = (t: string) => {
+    setText(t);
+    if (!t.trim()) {
+      setBad(false);
+      props.onChange(undefined);
+      return;
+    }
+    try {
+      props.onChange(JSON.parse(t));
+      setBad(false);
+    } catch {
+      setBad(true);
+    }
+  };
 
   useEffect(() => {
     setText((prev) => {
@@ -229,28 +281,28 @@ export function JsonField(props: FieldProps) {
   const title = props.schema.title ?? props.name;
   return (
     <div className="mb-3">
-      <label htmlFor={props.idSchema.$id} className="mb-1 block text-xs font-medium text-slate-600">
-        {title}
-      </label>
+      <div className="mb-1 flex items-center justify-between gap-2">
+        <label htmlFor={props.idSchema.$id} className="block text-xs font-medium text-slate-600">
+          {title}
+        </label>
+        {!(props.disabled || props.readonly) && (
+          <RawValueButton
+            wsId={ctxOf(props).wsId}
+            onInsert={(token) => {
+              const el = areaRef.current;
+              const start = el?.selectionStart ?? text.length;
+              const end = el?.selectionEnd ?? text.length;
+              apply(text.slice(0, start) + token + text.slice(end));
+            }}
+          />
+        )}
+      </div>
       <textarea
         id={props.idSchema.$id}
+        ref={areaRef}
         className={`${inputCls} min-h-[80px] font-mono text-xs ${bad ? "border-red-400" : ""}`}
         value={text}
-        onChange={(e) => {
-          const t = e.target.value;
-          setText(t);
-          if (!t.trim()) {
-            setBad(false);
-            props.onChange(undefined);
-            return;
-          }
-          try {
-            props.onChange(JSON.parse(t));
-            setBad(false);
-          } catch {
-            setBad(true);
-          }
-        }}
+        onChange={(e) => apply(e.target.value)}
       />
       {bad && (
         <p className="mt-1 text-xs text-red-600">

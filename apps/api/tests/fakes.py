@@ -105,7 +105,7 @@ class FakeAdapter:
         return turn
 
     def embed(self, *, model: str, texts: list[str]) -> list[list[float]]:
-        self.calls.append({"kind": "embed", "n": len(texts)})
+        self.calls.append({"kind": "embed", "n": len(texts), "model": model})
         return [fake_embedding(t) for t in texts]
 
 

@@ -3,6 +3,7 @@
 from api.db import SessionLocal
 from api.engine.executor import execute_run
 from api.services.knowledge import process_document
+from api.services.limits import apply_retention, check_alerts
 from api.services.triggers import dispatch_schedules
 from worker.celery_app import celery
 
@@ -23,3 +24,17 @@ def dispatch_schedules_task() -> int:
     """next_run_at이 지난 예약 자동 실행을 큐에 넣는다(beat가 1분마다 부름)."""
     with SessionLocal() as db:
         return len(dispatch_schedules(db))
+
+
+@celery.task(name="genio.check_alerts")  # type: ignore[untyped-decorator]
+def check_alerts_task() -> int:
+    """실패·비용 알림 메일(워크스페이스 설정에 받는 사람·메일 연결 정보가 있을 때만)."""
+    with SessionLocal() as db:
+        return check_alerts(db)
+
+
+@celery.task(name="genio.apply_retention")  # type: ignore[untyped-decorator]
+def apply_retention_task() -> dict[str, int]:
+    """보관 기간이 지난 실행 기록·대화를 지운다."""
+    with SessionLocal() as db:
+        return apply_retention(db)

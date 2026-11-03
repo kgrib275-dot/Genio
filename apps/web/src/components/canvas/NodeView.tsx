@@ -78,7 +78,7 @@ export function NodeView({ data, selected }: NodeProps<GenioFlowNode>) {
         highlighted && "genio-highlight",
         off && "border-dashed opacity-60 saturate-0",
       )}
-      title={off ? "꺼진 블록이에요. 실행할 때 건너뛰어요." : undefined}
+      title={off ? "꺼진 단계예요. 실행할 때 건너뛰어요." : undefined}
     >
       <span className={cn("absolute inset-y-0 left-0 w-1", toneOf(spec?.category).bar)} />
       {node.type !== "input" && (

@@ -24,29 +24,3 @@ export function toRjsfUiSchema(spec: Pick<NodeType, "ui_schema" | "input_schema"
   }
   return out;
 }
-
-/** 다른 노드 출력을 참조하는 표현식 목록(설정 패널 도움말). */
-export function referenceHints(
-  nodes: { id: string; type: string; data: Record<string, unknown> }[],
-  exceptId: string,
-): string[] {
-  const hints: string[] = [];
-  for (const n of nodes) {
-    if (n.id === exceptId) continue;
-    if (n.type === "input") {
-      const fields = (n.data.fields as { key?: string }[] | undefined) ?? [];
-      for (const f of fields) if (f.key) hints.push(`{{${n.id}.${f.key}}}`);
-    } else if (n.type === "llm") {
-      hints.push(`{{${n.id}.text}}`);
-      const schema = n.data.output_schema as { properties?: Record<string, unknown> } | undefined;
-      for (const k of Object.keys(schema?.properties ?? {})) hints.push(`{{${n.id}.${k}}}`);
-    } else if (n.type === "knowledge_search") {
-      hints.push(`{{${n.id}.context}}`);
-    } else if (n.type === "http") {
-      hints.push(`{{${n.id}.body}}`);
-    } else if (n.type !== "output" && n.type !== "condition") {
-      hints.push(`{{${n.id}.…}}`);
-    }
-  }
-  return hints;
-}

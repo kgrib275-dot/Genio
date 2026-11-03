@@ -1,4 +1,5 @@
 import {
+  Headset,
   BookMarked,
   Eye,
   EyeOff,
@@ -17,7 +18,7 @@ import { useParams } from "react-router-dom";
 import { ErrorBox, Loading } from "@/components/ErrorBox";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
-import { Input, Select, Textarea } from "@/components/ui/input";
+import { Field, Input, Select, Textarea } from "@/components/ui/input";
 import { toast } from "@/components/ui/toast-store";
 import { useApp, useApps } from "@/lib/api/apps";
 import {
@@ -30,6 +31,7 @@ import { useSaveEnvVars, useSaveFeatures } from "@/lib/api/v2";
 import { cn } from "@/lib/cn";
 import { AppNav } from "@/pages/apps/AppNav";
 import { canEdit, useSession } from "@/store/session";
+import { useSaveHandoff, type HandoffFeature } from "@/lib/api/v5a";
 
 function Toggle({
   checked,
@@ -581,6 +583,86 @@ function OnFailureCard({
   );
 }
 
+/** v0.5 상담원 연결: 챗봇이 못 풀면 사람에게 넘긴다(기능 정의서 S7) */
+function HandoffCard({ app, readOnly }: { app: AppDetailV2; readOnly: boolean }) {
+  const saved = ((app.features ?? {}) as { handoff?: HandoffFeature }).handoff;
+  const save = useSaveHandoff(app.id);
+  const [enabled, setEnabled] = useState(Boolean(saved?.enabled));
+  const [keywords, setKeywords] = useState(
+    (saved?.keywords ?? ["상담원", "사람이랑", "직원 연결"]).join(", "),
+  );
+  const [message, setMessage] = useState(saved?.message ?? "");
+  useEffect(() => {
+    setEnabled(Boolean(saved?.enabled));
+    setKeywords((saved?.keywords ?? ["상담원", "사람이랑", "직원 연결"]).join(", "));
+    setMessage(saved?.message ?? "");
+  }, [saved?.enabled, saved?.keywords, saved?.message]);
+  return (
+    <Card className="overflow-hidden">
+      <CardHeader
+        title="상담원 연결"
+        description="챗봇이 못 푸는 대화를 사람에게 넘겨요. 넘긴 대화는 로그의 '상담원 응대'에서 답해요."
+        action={
+          !readOnly && (
+            <Button
+              size="sm"
+              disabled={save.isPending}
+              onClick={() =>
+                save.mutate(
+                  {
+                    enabled,
+                    keywords: keywords
+                      .split(/[,\n]/)
+                      .map((k) => k.trim())
+                      .filter(Boolean),
+                    message,
+                  },
+                  {
+                    onSuccess: () => toast.success("상담원 연결 설정을 저장했어요."),
+                    onError: (err) => toast.error(err),
+                  },
+                )
+              }
+            >
+              {save.isPending ? "저장 중…" : "저장"}
+            </Button>
+          )
+        }
+      />
+      <div className="border-t border-slate-100">
+        <FeatureRow
+          icon={<Headset className="h-4 w-4" />}
+          title="상담원 연결 쓰기"
+          description="켜면 챗 화면에 '상담원 연결' 버튼이 생기고, 아래 말이 들어와도 사람에게 넘겨요."
+          enabled={enabled}
+          onToggle={setEnabled}
+          disabled={readOnly}
+        >
+          <Field label="이 말이 들어오면 넘기기(쉼표로 구분)" htmlFor="handoff-keywords">
+            <Input
+              id="handoff-keywords"
+              value={keywords}
+              disabled={readOnly}
+              onChange={(e) => setKeywords(e.target.value)}
+            />
+          </Field>
+          <Field label="넘길 때 보여 줄 말" htmlFor="handoff-message">
+            <Textarea
+              id="handoff-message"
+              rows={2}
+              maxLength={300}
+              placeholder="상담원을 연결해 드릴게요. 잠시만 기다려 주세요."
+              value={message}
+              disabled={readOnly}
+              onChange={(e) => setMessage(e.target.value)}
+            />
+          </Field>
+        </FeatureRow>
+      </div>
+    </Card>
+  );
+}
+
 export default function AppFeaturesPage() {
   const { id: appId = "" } = useParams();
   const role = useSession((s) => s.role);
@@ -622,6 +704,7 @@ export default function AppFeaturesPage() {
                 })
               }
             />
+            <HandoffCard app={detail} readOnly={readOnly} />
             <EnvVarsCard app={detail} readOnly={readOnly} />
           </>
         )}

@@ -2,7 +2,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { RotateCcw } from "lucide-react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { JsonView, StepRow } from "@/components/canvas/RunPanel";
+import { FailureBox, JsonView, StepRow, StoryList } from "@/components/canvas/RunPanel";
 import { DataView } from "@/components/DataView";
 import { ErrorBox, Loading } from "@/components/ErrorBox";
 import { ListPager, ListToolbar, NoMatch } from "@/components/ListControls";
@@ -20,6 +20,7 @@ import type { Run, RunDetail, RunStep } from "@/lib/api/types";
 import { formatCost, formatDate } from "@/lib/cn";
 import { useListControls } from "@/lib/useListControls";
 import { RUN_STATUS } from "@/lib/runLabels";
+import { useRerunFromNode, type RunDetailStory, type StoryStep } from "@/lib/api/v5c";
 import { PageContainer } from "@/app/Layout";
 
 const TERMINAL = new Set(["succeeded", "failed"]);
@@ -171,14 +172,16 @@ export default function RunDetailPage() {
         <ErrorBox error={run.error} />
       </PageContainer>
     );
-  const r = run.data;
+  const r = run.data as RunDetailStory | undefined;
   if (!r) return null;
 
   const nodes = r.graph?.nodes ?? [];
   const labelOf = (id: string) =>
     ((nodes.find((n) => n.id === id)?.data as Record<string, unknown> | undefined)?.label as
       string | undefined) ?? id;
-  const steps = [...r.steps].sort((a, b) => (a.started_at ?? "").localeCompare(b.started_at ?? ""));
+  const steps: StoryStep[] = [...r.steps].sort((a, b) =>
+    (a.started_at ?? "").localeCompare(b.started_at ?? ""),
+  );
 
   const decide = (approved: boolean) =>
     approve.mutate(
@@ -246,10 +249,28 @@ export default function RunDetailPage() {
         </p>
       )}
 
-      {r.error && (
-        <div className="mb-4 rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-900">
-          {r.error}
+      {r.status === "failed" ? (
+        <div className="mb-4 overflow-hidden rounded-md border border-red-200 text-sm">
+          <FailureBox run={r} steps={steps} appId={canEdit(role) ? r.app_id : undefined} />
         </div>
+      ) : (
+        r.error && (
+          <div className="mb-4 rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-900">
+            {r.error}
+          </div>
+        )
+      )}
+
+      {(r.story?.length ?? 0) > 0 && (
+        <Card className="mb-6">
+          <CardHeader
+            title="이번 실행 이야기"
+            description="단계마다 무엇을 했는지 한 문장으로 보여 줘요."
+          />
+          <CardBody className="p-0 text-sm">
+            <StoryList story={r.story ?? []} />
+          </CardBody>
+        </Card>
       )}
 
       <div className="grid gap-6 md:grid-cols-2">
@@ -270,17 +291,37 @@ export default function RunDetailPage() {
           </CardBody>
         </Card>
       </div>
-      <StepsCard steps={steps} labelOf={labelOf} />
+      <StepsCard
+        steps={steps}
+        labelOf={labelOf}
+        runId={r.id}
+        appId={r.app_id}
+        canRerun={canEdit(role) && TERMINAL.has(r.status)}
+      />
     </PageContainer>
   );
 }
 
-/** 단계별 진행: 블록 이름 검색, 상태 필터, 개수 */
-function StepsCard({ steps, labelOf }: { steps: RunStep[]; labelOf: (id: string) => string }) {
+/** 단계별 진행: 단계 이름 검색, 상태 필터, 개수. 단계마다 문장 설명과 '이 단계부터 다시' */
+function StepsCard({
+  steps,
+  labelOf,
+  runId,
+  appId,
+  canRerun,
+}: {
+  steps: StoryStep[];
+  labelOf: (id: string) => string;
+  runId: string;
+  appId: string;
+  canRerun: boolean;
+}) {
+  const navigate = useNavigate();
+  const rerun = useRerunFromNode(appId);
   const sc = useListControls(steps, {
     key: "run-steps",
     defaultSize: 50,
-    search: (s) => `${labelOf(s.node_id)} ${s.node_id}`,
+    search: (s) => `${labelOf(s.node_id)} ${s.node_id} ${s.summary ?? ""}`,
     filters: [
       {
         id: "status",
@@ -294,12 +335,32 @@ function StepsCard({ steps, labelOf }: { steps: RunStep[]; labelOf: (id: string)
     <Card className="mt-6">
       <CardHeader title="단계별 진행" />
       {steps.length > 0 && (
-        <ListToolbar c={sc} placeholder="블록 이름으로 찾기" className="px-4 pb-3 sm:px-5" />
+        <ListToolbar c={sc} placeholder="단계 이름·내용으로 찾기" className="px-4 pb-3 sm:px-5" />
       )}
       <NoMatch c={sc} />
       <ul className="border-t border-slate-100">
         {sc.pageItems.map((s) => (
-          <StepRow key={s.id} step={s} label={labelOf(s.node_id)} />
+          <StepRow
+            key={s.id}
+            step={s}
+            label={labelOf(s.node_id)}
+            rerunPending={rerun.isPending}
+            onRerunFrom={
+              canRerun && s.status !== "skipped"
+                ? () =>
+                    rerun.mutate(
+                      { runId, fromNode: s.node_id },
+                      {
+                        onSuccess: (r) => {
+                          toast.success(`'${labelOf(s.node_id)}' 단계부터 다시 실행했어요.`);
+                          navigate(`/runs/${r.id}`);
+                        },
+                        onError: (err) => toast.error(err),
+                      },
+                    )
+                : undefined
+            }
+          />
         ))}
         {steps.length === 0 && (
           <li className="px-5 py-4 text-sm text-slate-500">아직 진행된 단계가 없어요.</li>

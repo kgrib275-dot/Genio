@@ -167,7 +167,13 @@ export function ChatMessage({
         <AppIcon name={appName} icon={appIcon} size="sm" />
       </span>
       <div className="min-w-0 max-w-full flex-1 sm:max-w-[85%] sm:flex-none">
-        <div className="rounded-2xl rounded-tl-md border border-slate-200 bg-white px-3.5 py-2.5 text-[15px] text-slate-900 shadow-sm sm:text-sm">
+        {line.agent && <p className="mb-1 text-[11px] font-semibold text-emerald-700">상담원</p>}
+        <div
+          className={cn(
+            "rounded-2xl rounded-tl-md border px-3.5 py-2.5 text-[15px] text-slate-900 shadow-sm sm:text-sm",
+            line.agent ? "border-emerald-200 bg-emerald-50" : "border-slate-200 bg-white",
+          )}
+        >
           {waiting ? (
             <span className="flex items-center gap-1 py-1" aria-label="답을 쓰는 중">
               <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-slate-400" />

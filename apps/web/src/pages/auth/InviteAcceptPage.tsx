@@ -56,7 +56,7 @@ export default function InviteAcceptPage() {
               <Field
                 label="비밀번호"
                 htmlFor="password"
-                hint="이미 계정이 있으면 그 비밀번호를, 없으면 새 비밀번호(8자 이상)를 넣어 주세요."
+                hint="이미 계정이 있으면 그 비밀번호를, 없으면 새 비밀번호(8자 이상, 영문과 숫자를 섞어서)를 넣어 주세요."
               >
                 <Input
                   id="password"

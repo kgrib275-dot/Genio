@@ -228,3 +228,135 @@ def connector_manifest(db: Session, workspace_id: str, key: str) -> dict[str, An
         if item.key == key:
             return item.manifest
     return None
+
+
+def update_installation(
+    db: Session, workspace_id: str, installation_id: str, user_id: str
+) -> Installation:
+    """설치한 아이템을 마켓의 최신 버전으로 바꾼다(커넥터 정의도 새 버전으로)."""
+    inst = db.get(Installation, installation_id)
+    if inst is None or inst.workspace_id != workspace_id or inst.status != "installed":
+        raise not_found("설치 항목")
+    item = db.get(MarketItem, inst.item_id)
+    if item is None:
+        raise not_found("마켓 아이템")
+    if inst.version == item.version:
+        raise AppError(409, "이미 최신 버전이에요.", "새 버전이 나오면 업데이트 버튼이 보여요.")
+    path = bundle_path(item)
+    try:
+        validate_bundle(path, item.manifest)
+        if item.type == "node":
+            registry.register(_load_node_spec(item), replace=True)
+    except BundleError as exc:
+        raise AppError(
+            422, f"업데이트하지 못했어요: {exc}", "지금 버전을 계속 쓰고 게시자에게 문의하세요."
+        ) from exc
+    if item.type == "connector":
+        definition = db.scalar(
+            select(ConnectorDefinition).where(
+                ConnectorDefinition.key == item.key, ConnectorDefinition.version == item.version
+            )
+        )
+        if definition is None:
+            definition = ConnectorDefinition(
+                key=item.key,
+                name=item.name,
+                version=item.version,
+                source="market",
+                manifest=item.manifest,
+            )
+            db.add(definition)
+            db.flush()
+        # 기존 연결 정보는 새 정의로 옮긴다(값은 그대로)
+        from api.models import ConnectorCredential
+
+        old_ids = list(
+            db.scalars(
+                select(ConnectorDefinition.id).where(
+                    ConnectorDefinition.key == item.key, ConnectorDefinition.id != definition.id
+                )
+            )
+        )
+        if old_ids:
+            for cred in db.scalars(
+                select(ConnectorCredential).where(
+                    ConnectorCredential.workspace_id == workspace_id,
+                    ConnectorCredential.definition_id.in_(old_ids),
+                )
+            ):
+                cred.definition_id = definition.id
+    before = inst.version
+    inst.version = item.version
+    audit(
+        db,
+        workspace_id=workspace_id,
+        user_id=user_id,
+        action="market.update",
+        target_type="market_item",
+        target_id=item.key,
+        meta={"from": before, "to": item.version},
+    )
+    db.commit()
+    return inst
+
+
+def category_of(item: MarketItem) -> str:
+    """마켓 분류(manifest.category가 없으면 종류로 정한다)."""
+    cat = (item.manifest or {}).get("category")
+    if isinstance(cat, str) and cat.strip():
+        return cat.strip()
+    return {
+        "connector": "연결",
+        "template": "템플릿",
+        "node": "단계",
+        "prompt_pack": "프롬프트",
+    }.get(item.type, "기타")
+
+
+STEP_NAMES = {
+    "input": "입력 받기",
+    "output": "결과 내기",
+    "llm": "AI에게 묻기",
+    "condition": "조건으로 나누기",
+    "http": "외부 주소 부르기",
+    "code": "코드 실행",
+    "knowledge_search": "지식 찾기",
+    "connector": "서비스 연결",
+    "approval": "승인 받기",
+    "question_classifier": "질문 분류",
+    "parameter_extractor": "값 뽑기",
+    "template": "글 만들기",
+    "document_extractor": "문서 읽기",
+    "data_table": "데이터 표",
+    "agent": "에이전트",
+}
+
+
+def template_preview(item: MarketItem) -> dict[str, Any]:
+    """템플릿 미리 보기: 단계 목록·앱 종류·채울 빈칸."""
+    try:
+        graph = read_json(bundle_path(item) / "template.json")
+    except (OSError, ValueError, AppError):
+        return {"steps": [], "app_type": None, "blanks": []}
+    steps = []
+    for n in graph.get("nodes", []) if isinstance(graph, dict) else []:
+        data = n.get("data") or {}
+        extra = ""
+        if n.get("type") == "connector":
+            extra = str(data.get("connector") or "")
+        steps.append(
+            {
+                "id": n.get("id"),
+                "type": n.get("type"),
+                "label": data.get("label") or STEP_NAMES.get(str(n.get("type")), n.get("type")),
+                "kind": STEP_NAMES.get(str(n.get("type")), str(n.get("type"))),
+                "service": extra or None,
+            }
+        )
+    m = item.manifest or {}
+    return {
+        "steps": steps,
+        "app_type": m.get("app_type") or "workflow",
+        "blanks": m.get("blanks") or [],
+        "requires": (m.get("requires") or {}).get("items") or [],
+    }

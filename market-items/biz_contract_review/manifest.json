@@ -1,0 +1,23 @@
+{
+  "key": "biz_contract_review",
+  "type": "template",
+  "name": "계약서 검토 보조",
+  "summary": "계약서 파일을 올리면 핵심 조건·위험 조항·확인할 점을 정리해 줘요(법률 자문을 대신하지 않아요).",
+  "version": "1.0.0",
+  "publisher": "platform",
+  "price": 0,
+  "category": "업무",
+  "app_type": "workflow",
+  "tags": [
+    "계약서",
+    "검토",
+    "법무",
+    "문서",
+    "업무"
+  ],
+  "requires": {
+    "items": []
+  },
+  "blanks": [],
+  "permissions": []
+}

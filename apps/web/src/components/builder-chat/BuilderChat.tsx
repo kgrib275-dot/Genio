@@ -333,7 +333,8 @@ export function BuilderChatView({
   );
 }
 
-export function BuilderChat({ appId }: { appId: string }) {
+/** promptNonce가 바뀌면 대화를 다시 그려, 맡겨 둔 첫 메시지(예: 고쳐 달라는 요청)를 보낸다 */
+export function BuilderChat({ appId, promptNonce = 0 }: { appId: string; promptNonce?: number }) {
   const wsId = useSession((s) => s.workspaceId);
   const qc = useQueryClient();
   const session = useBuilderSession(appId);
@@ -360,7 +361,7 @@ export function BuilderChat({ appId }: { appId: string }) {
   if (!session.data) return null;
   return (
     <BuilderChatView
-      key={session.data.id}
+      key={`${session.data.id}-${promptNonce}`}
       sessionId={session.data.id}
       appId={appId}
       history={messages.data ?? []}

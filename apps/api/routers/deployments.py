@@ -1,13 +1,14 @@
 """배포(위젯·공유 링크·API)와 공개 챗 API, 위젯 스크립트, 위젯 모양(v0.4)."""
 
 import json
+import time
 from collections.abc import Iterator
 from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Depends, File, Request, Response, UploadFile
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from api.core import ratelimit
@@ -25,12 +26,23 @@ from api.deps import (
     membership_role,
     require_role,
 )
-from api.models import App, Conversation, Deployment, Message, StoredFile, User, WorkflowVersion
+from api.models import (
+    App,
+    Conversation,
+    Deployment,
+    Membership,
+    Message,
+    Run,
+    StoredFile,
+    User,
+    WorkflowVersion,
+)
 from api.routers.common import client_ip, public_origin, sse_frame, sse_response
 from api.services import apps as app_svc
 from api.services.app_config import merged_features
-from api.services.chat import ChatRequest, input_fields, run_chat, start_chat
+from api.services.chat import ChatRequest, input_fields, run_chat, start_chat, start_handoff
 from api.services.files import save_upload
+from api.services.queue import enqueue_run
 
 router = APIRouter(tags=["deployments"])
 AppDeployers = Annotated[Ctx, Depends(require_role(DEPLOY_APPS, via="app"))]
@@ -77,6 +89,7 @@ def _dep(d: Deployment, version: int | None, origin: str) -> dict[str, Any]:
         "public_token": d.public_token,
         "access": d.access,
         "allowed_roles": d.allowed_roles or [],
+        "allowed_users": d.allowed_users or [],
         "created_at": d.created_at,
         "share_url": f"{origin}/share/{d.public_token}",
         "widget_snippet": f'<script src="{origin}/api/v1/public/apps/{d.public_token}/widget.js" async></script>',
@@ -89,7 +102,30 @@ class DeploymentIn(BaseModel):
     channel: Literal["web_widget", "share_link", "api"] = "share_link"
     access: Literal["workspace", "roles", "public"] = "workspace"
     allowed_roles: list[Role] = Field(default_factory=list)
+    # v0.5: 특정 사용자(워크스페이스 멤버 user id). 역할과 함께 쓰면 둘 중 하나만 맞아도 된다
+    allowed_users: list[str] = Field(default_factory=list, max_length=500)
     version: int | None = None
+
+
+def _members_only(db: Session, workspace_id: str, user_ids: list[str]) -> list[str]:
+    ids = list(dict.fromkeys(str(u)[:36] for u in user_ids if str(u).strip()))
+    if not ids:
+        return []
+    found = set(
+        db.scalars(
+            select(Membership.user_id).where(
+                Membership.workspace_id == workspace_id, Membership.user_id.in_(ids)
+            )
+        )
+    )
+    missing = [u for u in ids if u not in found]
+    if missing:
+        raise AppError(
+            422,
+            "워크스페이스 멤버가 아닌 사람이 들어 있어요.",
+            "멤버 목록에서 다시 골라 주세요.",
+        )
+    return ids
 
 
 @router.post("/apps/{app_id}/deployments", status_code=201)
@@ -111,10 +147,17 @@ def create_deployment(
             "저장된 버전이 없어 배포할 수 없어요.",
             "빌더 화면에서 '버전 저장'을 먼저 누르세요.",
         )
-    if body.access == "roles" and not body.allowed_roles:
+    if body.access == "roles" and not body.allowed_roles and not body.allowed_users:
         raise AppError(
-            422, "사용할 수 있는 역할을 하나 이상 골라 주세요.", "역할 목록에서 체크하세요."
+            422,
+            "사용할 수 있는 역할이나 사람을 하나 이상 골라 주세요.",
+            "역할 목록에서 체크하거나 사람을 고르세요.",
         )
+    users = (
+        _members_only(ctx.db, app.workspace_id, body.allowed_users)
+        if body.access == "roles"
+        else []
+    )
     dep = Deployment(
         app_id=app_id,
         version_id=version.id,
@@ -122,6 +165,7 @@ def create_deployment(
         public_token=random_token(18),
         access=body.access,
         allowed_roles=list(body.allowed_roles) if body.access == "roles" else [],
+        allowed_users=users,
     )
     ctx.db.add(dep)
     app.status = "published"
@@ -151,7 +195,11 @@ def list_deployments(app_id: str, request: Request, ctx: AppViewers) -> list[dic
 
 
 class DeploymentPatch(BaseModel):
-    appearance: Appearance
+    appearance: Appearance | None = None
+    # v0.5: 누가 쓸 수 있나 바꾸기
+    access: Literal["workspace", "roles", "public"] | None = None
+    allowed_roles: list[Role] | None = None
+    allowed_users: list[str] | None = Field(default=None, max_length=500)
 
 
 @router.patch("/deployments/{deployment_id}")
@@ -161,16 +209,38 @@ def update_deployment(
     dep = ctx.db.get(Deployment, deployment_id)
     if dep is None:
         raise not_found("배포")
-    dep.appearance = body.appearance.model_dump()
     app = ctx.db.get(App, dep.app_id)
+    if body.appearance is not None:
+        dep.appearance = body.appearance.model_dump()
+    access_changed = any(
+        v is not None for v in (body.access, body.allowed_roles, body.allowed_users)
+    )
+    if access_changed and app is not None:
+        access = body.access or dep.access
+        roles = list(body.allowed_roles) if body.allowed_roles is not None else dep.allowed_roles
+        users = (
+            _members_only(ctx.db, app.workspace_id, body.allowed_users)
+            if body.allowed_users is not None
+            else list(dep.allowed_users or [])
+        )
+        if access == "roles" and not roles and not users:
+            raise AppError(
+                422,
+                "사용할 수 있는 역할이나 사람을 하나 이상 골라 주세요.",
+                "역할 목록에서 체크하거나 사람을 고르세요.",
+            )
+        dep.access = access
+        dep.allowed_roles = list(roles or []) if access == "roles" else []
+        dep.allowed_users = users if access == "roles" else []
     if app is not None:
         audit(
             ctx.db,
             workspace_id=app.workspace_id,
             user_id=ctx.user.id,
-            action="app.deploy_appearance",
+            action="app.deploy_access" if access_changed else "app.deploy_appearance",
             target_type="deployment",
             target_id=dep.id,
+            meta={"access": dep.access} if access_changed else None,
         )
     ctx.db.commit()
     version = ctx.db.get(WorkflowVersion, dep.version_id)
@@ -229,11 +299,16 @@ def _check_access(db: Session, dep: Deployment, app: App, user: User | None) -> 
             "이 앱을 쓸 수 있는 워크스페이스 멤버가 아니에요.",
             "앱 관리자에게 초대를 요청하세요.",
         )
-    if dep.access == "roles" and role not in (dep.allowed_roles or []) and role != "owner":
+    if (
+        dep.access == "roles"
+        and role not in (dep.allowed_roles or [])
+        and user.id not in (dep.allowed_users or [])
+        and role != "owner"
+    ):
         raise AppError(
             403,
-            "내 역할로는 이 앱을 쓸 수 없어요.",
-            "앱 관리자에게 배포 대상 역할을 확인해 달라고 요청하세요.",
+            "이 앱을 쓸 수 있는 사람으로 지정되지 않았어요.",
+            "앱 관리자에게 배포 대상(역할·사람)을 확인해 달라고 요청하세요.",
         )
 
 
@@ -325,6 +400,67 @@ def public_chat(
     return sse_response(frames())
 
 
+# ---------------- 워크플로우 앱 공유(입력 폼 → 결과), 기능 정의서 앱 유형 ----------------
+class FormRunIn(BaseModel):
+    input: dict[str, Any] = Field(default_factory=dict)
+    files: list[str] = Field(default_factory=list, max_length=10)
+
+
+@router.post("/public/apps/{token}/runs", status_code=202)
+def public_form_run(
+    token: str, body: FormRunIn, request: Request, db: DbDep, user: OptionalUser
+) -> dict[str, Any]:
+    """공유 링크로 흐름을 한 번 실행한다. 바로 run_id를 돌려주고, 결과는 아래 GET으로 받는다."""
+    dep, app, version = _load_public(db, token)
+    if _rate_limited(app, f"run:{app.id}:{client_ip(request)}"):
+        raise AppError(429, "요청이 너무 많아요.", "1분 뒤에 다시 시도하세요.")
+    _check_access(db, dep, app, user)
+    run_input = dict(body.input or {})
+    if len(json.dumps(run_input, ensure_ascii=False, default=str)) > 20_000:
+        raise AppError(413, "입력이 너무 길어요.", "내용을 줄여서 다시 보내 주세요.")
+    files = _own_files(db, app, body.files)
+    if files:
+        field = next((f["key"] for f in input_fields(version.graph) if f["type"] == "file"), None)
+        if field:
+            run_input.setdefault(str(field), files[0] if len(files) == 1 else files)
+    run = Run(
+        app_id=app.id,
+        version_id=version.id,
+        trigger="form",
+        input=run_input,
+        created_by=user.id if user else None,
+    )
+    db.add(run)
+    db.commit()
+    run_id = run.id
+    enqueue_run(run_id)
+    return {"run_id": run_id, "status": "queued"}
+
+
+@router.get("/public/apps/{token}/runs/{run_id}")
+def public_form_result(token: str, run_id: str, db: DbDep, user: OptionalUser) -> dict[str, Any]:
+    """그 공유 링크 앱의 실행 결과만. 단계 입력·출력 같은 내부 값은 보내지 않는다."""
+    dep, app, _ = _load_public(db, token)
+    _check_access(db, dep, app, user)
+    run = db.get(Run, run_id)
+    if run is None or run.app_id != app.id or run.trigger != "form":
+        raise not_found("실행 결과")
+    out = run.output or {}
+    body: dict[str, Any] = {"run_id": run.id, "status": run.status}
+    if run.status == "succeeded":
+        body["text"] = str(out.get("text", ""))
+    elif run.status == "failed":
+        msg = (run.error or "").strip()
+        body["error"] = {
+            "message": "흐름을 끝까지 실행하지 못했어요.",
+            "hint": "입력을 확인하고 다시 실행하거나, 앱을 만든 사람에게 알려 주세요.",
+            "detail": msg[:300],
+        }
+    elif run.status == "waiting_approval":
+        body["text"] = "담당자의 확인을 기다리고 있어요. 확인되면 이 화면에 결과가 나와요."
+    return body
+
+
 @router.get("/public/apps/{token}/sessions/{session_id}/messages")
 def public_session_messages(
     token: str, session_id: str, db: DbDep, user: OptionalUser
@@ -357,6 +493,59 @@ def public_session_messages(
         }
         for m in msgs
     ]
+
+
+def _session_conv(db: Session, dep: Deployment, app: App, session_id: str) -> Conversation:
+    conv = db.scalar(
+        select(Conversation).where(
+            Conversation.app_id == app.id,
+            Conversation.deployment_id == dep.id,
+            Conversation.external_session_id == session_id[:100],
+        )
+    )
+    if conv is None:
+        raise AppError(404, "지난 대화를 찾을 수 없어요.", "새 대화를 시작하세요.")
+    return conv
+
+
+@router.get("/public/apps/{token}/sessions/{session_id}/state")
+def public_session_state(
+    token: str, session_id: str, db: DbDep, user: OptionalUser
+) -> dict[str, Any]:
+    """대화 상태(bot | handoff | closed)와 사람을 기다리는 실행이 있는지. 챗 화면이 주기적으로 본다."""
+    dep, app, _ = _load_public(db, token)
+    _check_access(db, dep, app, user)
+    conv = _session_conv(db, dep, app, session_id)
+    waiting = db.scalar(
+        select(func.count())
+        .select_from(Run)
+        .join(Message, Message.run_id == Run.id)
+        .where(Message.conversation_id == conv.id, Run.status == "waiting_approval")
+    )
+    last = db.scalar(select(func.max(Message.created_at)).where(Message.conversation_id == conv.id))
+    return {"status": conv.status, "waiting": bool(waiting), "last_message_at": last}
+
+
+@router.post("/public/apps/{token}/sessions/{session_id}/handoff")
+def public_request_handoff(
+    token: str, session_id: str, request: Request, db: DbDep, user: OptionalUser
+) -> dict[str, Any]:
+    """'상담원 연결' 버튼: 이 대화를 사람에게 넘긴다(앱에서 상담원 전환을 켠 경우만)."""
+    dep, app, _ = _load_public(db, token)
+    _check_access(db, dep, app, user)
+    if _rate_limited(app, f"handoff:{app.id}:{client_ip(request)}"):
+        raise AppError(429, "요청이 너무 많아요.", "1분 뒤에 다시 시도하세요.")
+    if not (merged_features(app.features).get("handoff") or {}).get("enabled"):
+        raise AppError(
+            409,
+            "이 챗봇은 상담원 연결을 쓰지 않아요.",
+            "챗봇에게 다시 물어보거나 관리자에게 문의하세요.",
+        )
+    conv = _session_conv(db, dep, app, session_id)
+    if conv.status == "handoff":
+        return {"status": "handoff", "message": None}
+    m = start_handoff(db, app, conv, time.time())
+    return {"status": "handoff", "message": {"id": m.id, "content": m.content}}
 
 
 def _own_files(db: Session, app: App, ids: list[str]) -> list[str]:

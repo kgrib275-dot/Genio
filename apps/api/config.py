@@ -45,6 +45,17 @@ class Settings(BaseSettings):
     genio_db_max_overflow: int = 10
     # 사설망 호출 허용(테스트 전용). 운영에서는 항상 false.
     genio_allow_private_network: bool = False
+    # v0.5 보안(부하 시험 보고서 §4)
+    # X-Forwarded-For를 믿을 프록시(이 주소에서 온 요청만 헤더의 IP를 쓴다). 쉼표로 구분한 CIDR.
+    genio_trusted_proxies: str = (
+        "127.0.0.0/8,::1/128,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,fc00::/7"
+    )
+    # 브라우저에서 API를 부를 수 있는 주소(GENIO_PUBLIC_WEB_URL과 localhost는 늘 허용). 쉼표로 구분.
+    genio_cors_origins: str = ""
+    # 로그인 실패 제한: 같은 이메일+IP 15분에 5번, 같은 이메일 15분에 20번
+    genio_login_max_fails: int = 5
+    genio_login_max_fails_per_email: int = 20
+    genio_login_lock_seconds: int = 900
 
     market_items_dir: str = "market-items"
 

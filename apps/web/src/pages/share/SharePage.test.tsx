@@ -6,7 +6,7 @@ import SharePage from "@/pages/share/SharePage";
 
 const feedback = vi.fn();
 const sentMessages: string[] = [];
-let mode: "basic" | "stream" | "hang" = "basic";
+let mode: "basic" | "stream" | "hang" | "handoff" | "pending" = "basic";
 let release: (() => void) | null = null;
 
 vi.mock("@/lib/api/resources", async (orig) => {
@@ -41,6 +41,25 @@ vi.mock("@/lib/api/resources", async (orig) => {
       signal?: AbortSignal,
     ) => {
       sentMessages.push(body.message);
+      if (mode === "handoff") {
+        onEvent({ event: "session", data: { session_id: "s4" } });
+        onEvent({
+          event: "handoff",
+          data: { message: "상담원을 연결해 드릴게요.", message_id: "h1" },
+        });
+        onEvent({ event: "done", data: { session_id: "s4", status: "handoff" } });
+        return;
+      }
+      if (mode === "pending") {
+        onEvent({ event: "session", data: { session_id: "s5" } });
+        onEvent({
+          event: "answer",
+          data: { text: "담당자의 승인을 기다리고 있어요.", message_id: "m5" },
+        });
+        onEvent({ event: "pending", data: { run_id: "r5" } });
+        onEvent({ event: "done", data: { session_id: "s5", status: "waiting_approval" } });
+        return;
+      }
       if (mode === "stream") {
         onEvent({ event: "session", data: { session_id: "s2" } });
         onEvent({ event: "delta", data: { text: "연차는 ", node_id: "n2" } });
@@ -178,5 +197,27 @@ describe("공유 챗", () => {
     fireEvent.click(screen.getByRole("button", { name: "멈추기" }));
     expect(await screen.findByText("답을 멈췄어요.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "보내기" })).toBeInTheDocument();
+  });
+
+  it("상담원에게 넘기면 안내 답과 '상담원 연결 중' 표시가 보인다", async () => {
+    mode = "handoff";
+    renderPage();
+    fireEvent.change(screen.getByRole("textbox", { name: "메시지" }), {
+      target: { value: "상담원 연결해 주세요" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "보내기" }));
+    expect(await screen.findByText("상담원을 연결해 드릴게요.")).toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent("상담원과 연결 중이에요");
+  });
+
+  it("사람을 기다리는 실행이면 결과를 이 대화에 알려 준다고 표시한다", async () => {
+    mode = "pending";
+    renderPage();
+    fireEvent.change(screen.getByRole("textbox", { name: "메시지" }), {
+      target: { value: "휴가 신청해 줘" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "보내기" }));
+    expect(await screen.findByText("담당자의 승인을 기다리고 있어요.")).toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent("담당자 처리를 기다리고 있어요");
   });
 });

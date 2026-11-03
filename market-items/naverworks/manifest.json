@@ -1,0 +1,78 @@
+{
+  "key": "naverworks",
+  "type": "connector",
+  "name": "네이버웍스(NAVER WORKS) 봇",
+  "summary": "네이버웍스 봇으로 사용자나 채널에 메시지를 보내요.",
+  "version": "1.0.0",
+  "publisher": "platform",
+  "price": 0,
+  "category": "메신저",
+  "tags": [
+    "naverworks",
+    "네이버웍스",
+    "라인웍스",
+    "메신저",
+    "봇",
+    "알림"
+  ],
+  "requires": {
+    "credentials": [
+      {
+        "key": "bot_id",
+        "label": "봇 ID",
+        "secret": false,
+        "required": true
+      },
+      {
+        "key": "access_token",
+        "label": "Access Token(Bearer)",
+        "secret": true,
+        "required": true
+      }
+    ]
+  },
+  "actions": [
+    {
+      "key": "send_message",
+      "label": "메시지 보내기",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "target_type": {
+            "type": "string",
+            "title": "받는 곳",
+            "enum": [
+              "user",
+              "channel"
+            ],
+            "default": "user"
+          },
+          "target_id": {
+            "type": "string",
+            "title": "사용자 ID(이메일) 또는 채널 ID"
+          },
+          "text": {
+            "type": "string",
+            "title": "보낼 내용"
+          }
+        },
+        "required": [
+          "target_id",
+          "text"
+        ]
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "sent": {
+            "type": "boolean"
+          }
+        },
+        "required": []
+      }
+    }
+  ],
+  "permissions": [
+    "network:www.worksapis.com"
+  ]
+}

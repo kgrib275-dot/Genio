@@ -4,13 +4,16 @@ import re
 from datetime import UTC, datetime
 from typing import Any, Literal
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from api.config import get_settings
+from api.core import ratelimit
 from api.core.audit import audit
 from api.core.errors import AppError, not_found
+from api.core.password_policy import check_password
 from api.core.security import (
     create_tokens,
     decode_token,
@@ -20,6 +23,7 @@ from api.core.security import (
 )
 from api.deps import CurrentUser, DbDep
 from api.models import Invitation, Membership, Organization, User, Workspace
+from api.routers.common import client_ip
 from api.services import system
 from api.services.apps import slugify
 
@@ -65,6 +69,7 @@ def signup(body: SignupIn, db: DbDep) -> dict[str, str]:
     if not system.get_system(db)["allow_signup"]:
         raise AppError(403, "지금은 새로 가입할 수 없어요.", "관리자에게 초대 링크를 요청하세요.")
     email = body.email.lower()
+    check_password(body.password, email)
     if db.scalar(select(User).where(User.email == email)):
         raise AppError(409, "이미 가입된 이메일이에요.", "로그인하거나 다른 이메일을 쓰세요.")
     user = User(email=email, password_hash=hash_password(body.password), name=body.name)
@@ -83,15 +88,38 @@ def signup(body: SignupIn, db: DbDep) -> dict[str, str]:
     return create_tokens(user.id)
 
 
+def _too_many(minutes: int) -> AppError:
+    return AppError(
+        429,
+        "로그인 시도가 너무 많아 잠시 막았어요.",
+        f"{minutes}분 뒤에 다시 시도하거나 관리자에게 비밀번호 재설정을 요청하세요.",
+    )
+
+
 @router.post("/auth/login")
-def login(body: LoginIn, db: DbDep) -> dict[str, str]:
-    user = db.scalar(select(User).where(User.email == body.email.strip().lower()))
+def login(body: LoginIn, request: Request, db: DbDep) -> dict[str, str]:
+    s = get_settings()
+    email = body.email.strip().lower()
+    ip = client_ip(request)
+    key_ip = f"login:{email}:{ip}"
+    key_email = f"login:{email}"
+    window = s.genio_login_lock_seconds
+    # 무차별 대입 막기(부하 시험 보고서 §4): 이메일+IP 5번, 이메일 20번(15분)
+    if (
+        ratelimit.fail_count(key_ip, window) >= s.genio_login_max_fails
+        or ratelimit.fail_count(key_email, window) >= s.genio_login_max_fails_per_email
+    ):
+        raise _too_many(max(1, window // 60))
+    user = db.scalar(select(User).where(User.email == email))
     if user is None or not verify_password(body.password, user.password_hash):
+        ratelimit.add_fail(key_ip, window)
+        ratelimit.add_fail(key_email, window)
         raise AppError(
             401,
             "이메일 또는 비밀번호가 맞지 않아요.",
             "한/영 키가 한글로 되어 있지 않은지, 이메일에 빈칸이 없는지 확인하고 다시 시도하세요.",
         )
+    ratelimit.clear_fails(key_ip)
     if needs_rehash(user.password_hash):
         user.password_hash = hash_password(body.password)
         db.commit()
@@ -142,6 +170,7 @@ def accept_invitation(token: str, body: AcceptIn, db: DbDep) -> dict[str, str]:
         )
     user = db.scalar(select(User).where(User.email == inv.email.lower()))
     if user is None:
+        check_password(body.password, inv.email)
         user = User(
             email=inv.email.lower(), password_hash=hash_password(body.password), name=body.name
         )
@@ -252,6 +281,7 @@ def change_password(body: PasswordIn, user: CurrentUser, db: DbDep) -> dict[str,
         raise AppError(400, "지금 비밀번호가 맞지 않아요.", "한/영 키를 확인하고 다시 입력하세요.")
     if body.current_password == body.new_password:
         raise AppError(400, "새 비밀번호가 지금과 같아요.", "다른 비밀번호를 정하세요.")
+    check_password(body.new_password, user.email)
     user.password_hash = hash_password(body.new_password)
     audit(
         db,

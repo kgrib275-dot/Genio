@@ -50,13 +50,13 @@ const MOD = isMac ? "⌘" : "Ctrl";
 const SHORTCUTS: [string, string][] = [
   [`${MOD} + C / V`, "복사 / 붙여넣기"],
   [`${MOD} + D`, "복제"],
-  ["D", "블록 끄기·켜기"],
+  ["D", "단계 끄기·켜기"],
   ["Delete", "지우기"],
   [`${MOD} + Z`, "되돌리기"],
   [`${MOD} + Shift + Z, ${MOD} + Y`, "다시 하기"],
   ["Shift + 끌기", "여러 개 고르기"],
   [`${MOD} + 누르기`, "하나씩 더 고르기"],
-  ["오른쪽 클릭", "블록 메뉴"],
+  ["오른쪽 클릭", "단계 메뉴"],
 ];
 
 function ShortcutHelp({ onClose }: { onClose: () => void }) {
@@ -158,7 +158,7 @@ export function CanvasToolbar({
           <span className="mx-0.5 hidden h-5 w-px bg-slate-200 sm:block" />
           <span className="hidden items-center sm:flex">
             <Tool
-              label={allDisabled ? "고른 블록 켜기 (D)" : "고른 블록 끄기 (D)"}
+              label={allDisabled ? "고른 단계 켜기 (D)" : "고른 단계 끄기 (D)"}
               onClick={onToggleDisabled}
               disabled={!hasSelection}
               active={hasSelection && allDisabled}

@@ -10,6 +10,7 @@ import { Tabs } from "@/components/ui/tabs";
 import { HelpButton } from "@/help/HelpButton";
 import type { AdminOverview } from "@/lib/api/types";
 import { useAdminOverview } from "@/lib/api/v2";
+import { useBuilderMetrics } from "@/lib/api/v5c";
 import { formatCost } from "@/lib/cn";
 import {
   AdminApiKeysSection,
@@ -115,7 +116,89 @@ function Overview({ ws }: { ws: string }) {
           )}
         </CardBody>
       </Card>
+      <BuilderMetricsCard ws={ws} />
     </div>
+  );
+}
+
+function seconds(v: number | null): string {
+  if (v === null) return "-";
+  if (v < 60) return `${Math.round(v)}초`;
+  return `${Math.floor(v / 60)}분 ${Math.round(v % 60)}초`;
+}
+
+function percent(v: number | null): string {
+  return v === null ? "-" : `${Math.round(v * 100)}%`;
+}
+
+/** 대화형 빌더 지표(기능 정의서 S1) */
+function BuilderMetricsCard({ ws }: { ws: string }) {
+  const m = useBuilderMetrics(ws);
+  if (m.isLoading) return <Loading />;
+  if (m.error) return <ErrorBox error={m.error} />;
+  const d = m.data;
+  if (!d) return null;
+  return (
+    <Card>
+      <CardHeader
+        title="빌더 지표"
+        description="말로 만들기가 얼마나 잘 되는지 봐요. 첫 요청부터 검사를 통과한 앱까지 걸린 시간, 그 뒤 고쳐 달라고 한 횟수, 사람이 캔버스를 직접 고친 비율이에요."
+      />
+      <CardBody className="space-y-4">
+        {d.sessions === 0 ? (
+          <p className="text-sm text-slate-500">아직 빌더와 나눈 대화가 없어요.</p>
+        ) : (
+          <>
+            <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+              <StatTile
+                label="빌더 대화"
+                value={d.sessions}
+                sub={`검사 통과 ${d.sessions_valid}`}
+              />
+              <StatTile
+                label="동작하는 앱까지"
+                value={seconds(d.avg_seconds_to_valid)}
+                sub="평균"
+              />
+              <StatTile
+                label="수정 대화"
+                value={d.avg_edit_turns === null ? "-" : `${d.avg_edit_turns}번`}
+                sub="검사 통과 뒤 평균"
+              />
+              <StatTile
+                label="캔버스 직접 편집"
+                value={percent(d.manual_ratio)}
+                sub="낮을수록 말로 다 됨"
+              />
+            </div>
+            {d.apps.length > 0 && (
+              <ul className="divide-y divide-slate-100 rounded-lg border border-slate-100 text-sm">
+                {d.apps.slice(0, 8).map((a) => (
+                  <li
+                    key={a.app_id}
+                    className="flex flex-wrap items-center gap-x-3 gap-y-0.5 px-3 py-2"
+                  >
+                    <Link
+                      to={`/apps/${a.app_id}/builder`}
+                      className="min-w-0 flex-1 truncate font-medium hover:underline"
+                    >
+                      {a.app_name}
+                    </Link>
+                    <span className="text-xs text-slate-500">대화 {a.user_turns}번</span>
+                    <span className="text-xs text-slate-500">
+                      통과까지 {seconds(a.seconds_to_valid)}
+                    </span>
+                    <span className="text-xs text-slate-500">
+                      직접 편집 {percent(a.manual_ratio)}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </>
+        )}
+      </CardBody>
+    </Card>
   );
 }
 

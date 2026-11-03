@@ -21,12 +21,17 @@ def test_catalog_has_design_items(client: TestClient, team: Team) -> None:
     by_type: dict[str, list[str]] = {}
     for i in items:
         by_type.setdefault(i["type"], []).append(i["key"])
-    assert sorted(by_type["connector"]) == ["email", "google_sheets", "slack"]
-    assert len(by_type["template"]) == 5
+    # 설계서 기본 3종 + v0.5(DB·HTTP 인증·잔디·네이버웍스·카카오 알림톡)
+    assert {"email", "google_sheets", "slack"} <= set(by_type["connector"])
+    assert {"database", "http_credentials", "jandi", "naverworks", "kakao_alimtalk"} <= set(
+        by_type["connector"]
+    )
+    # 템플릿 5 + 업무 단위 템플릿 5(S10)
+    assert len(by_type["template"]) == 10
     assert len(by_type["prompt_pack"]) == 2
     assert by_type["node"] == ["node_text_tools"]
     found = client.get("/api/v1/market/items?q=슬랙", headers=team.h("member")).json()
-    assert sorted(i["key"] for i in found) == ["slack", "tpl_inquiry_router"]
+    assert {"slack", "tpl_inquiry_router"} <= {i["key"] for i in found}
 
 
 def test_install_connector_and_paid_item(client: TestClient, team: Team) -> None:
@@ -341,7 +346,7 @@ def test_kb_upload_search_and_failure(
 def test_signup_login_refresh_me(client: TestClient) -> None:
     res = client.post(
         "/api/v1/auth/signup",
-        json={"email": "New@Example.com", "password": "abcd1234", "name": "새 사람"},
+        json={"email": "New@Example.com", "password": "Spring2026walk", "name": "새 사람"},
     )
     assert res.status_code == 200
     tokens = res.json()
@@ -352,7 +357,7 @@ def test_signup_login_refresh_me(client: TestClient) -> None:
     assert (
         client.post(
             "/api/v1/auth/signup",
-            json={"email": "new@example.com", "password": "abcd1234", "name": "x"},
+            json={"email": "new@example.com", "password": "Spring2026walk", "name": "x"},
         ).status_code
         == 409
     )
@@ -361,7 +366,7 @@ def test_signup_login_refresh_me(client: TestClient) -> None:
     )
     assert bad.status_code == 401 and bad.json()["detail"]["hint"]
     ok = client.post(
-        "/api/v1/auth/login", json={"email": "new@example.com", "password": "abcd1234"}
+        "/api/v1/auth/login", json={"email": "new@example.com", "password": "Spring2026walk"}
     )
     assert ok.status_code == 200
     ref = client.post("/api/v1/auth/refresh", json={"refresh_token": ok.json()["refresh_token"]})

@@ -1,0 +1,141 @@
+{
+  "version": 1,
+  "nodes": [
+    {
+      "id": "n1",
+      "type": "input",
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "data": {
+        "label": "문의 받기",
+        "fields": [
+          {
+            "key": "message",
+            "label": "문의 내용",
+            "type": "text",
+            "required": true
+          },
+          {
+            "key": "customer",
+            "label": "고객 이름",
+            "type": "text",
+            "required": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "n2",
+      "type": "question_classifier",
+      "position": {
+        "x": 300,
+        "y": 0
+      },
+      "data": {
+        "label": "문의 분류",
+        "provider": "default",
+        "query": "{{n1.message}}",
+        "classes": [
+          {
+            "id": "billing",
+            "name": "결제·환불·청구"
+          },
+          {
+            "id": "tech",
+            "name": "오류·사용법·기술"
+          },
+          {
+            "id": "general",
+            "name": "그 밖의 문의"
+          }
+        ]
+      }
+    },
+    {
+      "id": "n4",
+      "type": "connector",
+      "position": {
+        "x": 650,
+        "y": -160
+      },
+      "data": {
+        "label": "결제팀 배정",
+        "connector": "slack",
+        "credential_id": "{{credential:slack}}",
+        "action": "post_message",
+        "params": {
+          "channel": "#billing",
+          "text": "[결제 문의] {{n1.customer}}: {{n1.message}}"
+        }
+      }
+    },
+    {
+      "id": "n5",
+      "type": "connector",
+      "position": {
+        "x": 650,
+        "y": 0
+      },
+      "data": {
+        "label": "기술팀 배정",
+        "connector": "slack",
+        "credential_id": "{{credential:slack}}",
+        "action": "post_message",
+        "params": {
+          "channel": "#tech",
+          "text": "[기술 문의] {{n1.customer}}: {{n1.message}}"
+        }
+      }
+    },
+    {
+      "id": "n6",
+      "type": "output",
+      "position": {
+        "x": 950,
+        "y": 0
+      },
+      "data": {
+        "label": "배정 결과",
+        "template": "문의를 '{{n2.class_name}}'(으)로 분류해 담당 팀에 전달했어요."
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "e1",
+      "source": "n1",
+      "target": "n2"
+    },
+    {
+      "id": "e2",
+      "source": "n2",
+      "target": "n4",
+      "sourceHandle": "billing"
+    },
+    {
+      "id": "e3",
+      "source": "n2",
+      "target": "n5",
+      "sourceHandle": "tech"
+    },
+    {
+      "id": "e4",
+      "source": "n2",
+      "target": "n6",
+      "sourceHandle": "general"
+    },
+    {
+      "id": "e5",
+      "source": "n4",
+      "target": "n6"
+    },
+    {
+      "id": "e6",
+      "source": "n5",
+      "target": "n6"
+    }
+  ],
+  "variables": {}
+}

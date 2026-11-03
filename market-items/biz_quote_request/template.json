@@ -1,0 +1,188 @@
+{
+  "version": 1,
+  "nodes": [
+    {
+      "id": "n1",
+      "type": "input",
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "data": {
+        "label": "견적 요청",
+        "fields": [
+          {
+            "key": "message",
+            "label": "요청 내용(메일 본문 등)",
+            "type": "text",
+            "required": true
+          },
+          {
+            "key": "email",
+            "label": "고객 메일",
+            "type": "text",
+            "required": true
+          }
+        ]
+      }
+    },
+    {
+      "id": "n2",
+      "type": "parameter_extractor",
+      "position": {
+        "x": 300,
+        "y": 0
+      },
+      "data": {
+        "label": "요청 정리",
+        "provider": "default",
+        "query": "{{n1.message}}",
+        "parameters": [
+          {
+            "name": "item",
+            "type": "string",
+            "description": "품목",
+            "required": true
+          },
+          {
+            "name": "quantity",
+            "type": "number",
+            "description": "수량",
+            "required": false
+          },
+          {
+            "name": "due",
+            "type": "string",
+            "description": "희망 납기",
+            "required": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "n3",
+      "type": "data_table",
+      "position": {
+        "x": 600,
+        "y": 0
+      },
+      "data": {
+        "label": "견적 기록",
+        "table_id": "",
+        "operation": "insert",
+        "data": {
+          "고객": "{{n1.email}}",
+          "품목": "{{n2.item}}",
+          "수량": "{{n2.quantity}}",
+          "납기": "{{n2.due}}"
+        }
+      }
+    },
+    {
+      "id": "n4",
+      "type": "llm",
+      "position": {
+        "x": 900,
+        "y": 0
+      },
+      "data": {
+        "label": "회신 초안",
+        "provider": "default",
+        "temperature": 0.3,
+        "system": "견적 요청에 대한 정중한 회신 메일을 씁니다. 담당자가 곧 상세 견적을 보낸다고 안내하세요.",
+        "prompt": "품목: {{n2.item}}\n수량: {{n2.quantity}}\n납기: {{n2.due}}",
+        "output_schema": {
+          "type": "object",
+          "properties": {
+            "subject": {
+              "type": "string"
+            },
+            "body": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "subject",
+            "body"
+          ]
+        }
+      }
+    },
+    {
+      "id": "n5",
+      "type": "approval",
+      "position": {
+        "x": 1200,
+        "y": 0
+      },
+      "data": {
+        "label": "담당자 확인",
+        "message": "이 회신을 보낼까요?\n{{n4.subject}}\n\n{{n4.body}}"
+      }
+    },
+    {
+      "id": "n6",
+      "type": "connector",
+      "position": {
+        "x": 1500,
+        "y": 0
+      },
+      "data": {
+        "label": "회신 보내기",
+        "connector": "email",
+        "credential_id": "{{credential:email}}",
+        "action": "send_email",
+        "params": {
+          "to": "{{n1.email}}",
+          "subject": "{{n4.subject}}",
+          "body": "{{n4.body}}"
+        }
+      }
+    },
+    {
+      "id": "n7",
+      "type": "output",
+      "position": {
+        "x": 1800,
+        "y": 0
+      },
+      "data": {
+        "label": "결과",
+        "template": "{{n2.item}} 견적 요청을 기록하고 회신했어요."
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "e1",
+      "source": "n1",
+      "target": "n2"
+    },
+    {
+      "id": "e2",
+      "source": "n2",
+      "target": "n3"
+    },
+    {
+      "id": "e3",
+      "source": "n3",
+      "target": "n4"
+    },
+    {
+      "id": "e4",
+      "source": "n4",
+      "target": "n5"
+    },
+    {
+      "id": "e5",
+      "source": "n5",
+      "target": "n6"
+    },
+    {
+      "id": "e6",
+      "source": "n6",
+      "target": "n7"
+    }
+  ],
+  "variables": {}
+}

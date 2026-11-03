@@ -1,0 +1,55 @@
+{
+  "key": "http_credentials",
+  "type": "connector",
+  "name": "HTTP 인증 정보",
+  "summary": "HTTP 요청 단계에서 쓸 토큰·아이디/비밀번호·API 키 헤더를 안전하게 보관해요.",
+  "version": "1.0.0",
+  "publisher": "platform",
+  "price": 0,
+  "category": "기본",
+  "tags": [
+    "http",
+    "api",
+    "토큰",
+    "인증",
+    "헤더",
+    "api key"
+  ],
+  "credential_only": true,
+  "requires": {
+    "credentials": [
+      {
+        "key": "token",
+        "label": "Bearer 토큰",
+        "secret": true,
+        "required": false
+      },
+      {
+        "key": "username",
+        "label": "아이디(Basic 인증)",
+        "secret": false,
+        "required": false
+      },
+      {
+        "key": "password",
+        "label": "비밀번호(Basic 인증)",
+        "secret": true,
+        "required": false
+      },
+      {
+        "key": "header_name",
+        "label": "헤더 이름(예: X-API-Key)",
+        "secret": false,
+        "required": false
+      },
+      {
+        "key": "header_value",
+        "label": "헤더 값(API 키)",
+        "secret": true,
+        "required": false
+      }
+    ]
+  },
+  "actions": [],
+  "permissions": []
+}

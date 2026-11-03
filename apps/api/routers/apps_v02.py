@@ -6,7 +6,7 @@ from collections import defaultdict
 from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Depends, File, Query, Response, UploadFile
 from fastapi.responses import StreamingResponse
@@ -242,8 +242,12 @@ def list_conversations(
     page: int = Query(default=1, ge=1),
     size: int = Query(default=30, ge=1, le=100),
     q: str | None = Query(default=None, max_length=200),
+    status: str | None = Query(default=None, pattern="^(bot|handoff|closed)$"),
 ) -> list[dict[str, Any]]:
     stmt = select(Conversation).where(Conversation.app_id == app_id, _not_preview_conv())
+    if status:
+        # v0.5 상담원 응대함: handoff = 사람이 답해야 하는 대화
+        stmt = stmt.where(Conversation.status == status)
     if q and q.strip():
         # 대화 안의 메시지 내용으로 찾는다
         hit = (
@@ -291,6 +295,7 @@ def list_conversations(
             "created_at": c.created_at,
             "last_message_at": stats[c.id]["last"],
             "first_question": stats[c.id]["first_q"],
+            "status": c.status,
         }
         for c in convs
     ]
@@ -535,11 +540,22 @@ def _key(k: AppApiKey) -> dict[str, Any]:
         "prefix": k.prefix,
         "created_at": k.created_at,
         "last_used_at": k.last_used_at,
+        "scopes": list(k.scopes or ["chat", "run"]),
     }
+
+
+KEY_SCOPES = ("chat", "run", "logs")
+KeyScope = Literal["chat", "run", "logs"]
+
+
+def _default_scopes() -> list[KeyScope]:
+    return ["chat", "run"]
 
 
 class KeyIn(BaseModel):
     name: str = Field(default="기본 키", min_length=1, max_length=100)
+    # 권한 범위: chat(대화) · run(흐름 실행) · logs(실행 기록 읽기)
+    scopes: list[KeyScope] = Field(default_factory=_default_scopes, min_length=1, max_length=3)
 
 
 @router.get("/apps/{app_id}/api-keys")
@@ -568,6 +584,7 @@ def create_key(app_id: str, body: KeyIn, ctx: AppBuilders) -> dict[str, Any]:
         prefix=raw[:10] + "…",
         key_hash=hash_key(raw),
         created_by=ctx.user.id,
+        scopes=[s for s in KEY_SCOPES if s in set(body.scopes)],
     )
     ctx.db.add(k)
     audit(
@@ -577,7 +594,7 @@ def create_key(app_id: str, body: KeyIn, ctx: AppBuilders) -> dict[str, Any]:
         action="api_key.create",
         target_type="app",
         target_id=app_id,
-        meta={"name": body.name, "prefix": k.prefix},
+        meta={"name": body.name, "prefix": k.prefix, "scopes": k.scopes},
     )
     ctx.db.commit()
     return {**_key(k), "key": raw}
@@ -655,3 +672,64 @@ def preview_chat(app_id: str, body: PreviewChatIn, ctx: AppBuilders) -> Streamin
             yield sse_frame(name, data)
 
     return sse_response(frames())
+
+
+# ---------------- v0.5 상담원 전환(기능 정의서 S7) ----------------
+ConvOperators = Annotated[Ctx, Depends(require_role(VIEW_RUNS, via="conversation"))]
+
+
+class AgentReplyIn(BaseModel):
+    content: str = Field(min_length=1, max_length=4000)
+
+
+@router.post("/conversations/{conversation_id}/reply", status_code=201)
+def agent_reply(conversation_id: str, body: AgentReplyIn, ctx: ConvOperators) -> dict[str, Any]:
+    """상담원이 방문자에게 답한다(방문자 챗 화면이 주기적으로 읽어 보여 준다)."""
+    conv = ctx.db.get(Conversation, conversation_id)
+    if conv is None:
+        raise not_found("대화")
+    if conv.status != "handoff":
+        raise AppError(
+            409,
+            "상담원 연결 중인 대화가 아니에요.",
+            "방문자가 상담원 연결을 요청한 대화에만 답할 수 있어요.",
+        )
+    conv.assigned_to = conv.assigned_to or ctx.user.id
+    m = Message(conversation_id=conv.id, role="agent", content=body.content.strip())
+    ctx.db.add(m)
+    ctx.db.commit()
+    return {
+        "id": m.id,
+        "role": m.role,
+        "content": m.content,
+        "created_at": m.created_at,
+        "agent_name": ctx.user.name,
+    }
+
+
+@router.post("/conversations/{conversation_id}/close")
+def close_handoff(conversation_id: str, ctx: ConvOperators) -> dict[str, Any]:
+    """상담을 마친다. 다음 메시지부터 다시 챗봇이 답한다."""
+    conv = ctx.db.get(Conversation, conversation_id)
+    if conv is None:
+        raise not_found("대화")
+    if conv.status == "handoff":
+        conv.status = "closed"
+        ctx.db.add(
+            Message(
+                conversation_id=conv.id,
+                role="assistant",
+                content="상담원 연결이 끝났어요. 이어서 물어보시면 챗봇이 답해 드릴게요.",
+            )
+        )
+        app = ctx.db.get(App, conv.app_id)
+        audit(
+            ctx.db,
+            workspace_id=app.workspace_id if app else None,
+            user_id=ctx.user.id,
+            action="conversation.close",
+            target_type="conversation",
+            target_id=conv.id,
+        )
+        ctx.db.commit()
+    return {"id": conv.id, "status": conv.status}

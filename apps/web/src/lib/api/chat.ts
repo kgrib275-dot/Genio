@@ -12,6 +12,7 @@ import type {
   StoredFile,
 } from "@/lib/api/types";
 import { sendPublicFeedback, uploadPublicFile } from "@/lib/api/v2";
+import { fetchSessionState, requestHandoff, type SessionState } from "@/lib/api/v5a";
 
 // ---------------- 위젯·공유 챗 모양 ----------------
 export interface Appearance {
@@ -74,11 +75,15 @@ export interface ChatLine {
   /** 사용자가 멈춤 */
   stopped?: boolean;
   createdAt?: string;
+  /** 사람(상담원)이 쓴 답 */
+  agent?: boolean;
+  /** 서버 메시지 id(늦게 온 답·상담원 답을 다시 읽을 때 겹치지 않게) */
+  serverId?: string;
 }
 
 export interface SessionMessage {
   id: string;
-  role: "user" | "assistant" | "system";
+  role: "user" | "assistant" | "system" | "agent";
   content: string;
   created_at: string;
   feedback: Rating | null;
@@ -100,6 +105,10 @@ export interface ChatTransport {
   feedback?: (messageId: string, rating: Rating | null) => Promise<unknown>;
   upload?: (file: File) => Promise<StoredFile>;
   loadSession?: (sessionId: string) => Promise<SessionMessage[]>;
+  /** 대화 상태(상담원 연결 중인지, 사람을 기다리는 실행이 있는지) */
+  sessionState?: (sessionId: string) => Promise<SessionState>;
+  /** '상담원 연결' 버튼 */
+  requestHandoff?: (sessionId: string) => Promise<unknown>;
 }
 
 export function publicTransport(token: string): ChatTransport {
@@ -111,6 +120,8 @@ export function publicTransport(token: string): ChatTransport {
       apiFetch<SessionMessage[]>(
         `/public/apps/${token}/sessions/${encodeURIComponent(sid)}/messages`,
       ),
+    sessionState: (sid) => fetchSessionState(token, sid),
+    requestHandoff: (sid) => requestHandoff(token, sid),
   };
 }
 
@@ -134,10 +145,12 @@ export function previewTransport(appId: string): ChatTransport {
 
 export function linesFromSession(msgs: SessionMessage[], nextId: () => number): ChatLine[] {
   return msgs
-    .filter((m) => m.role === "user" || m.role === "assistant")
+    .filter((m) => m.role === "user" || m.role === "assistant" || m.role === "agent")
     .map((m) => ({
       id: nextId(),
-      role: m.role as "user" | "assistant",
+      role: (m.role === "user" ? "user" : "assistant") as "user" | "assistant",
+      agent: m.role === "agent" || undefined,
+      serverId: m.id,
       text: m.content,
       messageId: m.role === "assistant" ? m.id : undefined,
       rating: m.feedback ?? null,

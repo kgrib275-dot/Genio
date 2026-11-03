@@ -9,13 +9,21 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 
 from api.builder.agent import message_dict, run_turn
-from api.deps import EDIT_APPS, Ctx, require_role
+from api.builder.metrics import workspace_metrics
+from api.deps import EDIT_APPS, MANAGE_MEMBERS, Ctx, require_role
 from api.models import BuilderMessage, BuilderSession
 from api.routers.common import sse_frame, sse_response
 
 router = APIRouter(tags=["builder"])
 AppBuilders = Annotated[Ctx, Depends(require_role(EDIT_APPS, via="app"))]
 SessionBuilders = Annotated[Ctx, Depends(require_role(EDIT_APPS, via="session"))]
+Managers = Annotated[Ctx, Depends(require_role(MANAGE_MEMBERS))]
+
+
+@router.get("/workspaces/{ws}/builder/metrics")
+def builder_metrics(ws: str, ctx: Managers) -> dict[str, Any]:
+    """대화형 빌더 지표(기능 정의서 S1): 첫 요청→검증 통과 시간, 수정 대화 수, 캔버스 직접 편집 비율."""
+    return workspace_metrics(ctx.db, ws)
 
 
 def _session(s: BuilderSession) -> dict[str, Any]:

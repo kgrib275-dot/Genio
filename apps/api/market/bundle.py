@@ -107,9 +107,15 @@ def validate_bundle(path: Path, manifest: dict[str, Any]) -> None:
         _check_python(py)
     if item_type == "connector":
         actions = manifest.get("actions")
-        if not isinstance(actions, list) or not actions:
+        # credential_only: 동작 없이 연결 정보만 담는 항목(HTTP 단계 인증 등)
+        if not manifest.get("credential_only") and (not isinstance(actions, list) or not actions):
             raise BundleError("커넥터는 actions를 하나 이상 선언해야 해요.")
-        if not allowed_domains(manifest) and not manifest.get("smtp"):
+        if (
+            not allowed_domains(manifest)
+            and not manifest.get("smtp")
+            and not manifest.get("database")
+            and not manifest.get("credential_only")
+        ):
             raise BundleError("커넥터는 접속할 네트워크 도메인(permissions)을 선언해야 해요.")
     if item_type in ("template", "prompt_pack"):
         try:

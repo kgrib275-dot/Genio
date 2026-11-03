@@ -22,6 +22,12 @@ DEFAULT_FEATURES: dict[str, Any] = {
     "memory": {"window": 6},
     # v0.4: 실패하면 실행할 앱(n8n Error Workflow). 같은 워크스페이스의 앱 id
     "on_failure": {"app_id": None},
+    # v0.5: 상담원 전환(기능 정의서 S7). 이 말이 들어오거나 '상담원 연결'을 누르면 사람에게 넘긴다
+    "handoff": {
+        "enabled": False,
+        "keywords": ["상담원", "사람이랑", "직원 연결"],
+        "message": "상담원을 연결해 드릴게요. 잠시만 기다려 주세요. 이어서 적으신 말도 상담원에게 전달돼요.",
+    },
 }
 
 
@@ -57,6 +63,10 @@ def patch_features(saved: dict[str, Any] | None, patch: dict[str, Any]) -> dict[
     current["file_upload"]["max_files"] = max(
         1, min(int(current["file_upload"]["max_files"] or 1), 10)
     )
+    current["handoff"]["keywords"] = [
+        str(w).strip()[:30] for w in current["handoff"]["keywords"] if str(w).strip()
+    ][:30]
+    current["handoff"]["message"] = str(current["handoff"]["message"] or "")[:300]
     target = current["on_failure"].get("app_id")
     current["on_failure"]["app_id"] = (str(target).strip()[:36] or None) if target else None
     thr = float(current["annotation_reply"]["score_threshold"] or 0.85)

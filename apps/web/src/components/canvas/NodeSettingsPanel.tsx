@@ -5,7 +5,7 @@ import { useMemo } from "react";
 import { CurlImport } from "@/components/canvas/CurlImport";
 import { FailureSettings } from "@/components/canvas/FailureSettings";
 import { nodeFields, nodeTemplates, nodeWidgets } from "@/components/canvas/formRegistry";
-import { referenceHints, toRjsfUiSchema } from "@/components/canvas/uiSchema";
+import { toRjsfUiSchema } from "@/components/canvas/uiSchema";
 import type { NodeFormContext } from "@/components/canvas/widgets";
 import { Button } from "@/components/ui/button";
 import type { GraphNode, NodeType } from "@/lib/api/types";
@@ -73,13 +73,13 @@ export function NodeSettingsPanel({
   onClose: () => void;
   readOnly?: boolean;
 }) {
-  const hints = referenceHints(nodes, node.id);
+  const hasUpstream = nodes.some((n) => n.id !== node.id);
   return (
     <div className="flex h-full flex-col">
       <div className="flex items-start justify-between border-b border-slate-200 px-4 py-3">
         <div>
           <p className="text-sm font-semibold">{spec?.label ?? node.type} 설정</p>
-          <p className="text-xs text-slate-400">노드 id: {node.id}</p>
+          <p className="text-xs text-slate-400">단계 id: {node.id}</p>
         </div>
         <button
           type="button"
@@ -101,8 +101,8 @@ export function NodeSettingsPanel({
         )}
         {node.disabled && (
           <p className="mb-3 rounded border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
-            꺼진 블록이에요. 실행할 때 건너뛰고 입력을 그대로 다음 블록으로 넘겨요. 캔버스에서
-            블록을 고르고 D를 누르면 다시 켜져요.
+            꺼진 단계예요. 실행할 때 건너뛰고 입력을 그대로 다음 단계로 넘겨요. 캔버스에서 단계를
+            고르고 D를 누르면 다시 켜져요.
           </p>
         )}
         {node.type === "http" && !readOnly && <CurlImport data={node.data} onChange={onChange} />}
@@ -116,29 +116,23 @@ export function NodeSettingsPanel({
           />
         ) : (
           <p className="text-sm text-red-600">
-            이 노드 종류({node.type})를 찾을 수 없어요. 마켓에서 해당 아이템을 다시 설치하세요.
+            이 단계 종류({node.type})를 찾을 수 없어요. 마켓에서 해당 아이템을 다시 설치하세요.
           </p>
         )}
         {spec && node.type !== "input" && node.type !== "output" && (
           <FailureSettings key={node.id} data={node.data} onChange={onChange} readOnly={readOnly} />
         )}
-        {hints.length > 0 && (
-          <div className="mt-4 rounded bg-slate-50 px-3 py-2">
-            <p className="mb-1 text-xs font-medium text-slate-600">다른 노드 값 쓰기</p>
-            <div className="flex flex-wrap gap-1">
-              {hints.map((h) => (
-                <code key={h} className="rounded bg-white px-1.5 py-0.5 text-[11px] text-slate-700">
-                  {h}
-                </code>
-              ))}
-            </div>
-          </div>
+        {hasUpstream && !readOnly && (
+          <p className="mt-4 rounded bg-slate-50 px-3 py-2 text-xs text-slate-600">
+            앞 단계에서 나온 값을 쓰려면 칸 아래 <b>값 끌어오기</b>를 누르세요. 표현식을 직접 쓰고
+            싶으면 <b>고급</b>을 켜요.
+          </p>
         )}
       </div>
       {!readOnly && (
         <div className="border-t border-slate-200 px-4 py-3">
           <Button variant="outline" size="sm" className="text-red-600" onClick={onDelete}>
-            이 노드 삭제
+            이 단계 삭제
           </Button>
         </div>
       )}

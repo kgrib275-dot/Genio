@@ -23,6 +23,9 @@ celery.conf.update(
     # v0.4: 1분마다 예약 실행 확인(워커를 `-B`로 띄워 beat를 함께 돌린다. 워커가 여럿이면 하나만 -B)
     beat_schedule={
         "dispatch-schedules": {"task": "genio.dispatch_schedules", "schedule": 60.0},
+        # v0.5: 실패·비용 알림(5분), 보관 기간이 지난 기록 지우기(하루 한 번)
+        "check-alerts": {"task": "genio.check_alerts", "schedule": 300.0},
+        "apply-retention": {"task": "genio.apply_retention", "schedule": 24 * 3600.0},
     },
 )
 

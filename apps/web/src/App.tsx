@@ -19,6 +19,8 @@ const MarketPage = lazy(() => import("@/pages/market/MarketPage"));
 const MarketDetailPage = lazy(() => import("@/pages/market/MarketDetailPage"));
 const WorkspacePage = lazy(() => import("@/pages/workspace/WorkspacePage"));
 const SharePage = lazy(() => import("@/pages/share/SharePage"));
+const TaskLinkPage = lazy(() => import("@/pages/share/TaskLinkPage"));
+const TasksPage = lazy(() => import("@/pages/tasks/TasksPage"));
 const AppFeaturesPage = lazy(() => import("@/pages/apps/AppFeaturesPage"));
 const AppLogsPage = lazy(() => import("@/pages/apps/AppLogsPage"));
 const AppMonitorPage = lazy(() => import("@/pages/apps/AppMonitorPage"));
@@ -39,6 +41,7 @@ export default function App() {
           <Route path="/signup" element={<SignupPage />} />
           <Route path="/invite/:token" element={<InviteAcceptPage />} />
           <Route path="/share/:token" element={<SharePage />} />
+          <Route path="/t/:token" element={<TaskLinkPage />} />
           <Route
             element={
               <RequireAuth>
@@ -67,6 +70,7 @@ export default function App() {
             <Route path="admin" element={<AdminPage />} />
             <Route path="help" element={<HelpPage />} />
             <Route path="settings" element={<SettingsPage />} />
+            <Route path="tasks" element={<TasksPage />} />
             <Route path="projects" element={<ProjectsBoardPage />} />
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />

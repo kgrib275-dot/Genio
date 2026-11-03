@@ -1,5 +1,7 @@
 """워크스페이스: 멤버·초대·역할, AI 연결(LLM 키), 노드 카탈로그, 템플릿, 운영(실행 이력·사용량·감사 로그)."""
 
+import json
+import time
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from typing import Annotated, Any, Literal
@@ -8,6 +10,7 @@ from fastapi import APIRouter, Depends, Query, Request, Response
 from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy import func, or_, select
 
+from api.connectors.http_auth import auth_headers
 from api.core.audit import audit
 from api.core.crypto import decrypt_str, encrypt_str, mask
 from api.core.errors import AppError, not_found
@@ -19,16 +22,32 @@ from api.deps import (
     MANAGE_SECRETS,
     VIEW_RUNS,
     Ctx,
+    CurrentUser,
     Role,
     require_role,
 )
+from api.engine import pricing, safe_http
+from api.llm.base import LlmError
+from api.llm.catalog import catalog
+from api.llm.openai_adapter import azure_endpoint
 from api.llm.registry import PROVIDERS
 from api.market import service as market
-from api.models import App, AuditLog, Invitation, LlmProvider, Membership, Run, User
+from api.models import (
+    App,
+    AuditLog,
+    ConnectorCredential,
+    Invitation,
+    LlmProvider,
+    Membership,
+    Run,
+    User,
+    Workspace,
+)
 from api.routers.common import public_origin
 from api.schemas.graph import Graph
+from api.services import limits
 from api.services.projects import hidden_project_ids
-from nodes import registry
+from nodes import NodeError, registry
 
 router = APIRouter(tags=["workspaces"])
 
@@ -195,7 +214,7 @@ def list_providers(ws: str, ctx: Builders) -> list[dict[str, Any]]:
 
 
 class ProviderIn(BaseModel):
-    provider: Literal["openai", "anthropic", "google", "openai-compatible"]
+    provider: Literal["openai", "anthropic", "google", "openai-compatible", "azure"]
     label: str = Field(min_length=1, max_length=100)
     api_key: str = Field(min_length=4, max_length=500)
     base_url: str | None = Field(default=None, max_length=500)
@@ -211,6 +230,17 @@ def add_provider(ws: str, body: ProviderIn, ctx: SecretManagers) -> dict[str, An
         raise AppError(
             422, "호환 API는 주소(base URL)가 필요해요.", "예: https://api.example.com/v1"
         )
+    if body.provider == "azure":
+        if not body.base_url:
+            raise AppError(
+                422,
+                "Azure는 리소스 주소가 필요해요.",
+                "예: https://my-resource.openai.azure.com/ (모델 칸에는 배포 이름)",
+            )
+        try:
+            azure_endpoint(body.base_url)
+        except LlmError as exc:
+            raise AppError(422, exc.message, exc.hint) from None
     existing = list(ctx.db.scalars(select(LlmProvider).where(LlmProvider.workspace_id == ws)))
     is_default = body.is_default or not existing
     if is_default:
@@ -350,7 +380,10 @@ def usage(
     ctx: Viewers,
     from_: Annotated[str | None, Query(alias="from")] = None,
     to: str | None = None,
+    group: Literal["app", "user"] = "app",
 ) -> dict[str, Any]:
+    if group == "user":
+        return _usage_by_user(ctx, ws, _parse_dt(from_), _parse_dt(to))
     q = select(Run, App.name).join(App, App.id == Run.app_id).where(App.workspace_id == ws)
     start, end = _parse_dt(from_), _parse_dt(to)
     if start:
@@ -420,3 +453,195 @@ def audit_logs(
         }
         for a, email in rows
     ]
+
+
+# ---------------- v0.5: 사람별 비용·예상 비용·모델 카탈로그(S8, §6) ----------------
+def _usage_by_user(
+    ctx: Ctx, ws: str, start: datetime | None, end: datetime | None
+) -> dict[str, Any]:
+    q = (
+        select(Run, User)
+        .join(App, App.id == Run.app_id)
+        .outerjoin(User, User.id == Run.created_by)
+        .where(App.workspace_id == ws)
+    )
+    if start:
+        q = q.where(Run.created_at >= start)
+    if end:
+        q = q.where(Run.created_at <= end)
+    by_user: dict[str, dict[str, Any]] = {}
+    totals: dict[str, Any] = {
+        "runs": 0,
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "cost": Decimal("0"),
+    }
+    for r, u in ctx.db.execute(q).all():
+        key = u.id if u else "_anon"
+        entry = by_user.setdefault(
+            key,
+            {
+                "user_id": u.id if u else None,
+                "name": u.name if u else "방문자·자동 실행",
+                "email": u.email if u else None,
+                "runs": 0,
+                "input_tokens": 0,
+                "output_tokens": 0,
+                "cost": Decimal("0"),
+            },
+        )
+        usage_ = r.token_usage or {}
+        i, o = int(usage_.get("input_tokens", 0)), int(usage_.get("output_tokens", 0))
+        c = Decimal(str(r.cost or 0))
+        for d in (entry, totals):
+            d["runs"] += 1
+            d["input_tokens"] += i
+            d["output_tokens"] += o
+            d["cost"] += c
+    users = sorted(by_user.values(), key=lambda x: x["cost"], reverse=True)
+    for e in users:
+        e["cost"] = float(e["cost"])
+    return {
+        "total_runs": totals["runs"],
+        "total_input_tokens": totals["input_tokens"],
+        "total_output_tokens": totals["output_tokens"],
+        "total_cost": float(totals["cost"]),
+        "by_user": users,
+    }
+
+
+@router.get("/workspaces/{ws}/usage/estimate")
+def usage_estimate(
+    ws: str,
+    ctx: Viewers,
+    model: Annotated[str, Query(min_length=1, max_length=100)],
+    days: Annotated[int, Query(ge=1, le=90)] = 30,
+) -> dict[str, Any]:
+    """최근 N일 토큰을 다른 모델로 썼다면 얼마였을지(S8 모델 교체 비용 비교)."""
+    price = pricing.PRICES.get(model)
+    if price is None:
+        raise AppError(
+            422,
+            "단가를 모르는 모델이에요.",
+            "모델 목록(카탈로그)에 있는 모델을 고르세요.",
+        )
+    since = datetime.now(UTC) - timedelta(days=days)
+    rows = ctx.db.scalars(
+        select(Run)
+        .join(App, App.id == Run.app_id)
+        .where(App.workspace_id == ws, Run.created_at >= since)
+    )
+    tin = tout = 0
+    current = Decimal("0")
+    for r in rows:
+        u = r.token_usage or {}
+        tin += int(u.get("input_tokens", 0))
+        tout += int(u.get("output_tokens", 0))
+        current += Decimal(str(r.cost or 0))
+    estimated = pricing.cost_of(model, tin, tout)
+    return {
+        "model": model,
+        "days": days,
+        "input_tokens": tin,
+        "output_tokens": tout,
+        "current_cost": float(current),
+        "estimated_cost": float(estimated),
+        "difference": float(estimated - current),
+        "price": {"input": float(Decimal(price[0])), "output": float(Decimal(price[1]))},
+    }
+
+
+@router.get("/llm/catalog")
+def llm_catalog(user: CurrentUser) -> list[dict[str, Any]]:
+    """모델 카탈로그: 공급자·컨텍스트·단가(USD/100만 토큰)·도구 호출·이미지·임베딩."""
+    del user
+    return catalog()
+
+
+# ---------------- v0.5: HTTP 시험 호출(§4 범용 HTTP 응답 미리보기) ----------------
+class HttpPreviewIn(BaseModel):
+    method: Literal["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD"] = "GET"
+    url: str = Field(min_length=8, max_length=2000)
+    headers: dict[str, str] = Field(default_factory=dict)
+    body: Any = None
+    auth: dict[str, Any] | None = None
+
+
+PREVIEW_BODY_CHARS = 8000
+
+
+@router.post("/workspaces/{ws}/http/preview")
+def http_preview(ws: str, body: HttpPreviewIn, ctx: Builders) -> dict[str, Any]:
+    """HTTP 단계를 저장하기 전에 한 번 불러 보고 응답을 본다(사설망 차단 규칙 그대로)."""
+    started = time.perf_counter()
+    try:
+        headers = {str(k)[:100]: str(v)[:2000] for k, v in list(body.headers.items())[:30]}
+        headers.update(auth_headers(ctx.db, ws, body.auth))
+        res = safe_http.request(body.method, body.url, headers=headers, body=body.body)
+    except NodeError as exc:
+        raise AppError(422, exc.message, "주소·인증·값을 확인한 뒤 다시 시험 호출하세요.") from None
+    out_body = res.get("body")
+    text = out_body if isinstance(out_body, str) else json.dumps(out_body, ensure_ascii=False)
+    truncated = len(text) > PREVIEW_BODY_CHARS
+    return {
+        "status": res.get("status"),
+        "headers": res.get("headers", {}),
+        "body": (text[:PREVIEW_BODY_CHARS] if truncated else out_body),
+        "truncated": truncated,
+        "elapsed_ms": int((time.perf_counter() - started) * 1000),
+    }
+
+
+# ---------------- v0.5: 한도·알림·보관 기간(P1) ----------------
+class LimitsPatch(BaseModel):
+    monthly_budget_usd: float | None = None
+    cost_alert_usd: float | None = None
+    alert_on_failure: bool | None = None
+    alert_emails: list[str] | None = None
+    alert_credential_id: str | None = None
+    retention_days: int | None = None
+
+
+def _limits_out(ctx: Ctx, w: Workspace) -> dict[str, Any]:
+    return {
+        **limits.get_limits(w),
+        "month_cost": float(limits.month_cost(ctx.db, w.id)),
+    }
+
+
+@router.get("/workspaces/{ws}/limits")
+def get_limits(ws: str, ctx: Managers) -> dict[str, Any]:
+    w = ctx.db.get(Workspace, ws)
+    if w is None:
+        raise not_found("워크스페이스")
+    return _limits_out(ctx, w)
+
+
+@router.patch("/workspaces/{ws}/limits")
+def patch_limits(ws: str, body: LimitsPatch, ctx: Managers) -> dict[str, Any]:
+    w = ctx.db.get(Workspace, ws)
+    if w is None:
+        raise not_found("워크스페이스")
+    patch = body.model_dump(exclude_unset=True)
+    cred_id = patch.get("alert_credential_id")
+    if cred_id:
+        cred = ctx.db.get(ConnectorCredential, cred_id)
+        if cred is None or cred.workspace_id != ws:
+            raise AppError(
+                422,
+                "알림 메일에 쓸 연결 정보를 찾지 못했어요.",
+                "Email (SMTP) 연결 정보를 고르세요.",
+            )
+    new = limits.clean_limits(patch, limits.get_limits(w))
+    w.settings = {**(w.settings or {}), "limits": new}
+    audit(
+        ctx.db,
+        workspace_id=ws,
+        user_id=ctx.user.id,
+        action="workspace.limits",
+        target_type="workspace",
+        target_id=ws,
+        meta={k: v for k, v in new.items() if k != "alert_emails"},
+    )
+    ctx.db.commit()
+    return _limits_out(ctx, w)

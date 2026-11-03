@@ -1,5 +1,6 @@
 // 내 설정: 프로필, 화면(테마·글자 크기), 작업 환경(기본 워크스페이스·Enter로 보내기), 비밀번호.
 import { Check, KeyRound, Monitor, Moon, Sun, type LucideIcon } from "lucide-react";
+import { PASSWORD_HINT, passwordProblem } from "@/lib/passwordRule";
 import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { PageContainer } from "@/app/Layout";
 import { ErrorBox, Loading } from "@/components/ErrorBox";
@@ -341,7 +342,8 @@ function PasswordCard() {
   const change = useChangePassword();
   const mismatch = confirm.length > 0 && next !== confirm;
   const tooShort = next.length > 0 && next.length < 8;
-  const ready = current.length > 0 && next.length >= 8 && next === confirm;
+  const weak = next.length >= 8 ? passwordProblem(next) : null;
+  const ready = current.length > 0 && next.length >= 8 && !weak && next === confirm;
 
   async function submit(e: FormEvent) {
     e.preventDefault();
@@ -377,7 +379,7 @@ function PasswordCard() {
               onChange={(e) => setCurrent(e.target.value)}
             />
           </Field>
-          <Field label="새 비밀번호" htmlFor="pw-new" hint="8자 이상">
+          <Field label="새 비밀번호" htmlFor="pw-new" hint={PASSWORD_HINT}>
             <Input
               id="pw-new"
               type="password"
@@ -409,6 +411,7 @@ function PasswordCard() {
             {!mismatch && tooShort && (
               <p className="text-sm text-amber-700">새 비밀번호는 8자 이상이어야 해요.</p>
             )}
+            {!mismatch && weak && <p className="text-sm text-amber-700">{weak}</p>}
           </div>
         </form>
       </CardBody>

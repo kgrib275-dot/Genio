@@ -1,0 +1,83 @@
+{
+  "version": 1,
+  "nodes": [
+    {
+      "id": "n1",
+      "type": "input",
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "data": {
+        "label": "질문",
+        "fields": [
+          {
+            "key": "message",
+            "label": "궁금한 점",
+            "type": "text",
+            "required": true
+          }
+        ]
+      }
+    },
+    {
+      "id": "n2",
+      "type": "knowledge_search",
+      "position": {
+        "x": 300,
+        "y": 0
+      },
+      "data": {
+        "label": "규정 찾기",
+        "kb_id": "",
+        "query": "{{n1.message}}",
+        "top_k": 4
+      }
+    },
+    {
+      "id": "n3",
+      "type": "llm",
+      "position": {
+        "x": 600,
+        "y": 0
+      },
+      "data": {
+        "label": "답변",
+        "provider": "default",
+        "temperature": 0.2,
+        "system": "신규 입사자를 돕는 사내 안내 담당입니다. 자료에 있는 내용만 친절하게 답하고, 자료에 없으면 인사팀에 문의하라고 안내하세요.",
+        "prompt": "질문: {{n1.message}}\n\n자료:\n{{n2.context}}"
+      }
+    },
+    {
+      "id": "n4",
+      "type": "output",
+      "position": {
+        "x": 900,
+        "y": 0
+      },
+      "data": {
+        "label": "답",
+        "template": "{{n3.text}}"
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "e1",
+      "source": "n1",
+      "target": "n2"
+    },
+    {
+      "id": "e2",
+      "source": "n2",
+      "target": "n3"
+    },
+    {
+      "id": "e3",
+      "source": "n3",
+      "target": "n4"
+    }
+  ],
+  "variables": {}
+}

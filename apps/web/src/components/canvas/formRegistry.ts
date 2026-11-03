@@ -16,9 +16,12 @@ import {
   JsonField,
   KbWidget,
   TextareaWidget,
+  ValueTextWidget,
 } from "@/components/canvas/widgets";
 
 export const nodeWidgets: RegistryWidgetsType = {
+  // 기본 한 줄 칸도 '값 끌어오기'를 쓴다
+  TextWidget: ValueTextWidget,
   textarea: TextareaWidget,
   code: CodeWidget,
   kb: KbWidget,

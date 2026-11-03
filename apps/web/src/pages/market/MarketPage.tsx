@@ -12,9 +12,10 @@ import { Tabs } from "@/components/ui/tabs";
 import { toast } from "@/components/ui/toast-store";
 import { ko } from "@/i18n/ko";
 import { useInstallations, useMarketItems, useUninstall } from "@/lib/api/resources";
+import { useInstallationsV5, useUpdateInstallation } from "@/lib/api/v5b";
 import type { MarketType } from "@/lib/api/types";
 import { cn, formatDate } from "@/lib/cn";
-import { useListControls } from "@/lib/useListControls";
+import { optionsFrom, useListControls } from "@/lib/useListControls";
 
 const FALLBACK_ICON = { Icon: Puzzle, tile: "bg-slate-100 text-slate-600" };
 const TYPE_ICON: Record<string, { Icon: LucideIcon; tile: string }> = {
@@ -29,6 +30,9 @@ function Installed({ ws }: { ws: string }) {
   const role = useSession((s) => s.role);
   const list = useInstallations(ws);
   const uninstall = useUninstall(ws);
+  const latest = useInstallationsV5(ws);
+  const update = useUpdateInstallation(ws);
+  const updates = new Map((latest.data ?? []).map((i) => [i.id, i]));
   const c = useListControls(list.data, {
     key: "market-installed",
     search: (i) => `${i.item_name} ${i.item_key}`,
@@ -64,7 +68,25 @@ function Installed({ ws }: { ws: string }) {
             </Link>
             <span className="text-xs text-slate-400">v{i.version}</span>
             <StatusBadge status={i.status} />
+            {updates.get(i.id)?.update_available && (
+              <Badge tone="amber">새 버전 v{updates.get(i.id)?.latest_version}</Badge>
+            )}
             <span className="ml-auto text-xs text-slate-400">{formatDate(i.installed_at)}</span>
+            {canManage(role) && updates.get(i.id)?.update_available && (
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={update.isPending}
+                onClick={() =>
+                  update.mutate(i.id, {
+                    onSuccess: (r) => toast.success(`v${r.version}(으)로 업데이트했어요.`),
+                    onError: (err) => toast.error(err),
+                  })
+                }
+              >
+                업데이트
+              </Button>
+            )}
             {canManage(role) && (
               <Button
                 size="sm"
@@ -105,6 +127,12 @@ export default function MarketPage() {
     defaultSize: 20,
     search: (it) => `${it.name} ${it.summary} ${it.publisher} ${it.tags.join(" ")}`,
     filters: [
+      {
+        id: "category",
+        label: "분류",
+        options: optionsFrom(items.data, (it) => (it as { category?: string }).category),
+        match: (it, v) => (it as { category?: string }).category === v,
+      },
       {
         id: "installed",
         label: "설치",

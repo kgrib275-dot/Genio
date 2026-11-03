@@ -1,0 +1,33 @@
+{
+  "key": "biz_onboarding_qa",
+  "type": "template",
+  "name": "신규 입사자 온보딩 Q&A",
+  "summary": "회사 규정·복지 문서를 지식베이스에 올리면 신규 입사자 질문에 출처와 함께 답하는 챗봇이에요.",
+  "version": "1.0.0",
+  "publisher": "platform",
+  "price": 0,
+  "category": "업무",
+  "app_type": "chat",
+  "tags": [
+    "온보딩",
+    "입사",
+    "규정",
+    "복지",
+    "챗봇",
+    "Q&A",
+    "업무"
+  ],
+  "requires": {
+    "items": []
+  },
+  "blanks": [
+    {
+      "key": "kb_id",
+      "label": "온보딩 문서를 담은 지식베이스",
+      "node_id": "n2",
+      "field": "kb_id",
+      "example": "사내 규정"
+    }
+  ],
+  "permissions": []
+}

@@ -1,0 +1,33 @@
+{
+  "key": "biz_quote_request",
+  "type": "template",
+  "name": "견적 요청 처리",
+  "summary": "견적 요청에서 품목·수량·납기를 뽑아 데이터 표에 기록하고 담당자 승인 뒤 회신 메일을 보내요.",
+  "version": "1.0.0",
+  "publisher": "platform",
+  "price": 0,
+  "category": "업무",
+  "app_type": "workflow",
+  "tags": [
+    "견적",
+    "영업",
+    "주문",
+    "메일",
+    "업무"
+  ],
+  "requires": {
+    "items": [
+      "email"
+    ]
+  },
+  "blanks": [
+    {
+      "key": "table_id",
+      "label": "견적을 기록할 데이터 표",
+      "node_id": "n3",
+      "field": "table_id",
+      "example": "견적 요청"
+    }
+  ],
+  "permissions": []
+}
