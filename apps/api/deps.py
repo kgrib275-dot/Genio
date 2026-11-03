@@ -15,9 +15,12 @@ from api.models import (
     Annotation,
     App,
     AppApiKey,
+    AppTrigger,
     BuilderSession,
     Chunk,
     Conversation,
+    DataRow,
+    DataTable,
     Deployment,
     Document,
     KnowledgeBase,
@@ -91,6 +94,9 @@ Via = Literal[
     "api_key",
     "chunk",
     "project",
+    "trigger",
+    "data_table",
+    "data_row",
 ]
 
 
@@ -147,6 +153,21 @@ def _workspace_of(db: Session, via: Via, key: str) -> str:
         if proj is None:
             raise not_found("프로젝트")
         return proj.workspace_id
+    if via == "trigger":
+        trig = db.get(AppTrigger, key)
+        if trig is None:
+            raise not_found("자동 실행")
+        return _workspace_of(db, "app", trig.app_id)
+    if via == "data_table":
+        table = db.get(DataTable, key)
+        if table is None:
+            raise not_found("데이터 표")
+        return table.workspace_id
+    if via == "data_row":
+        row = db.get(DataRow, key)
+        if row is None:
+            raise not_found("데이터 줄")
+        return _workspace_of(db, "data_table", row.table_id)
     dep = db.get(Deployment, key)
     if dep is None:
         raise not_found("배포")
@@ -170,6 +191,8 @@ def _app_id_of(db: Session, via: Via, key: str) -> str | None:
         obj = db.get(AppApiKey, key)
     elif via == "deployment":
         obj = db.get(Deployment, key)
+    elif via == "trigger":
+        obj = db.get(AppTrigger, key)
     return getattr(obj, "app_id", None)
 
 
@@ -177,6 +200,13 @@ def _project_of(db: Session, via: Via, key: str) -> Project | None:
     """경로 대상이 속한 프로젝트(없으면 None = 워크스페이스 공용)."""
     if via == "project":
         return db.get(Project, key)
+    if via in ("data_table", "data_row"):
+        table_id = key
+        if via == "data_row":
+            row = db.get(DataRow, key)
+            table_id = row.table_id if row else ""
+        table = db.get(DataTable, table_id) if table_id else None
+        return db.get(Project, table.project_id) if table and table.project_id else None
     kb_id: str | None = None
     if via == "kb":
         kb_id = key
@@ -209,6 +239,9 @@ _PARAM = {
     "api_key": "key_id",
     "chunk": "chunk_id",
     "project": "project_id",
+    "trigger": "trigger_id",
+    "data_table": "table_id",
+    "data_row": "row_id",
 }
 
 

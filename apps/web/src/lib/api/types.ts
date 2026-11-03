@@ -8,7 +8,21 @@ import type {
 export type GraphNode = Required<Pick<GeneratedNode, "id" | "type">> & {
   position: { x: number; y: number };
   data: Record<string, unknown>;
+  /** 끈 블록(실행하지 않고 건너뜀) */
+  disabled?: boolean | null;
 };
+
+export type NoteColor = "yellow" | "blue" | "green" | "pink" | "gray";
+
+/** 캔버스 메모(실행과 무관) */
+export interface GraphNote {
+  id: string;
+  text: string;
+  position: { x: number; y: number };
+  width: number;
+  height: number;
+  color: NoteColor;
+}
 export type GraphEdge = Omit<GeneratedEdge, "sourceHandle" | "targetHandle"> & {
   sourceHandle?: string | null;
   targetHandle?: string | null;
@@ -18,6 +32,7 @@ export interface Graph {
   nodes: GraphNode[];
   edges: GraphEdge[];
   variables: Record<string, unknown>;
+  notes?: GraphNote[];
 }
 
 /** 서버에서 받은 그래프(선택 필드가 빠져 있을 수 있음)를 화면용 형태로 맞춘다. */
@@ -29,9 +44,22 @@ export function normalizeGraph(g: GeneratedGraph | null | undefined): Graph {
       type: n.type,
       position: { x: n.position?.x ?? 0, y: n.position?.y ?? 0 },
       data: (n.data ?? {}) as Record<string, unknown>,
+      ...(n.disabled ? { disabled: true } : {}),
     })),
     edges: (g?.edges ?? []).map((e) => ({ ...e })),
     variables: (g?.variables ?? {}) as Record<string, unknown>,
+    ...(g?.notes?.length
+      ? {
+          notes: g.notes.map((m) => ({
+            id: m.id,
+            text: m.text ?? "",
+            position: { x: m.position?.x ?? 0, y: m.position?.y ?? 0 },
+            width: m.width ?? 220,
+            height: m.height ?? 140,
+            color: (m.color ?? "yellow") as NoteColor,
+          })),
+        }
+      : {}),
   };
 }
 
@@ -471,6 +499,8 @@ export interface AppFeatures {
   speech: { stt: boolean; tts: boolean };
   file_upload: { enabled: boolean; max_files: number };
   memory: { window: number };
+  /** v0.4: 실행이 실패하면 이 앱을 실행한다(n8n Error Workflow) */
+  on_failure?: { app_id: string | null };
 }
 
 export const DEFAULT_FEATURES: AppFeatures = {
@@ -498,6 +528,7 @@ export function normalizeFeatures(f: Partial<AppFeatures> | null | undefined): A
     speech: { ...DEFAULT_FEATURES.speech, ...src.speech },
     file_upload: { ...DEFAULT_FEATURES.file_upload, ...src.file_upload },
     memory: { ...DEFAULT_FEATURES.memory, ...src.memory },
+    ...(src.on_failure ? { on_failure: { app_id: src.on_failure.app_id ?? null } } : {}),
   };
 }
 
@@ -744,4 +775,68 @@ export interface ProjectsOverview {
   };
   projects: (ProjectStats & { project: Project })[];
   unassigned: ProjectStats;
+}
+
+// ---------------- v0.4 자동 실행(트리거)·데이터 표 ----------------
+export type TriggerKind = "webhook" | "schedule";
+
+export interface WebhookConfig {
+  mode: "async" | "sync";
+  version?: number | null;
+}
+
+export interface ScheduleConfig {
+  cron: string;
+  timezone: string;
+  input: Record<string, unknown>;
+  version?: number | null;
+}
+
+export interface Trigger {
+  id: string;
+  app_id: string;
+  kind: TriggerKind;
+  name: string;
+  enabled: boolean;
+  config: Partial<WebhookConfig & ScheduleConfig>;
+  url?: string | null;
+  next_run_at: string | null;
+  last_run_at: string | null;
+  last_run_id: string | null;
+  last_status: string | null;
+  created_at: string;
+}
+
+export type DataColumnType = "text" | "number" | "boolean" | "date" | "json";
+
+export interface DataColumn {
+  key: string;
+  label: string;
+  type: DataColumnType;
+}
+
+export interface DataTable {
+  id: string;
+  workspace_id: string;
+  project_id: string | null;
+  name: string;
+  description: string;
+  columns: DataColumn[];
+  row_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface DataRow {
+  id: string;
+  table_id: string;
+  row_key: string | null;
+  data: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface DataRowPage {
+  total: number;
+  rows: DataRow[];
 }

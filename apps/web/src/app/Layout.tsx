@@ -4,6 +4,7 @@ import {
   BookOpen,
   ChevronDown,
   ChevronRight,
+  Table2,
   LayoutGrid,
   Lock,
   LogOut,
@@ -45,6 +46,7 @@ interface NavItem {
 const NAV: NavItem[] = [
   { to: "/", label: ko.nav.dashboard, icon: LayoutGrid, end: true },
   { to: "/knowledge", label: ko.nav.knowledge, icon: BookOpen },
+  { to: "/data", label: "데이터 표", icon: Table2 },
   { to: "/connectors", label: ko.nav.connectors, icon: Plug },
   { to: "/market", label: ko.nav.market, icon: Store },
   { to: "/workspace", label: ko.nav.workspace, icon: Users },

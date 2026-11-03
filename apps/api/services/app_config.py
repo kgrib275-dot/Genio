@@ -20,6 +20,8 @@ DEFAULT_FEATURES: dict[str, Any] = {
     "speech": {"stt": False, "tts": False},
     "file_upload": {"enabled": False, "max_files": 3},
     "memory": {"window": 6},
+    # v0.4: 실패하면 실행할 앱(n8n Error Workflow). 같은 워크스페이스의 앱 id
+    "on_failure": {"app_id": None},
 }
 
 
@@ -55,6 +57,8 @@ def patch_features(saved: dict[str, Any] | None, patch: dict[str, Any]) -> dict[
     current["file_upload"]["max_files"] = max(
         1, min(int(current["file_upload"]["max_files"] or 1), 10)
     )
+    target = current["on_failure"].get("app_id")
+    current["on_failure"]["app_id"] = (str(target).strip()[:36] or None) if target else None
     thr = float(current["annotation_reply"]["score_threshold"] or 0.85)
     current["annotation_reply"]["score_threshold"] = max(0.5, min(thr, 1.0))
     return current

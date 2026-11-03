@@ -17,9 +17,9 @@ import { useParams } from "react-router-dom";
 import { ErrorBox, Loading } from "@/components/ErrorBox";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
-import { Input, Textarea } from "@/components/ui/input";
+import { Input, Select, Textarea } from "@/components/ui/input";
 import { toast } from "@/components/ui/toast-store";
-import { useApp } from "@/lib/api/apps";
+import { useApp, useApps } from "@/lib/api/apps";
 import {
   normalizeFeatures,
   type AppDetailV2,
@@ -510,6 +510,77 @@ function EnvVarsCard({ app, readOnly }: { app: AppDetailV2; readOnly: boolean })
   );
 }
 
+/** 실행이 실패하면 다른 앱을 실행한다(알림·기록용 앱 등) */
+function OnFailureCard({
+  appId,
+  wsId,
+  features,
+  readOnly,
+  saving,
+  onSave,
+}: {
+  appId: string;
+  wsId: string;
+  features: AppFeatures;
+  readOnly: boolean;
+  saving: boolean;
+  onSave: (f: AppFeatures) => void;
+}) {
+  const apps = useApps(wsId);
+  const current = features.on_failure?.app_id ?? "";
+  const [pick, setPick] = useState(current);
+  useEffect(() => setPick(current), [current]);
+  const others = (apps.data ?? []).filter((a) => a.id !== appId);
+  const chosen = others.find((a) => a.id === pick);
+  return (
+    <Card>
+      <CardHeader
+        title="실패했을 때"
+        description="이 앱의 실행이 실패하면 고른 앱을 대신 실행해요. 담당자에게 알리거나 기록을 남길 때 써요."
+        action={
+          !readOnly && (
+            <Button
+              size="sm"
+              disabled={saving || pick === current}
+              onClick={() => onSave({ ...features, on_failure: { app_id: pick || null } })}
+            >
+              저장
+            </Button>
+          )
+        }
+      />
+      <CardBody className="space-y-2">
+        <label className="block space-y-1 text-xs">
+          <span className="font-medium text-slate-600">실패하면 실행할 앱</span>
+          <Select
+            aria-label="실패하면 실행할 앱"
+            value={pick}
+            disabled={readOnly}
+            onChange={(e) => setPick(e.target.value)}
+          >
+            <option value="">실행하지 않음</option>
+            {others.map((a) => (
+              <option key={a.id} value={a.id}>
+                {a.name}
+                {a.latest_version ? "" : " (저장한 버전 없음)"}
+              </option>
+            ))}
+          </Select>
+        </label>
+        <p className="text-xs text-slate-500">
+          고른 앱은 이런 값을 입력으로 받아요: <code>failed_app_name</code>(실패한 앱 이름),{" "}
+          <code>error</code>(오류 내용), <code>run_id</code>, <code>input</code>(원래 입력).
+        </p>
+        {chosen && !chosen.latest_version && (
+          <p className="text-xs text-amber-700">
+            {chosen.name}에 저장한 버전이 없어요. 그 앱에서 버전 저장을 먼저 하세요.
+          </p>
+        )}
+      </CardBody>
+    </Card>
+  );
+}
+
 export default function AppFeaturesPage() {
   const { id: appId = "" } = useParams();
   const role = useSession((s) => s.role);
@@ -534,6 +605,19 @@ export default function AppFeaturesPage() {
               onSave={(f) =>
                 saveFeatures.mutate(f, {
                   onSuccess: () => toast.success("앱 기능을 저장했어요."),
+                  onError: (err) => toast.error(err),
+                })
+              }
+            />
+            <OnFailureCard
+              appId={appId}
+              wsId={detail.workspace_id}
+              features={features}
+              readOnly={readOnly}
+              saving={saveFeatures.isPending}
+              onSave={(f) =>
+                saveFeatures.mutate(f, {
+                  onSuccess: () => toast.success("실패했을 때 할 일을 저장했어요."),
                   onError: (err) => toast.error(err),
                 })
               }

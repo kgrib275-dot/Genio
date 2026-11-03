@@ -1,14 +1,17 @@
-"""v0.2 앱 기능: 기능 설정·환경 변수·내보내기/가져오기/복제/되돌리기, 파일, 로그·주석·모니터링, API 키."""
+"""v0.2 앱 기능: 기능 설정·환경 변수·내보내기/가져오기/복제/되돌리기, 파일, 로그·주석·모니터링, API 키.
+v0.4: 대화로 시험하기(작업본 챗 미리 보기)."""
 
 import hashlib
 from collections import defaultdict
+from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, File, Query, Response, UploadFile
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
-from sqlalchemy import func, select
+from sqlalchemy import ColumnElement, func, or_, select
 
 from api.core.audit import audit
 from api.core.errors import AppError, not_found
@@ -24,15 +27,25 @@ from api.models import (
     User,
     WorkflowVersion,
 )
+from api.routers.common import sse_frame, sse_response
 from api.schemas.graph import Graph
 from api.services import apps as svc
 from api.services.app_config import merged_features, patch_features, store_env_vars
+from api.services.chat import PREVIEW_PREFIX, ChatRequest, run_chat, start_chat
 from api.services.files import save_upload
 
 router = APIRouter(tags=["apps-v02"])
 WsBuilders = Annotated[Ctx, Depends(require_role(EDIT_APPS))]
 AppBuilders = Annotated[Ctx, Depends(require_role(EDIT_APPS, via="app"))]
 AppViewers = Annotated[Ctx, Depends(require_role(VIEW_RUNS, via="app"))]
+
+
+def _not_preview_conv() -> ColumnElement[bool]:
+    """'대화로 시험하기' 대화는 로그·통계에 넣지 않는다."""
+    return or_(
+        Conversation.external_session_id.is_(None),
+        Conversation.external_session_id.not_like(f"{PREVIEW_PREFIX}%"),
+    )
 
 
 def _detail(ctx: Ctx, app: App) -> dict[str, Any]:
@@ -230,7 +243,7 @@ def list_conversations(
     size: int = Query(default=30, ge=1, le=100),
     q: str | None = Query(default=None, max_length=200),
 ) -> list[dict[str, Any]]:
-    stmt = select(Conversation).where(Conversation.app_id == app_id)
+    stmt = select(Conversation).where(Conversation.app_id == app_id, _not_preview_conv())
     if q and q.strip():
         # 대화 안의 메시지 내용으로 찾는다
         hit = (
@@ -431,7 +444,9 @@ def app_stats(
         }
         for k in keys
     }
-    for r in ctx.db.scalars(select(Run).where(Run.app_id == app_id, Run.created_at >= since)):
+    for r in ctx.db.scalars(
+        select(Run).where(Run.app_id == app_id, Run.created_at >= since, Run.trigger != "preview")
+    ):
         d = rows.get(_day(r.created_at))
         if d is None:
             continue
@@ -444,7 +459,9 @@ def app_stats(
         if r.started_at and r.finished_at:
             d["latencies"].append((r.finished_at - r.started_at).total_seconds() * 1000)
     for c in ctx.db.scalars(
-        select(Conversation).where(Conversation.app_id == app_id, Conversation.created_at >= since)
+        select(Conversation).where(
+            Conversation.app_id == app_id, Conversation.created_at >= since, _not_preview_conv()
+        )
     ):
         d = rows.get(_day(c.created_at))
         if d is not None:
@@ -452,7 +469,7 @@ def app_stats(
     msgs = ctx.db.execute(
         select(Message.created_at, Message.role, Message.feedback)
         .join(Conversation, Conversation.id == Message.conversation_id)
-        .where(Conversation.app_id == app_id, Message.created_at >= since)
+        .where(Conversation.app_id == app_id, Message.created_at >= since, _not_preview_conv())
     ).all()
     for created, _role, fb in msgs:
         d = rows.get(_day(created))
@@ -490,7 +507,12 @@ def app_stats(
         ctx.db.scalar(
             select(func.count())
             .select_from(Run)
-            .where(Run.app_id == app_id, Run.created_at >= since, Run.status == "succeeded")
+            .where(
+                Run.app_id == app_id,
+                Run.created_at >= since,
+                Run.status == "succeeded",
+                Run.trigger != "preview",
+            )
         )
         or 0
     )
@@ -581,3 +603,55 @@ def delete_key(key_id: str, ctx: KeyBuilders) -> Response:
     )
     ctx.db.commit()
     return Response(status_code=204)
+
+
+# ---------------- 대화로 시험하기(v0.4) ----------------
+class PreviewChatIn(BaseModel):
+    message: str = Field(default="", max_length=4000)
+    session_id: str | None = Field(default=None, max_length=100)
+    input: dict[str, Any] | None = None
+
+
+@router.post("/apps/{app_id}/preview/chat")
+def preview_chat(app_id: str, body: PreviewChatIn, ctx: AppBuilders) -> StreamingResponse:
+    """작업본 그래프로 대화해 본다. 공개 챗과 같은 SSE 이벤트, 로그·통계에는 넣지 않는다."""
+    app = svc.get_app(ctx.db, app_id)
+    graph = app.draft_graph or {}
+    result = svc.validate_for_app(ctx.db, app, graph)
+    if not result.valid:
+        raise AppError(
+            422,
+            "흐름에 고칠 부분이 있어 대화해 볼 수 없어요.",
+            "빨간 테두리 블록의 오류를 먼저 고치세요.",
+            errors=[e.model_dump() for e in result.errors],
+        )
+    req = ChatRequest(
+        app=app,
+        version=None,
+        deployment=None,
+        user_id=ctx.user.id,
+        message=body.message,
+        session_id=body.session_id,
+        inputs=dict(body.input or {}),
+        trigger="preview",
+    )
+    conv, _ = start_chat(ctx.db, req)
+    conv_id, session_id, user_id = conv.id, conv.external_session_id or "", ctx.user.id
+    message, inputs = body.message, dict(body.input or {})
+
+    def frames() -> Iterator[str]:
+        yield sse_frame("session", {"session_id": session_id})
+        for name, data in run_chat(
+            conv_id,
+            app_id,
+            None,
+            user_id,
+            message,
+            inputs,
+            [],
+            trigger="preview",
+            draft_graph=graph,
+        ):
+            yield sse_frame(name, data)
+
+    return sse_response(frames())

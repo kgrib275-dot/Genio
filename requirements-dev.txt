@@ -3,3 +3,4 @@ mypy>=1.11
 pytest>=8.3
 types-jsonschema
 types-redis
+types-croniter

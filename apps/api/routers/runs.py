@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session
 from api.core.audit import audit
 from api.core.errors import AppError, forbidden, not_found
 from api.db import SessionLocal
-from api.deps import VIEW_RUNS, Ctx, require_role
+from api.deps import EDIT_APPS, VIEW_RUNS, Ctx, require_role
 from api.engine import events
 from api.engine.executor import load_graph
 from api.models import App, Run, RunStep
@@ -26,6 +26,7 @@ from nodes import NodeError
 
 router = APIRouter(tags=["runs"])
 RunViewers = Annotated[Ctx, Depends(require_role(VIEW_RUNS, via="run"))]
+RunEditors = Annotated[Ctx, Depends(require_role(EDIT_APPS, via="run"))]
 STREAM_MAX_SECONDS = 15 * 60
 END_STATES = {"succeeded", "failed", "waiting_approval"}
 
@@ -162,3 +163,38 @@ def approve(run_id: str, body: ApproveIn, ctx: RunViewers) -> dict[str, Any]:
     if fresh is None:
         raise not_found("실행 기록")
     return run_detail(ctx.db, fresh)
+
+
+# ---------------- v0.4 다시 실행 ----------------
+class RerunIn(BaseModel):
+    input: dict[str, Any] | None = None
+
+
+@router.post("/runs/{run_id}/rerun", status_code=201)
+def rerun(run_id: str, body: RerunIn, ctx: RunEditors) -> dict[str, Any]:
+    """지난 실행과 같은 앱·버전(또는 같은 작업본 스냅샷)으로 다시 실행한다. 입력은 고쳐서 보낼 수 있다."""
+    old = ctx.db.get(Run, run_id)
+    if old is None:
+        raise not_found("실행 기록")
+    source = body.input if body.input is not None else dict(old.input or {})
+    run_input = {k: v for k, v in source.items() if not str(k).startswith("__")}
+    run = Run(
+        app_id=old.app_id,
+        version_id=old.version_id,
+        graph_snapshot=None if old.version_id else old.graph_snapshot,
+        trigger="rerun",
+        input=run_input,
+        created_by=ctx.user.id,
+    )
+    if run.version_id is None and run.graph_snapshot is None:
+        raise AppError(
+            409, "다시 실행할 흐름을 찾지 못했어요.", "빌더에서 테스트 실행을 새로 해 보세요."
+        )
+    ctx.db.add(run)
+    ctx.db.commit()
+    enqueue_run(run.id)
+    ctx.db.expire_all()
+    fresh = ctx.db.get(Run, run.id)
+    if fresh is None:
+        raise not_found("실행 기록")
+    return run_dict(fresh)

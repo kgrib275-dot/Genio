@@ -14,6 +14,7 @@
     "gen:types": "json2ts -i src/lib/api/generated/graph.schema.json -o src/lib/api/generated/graph.ts --bannerComment \"/* 자동 생성 파일: scripts/gen_types.py + npm run gen:types. 직접 고치지 마세요. */\""
   },
   "dependencies": {
+    "@dagrejs/dagre": "^1.1.4",
     "@monaco-editor/react": "^4.7.0",
     "@rjsf/core": "^5.24.13",
     "@rjsf/utils": "^5.24.13",
@@ -23,7 +24,9 @@
     "lucide-react": "^0.453.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
+    "react-markdown": "^9.0.1",
     "react-router-dom": "^6.27.0",
+    "remark-gfm": "^4.0.0",
     "tailwind-merge": "^2.5.4",
     "zustand": "^5.0.0"
   },

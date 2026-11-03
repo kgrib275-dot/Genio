@@ -274,6 +274,53 @@ export const HELP_SECTIONS: HelpSection[] = [
     ],
   },
   {
+    id: "triggers",
+    title: "자동 실행(웹훅·예약)",
+    summary: "바깥 서비스가 부르거나 정해진 시간마다 흐름을 저절로 실행해요.",
+    blocks: [
+      {
+        type: "p",
+        text: "앱의 **자동 실행** 탭에서 만들어요. 자동 실행은 **저장한 버전**으로만 돌아요. 먼저 만들기 화면에서 **버전 저장**을 하세요.",
+      },
+      {
+        type: "list",
+        items: [
+          "**웹훅**: 비밀 주소가 생겨요. 쇼핑몰·설문·다른 자동화 도구가 이 주소로 JSON을 보내면 그 값이 흐름의 입력이 돼요.",
+          "**바로 받기**는 실행 번호만 바로 돌려주고, **결과 기다리기**는 최대 30초 기다려 결과를 돌려줘요.",
+          "**예약**: 매시간·매일·평일·매주 중에 고르거나 cron 식을 직접 적어요. 넣을 입력도 정해 둘 수 있어요.",
+          "**지금 실행**으로 바로 시험해 보고, 마지막 실행 결과는 **자세히**에서 봐요.",
+        ],
+      },
+      {
+        type: "tip",
+        text: "웹훅 주소를 아는 누구나 흐름을 실행할 수 있어요. 새어 나갔다면 **주소 새로 만들기**를 누르세요. 실패했을 때 담당자에게 알리려면 **기능** 탭의 **실패했을 때**에서 알림 앱을 고르세요.",
+      },
+    ],
+  },
+  {
+    id: "datatables",
+    title: "데이터 표",
+    summary: "흐름이 값을 적어 두고 다시 꺼내 쓰는 작은 표예요.",
+    blocks: [
+      {
+        type: "p",
+        text: "**데이터 표**는 엑셀 시트처럼 줄과 칸이 있는 작은 저장소예요. 문의 기록, 처리한 주문 번호, 고객 목록처럼 흐름이 기억해야 할 값을 담아 둬요.",
+      },
+      {
+        type: "steps",
+        items: [
+          "왼쪽 메뉴 **데이터 표**에서 **새 표**를 만들고 칸(이름·종류)을 정해요.",
+          "줄을 직접 넣거나 **CSV 가져오기**로 한 번에 넣어요.",
+          "흐름에 **데이터 표** 블록을 놓고 추가·덮어쓰기·찾기·목록·지우기 중 하나를 골라요.",
+        ],
+      },
+      {
+        type: "tip",
+        text: "**고유 키**를 정해 두면 같은 키로 다시 넣을 때 새 줄을 만들지 않고 덮어써요(중복 방지).",
+      },
+    ],
+  },
+  {
     id: "projects",
     title: "프로젝트",
     summary: "앱과 지식을 프로젝트로 묶어 나만의 작업 공간처럼 정리해요.",
@@ -363,7 +410,9 @@ export type HelpPageKey =
   | "admin"
   | "share"
   | "mysettings"
-  | "projects";
+  | "projects"
+  | "triggers"
+  | "datatables";
 
 /** 화면별로 '?' 버튼이 보여 줄 단락 */
 export const PAGE_HELP: Record<HelpPageKey, string> = {
@@ -383,6 +432,8 @@ export const PAGE_HELP: Record<HelpPageKey, string> = {
   share: "share",
   mysettings: "mysettings",
   projects: "projects",
+  triggers: "triggers",
+  datatables: "datatables",
 };
 
 export function helpSection(id: string): HelpSection {

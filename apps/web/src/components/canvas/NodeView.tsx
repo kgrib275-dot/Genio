@@ -66,6 +66,7 @@ export function NodeView({ data, selected }: NodeProps<GenioFlowNode>) {
   const fail = hasFailHandle(node.data);
   const hasErrors = Boolean(errors && errors.length);
   const label = (node.data.label as string | undefined) || spec?.label || node.type;
+  const off = Boolean(node.disabled);
 
   return (
     <div
@@ -75,7 +76,9 @@ export function NodeView({ data, selected }: NodeProps<GenioFlowNode>) {
         hasErrors ? "border-red-400 ring-2 ring-red-200" : "border-slate-200",
         selected && !hasErrors && "border-indigo-400 ring-4 ring-indigo-500/15",
         highlighted && "genio-highlight",
+        off && "border-dashed opacity-60 saturate-0",
       )}
+      title={off ? "꺼진 블록이에요. 실행할 때 건너뛰어요." : undefined}
     >
       <span className={cn("absolute inset-y-0 left-0 w-1", toneOf(spec?.category).bar)} />
       {node.type !== "input" && (
@@ -92,6 +95,11 @@ export function NodeView({ data, selected }: NodeProps<GenioFlowNode>) {
             <p className="truncate text-[13px] font-semibold text-slate-900">{label}</p>
             <p className="truncate text-[11px] text-slate-400">{spec?.label ?? node.type}</p>
           </div>
+          {off && (
+            <span className="shrink-0 rounded bg-slate-200 px-1.5 py-0.5 text-[10px] font-semibold text-slate-600">
+              꺼짐
+            </span>
+          )}
           {step && <StatusBadge status={step.status} />}
         </div>
         {summary(node) && (

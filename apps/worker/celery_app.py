@@ -20,6 +20,10 @@ celery.conf.update(
     worker_prefetch_multiplier=1,
     # 실행 10분 제한(설계서 §5) + 여유
     task_time_limit=11 * 60,
+    # v0.4: 1분마다 예약 실행 확인(워커를 `-B`로 띄워 beat를 함께 돌린다. 워커가 여럿이면 하나만 -B)
+    beat_schedule={
+        "dispatch-schedules": {"task": "genio.dispatch_schedules", "schedule": 60.0},
+    },
 )
 
 

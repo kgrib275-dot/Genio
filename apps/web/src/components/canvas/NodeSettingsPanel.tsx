@@ -2,6 +2,7 @@ import Form from "@rjsf/core";
 import type { RJSFSchema } from "@rjsf/utils";
 import validator from "@rjsf/validator-ajv8";
 import { useMemo } from "react";
+import { CurlImport } from "@/components/canvas/CurlImport";
 import { FailureSettings } from "@/components/canvas/FailureSettings";
 import { nodeFields, nodeTemplates, nodeWidgets } from "@/components/canvas/formRegistry";
 import { referenceHints, toRjsfUiSchema } from "@/components/canvas/uiSchema";
@@ -98,6 +99,13 @@ export function NodeSettingsPanel({
             ))}
           </div>
         )}
+        {node.disabled && (
+          <p className="mb-3 rounded border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+            꺼진 블록이에요. 실행할 때 건너뛰고 입력을 그대로 다음 블록으로 넘겨요. 캔버스에서
+            블록을 고르고 D를 누르면 다시 켜져요.
+          </p>
+        )}
+        {node.type === "http" && !readOnly && <CurlImport data={node.data} onChange={onChange} />}
         {spec ? (
           <NodeSettingsForm
             node={node}

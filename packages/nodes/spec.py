@@ -94,6 +94,26 @@ class NodeServices(Protocol):
         max_iterations: int,
     ) -> dict[str, Any]: ...
 
+    # v0.4
+    def run_app(self, *, app_id: str, inputs: dict[str, Any]) -> dict[str, Any]:
+        """같은 워크스페이스의 다른 앱(최신 저장 버전)을 실행하고 출력을 돌려준다."""
+        ...
+
+    def data_table(
+        self,
+        *,
+        table_id: str,
+        operation: str,
+        row_key: str | None,
+        data: dict[str, Any] | None,
+        filter: dict[str, Any] | None,
+        limit: int,
+    ) -> dict[str, Any]:
+        """워크스페이스의 데이터 표를 읽고 쓴다. 출력: {row, rows, count, found}"""
+        ...
+
+    def wait(self, *, seconds: float) -> None: ...
+
 
 @dataclass
 class NodeContext:

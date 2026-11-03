@@ -1,5 +1,6 @@
 import {
   Activity,
+  CalendarClock,
   ChevronLeft,
   KeyRound,
   MessagesSquare,
@@ -46,6 +47,9 @@ export function AppNav({
           { to: `${base}/builder`, label: "만들기", Icon: Wand2 },
           { to: `${base}/features`, label: "기능", Icon: SlidersHorizontal },
         ]
+      : []),
+    ...(canViewRuns(role)
+      ? [{ to: `${base}/triggers`, label: "자동 실행", Icon: CalendarClock }]
       : []),
     ...(canViewRuns(role)
       ? [

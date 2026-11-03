@@ -2,7 +2,11 @@
 import { useIsDark } from "@/store/theme";
 import { lazy, Suspense, useEffect, useState } from "react";
 import type { FieldProps, IconButtonProps, WidgetProps } from "@rjsf/utils";
+import { Link } from "react-router-dom";
+import { useApps } from "@/lib/api/apps";
 import { useConnectorDefinitions, useCredentials, useKnowledgeBases } from "@/lib/api/resources";
+import { useDataTables } from "@/lib/api/v4";
+import { useCanvas } from "@/store/canvas";
 
 const MonacoEditor = lazy(() => import("@monaco-editor/react"));
 
@@ -65,6 +69,67 @@ export function KbWidget(props: WidgetProps) {
         </option>
       ))}
     </select>
+  );
+}
+
+/** 다른 앱 실행 블록: 같은 워크스페이스의 다른 앱(지금 앱 제외) */
+export function AppWidget(props: WidgetProps) {
+  const apps = useApps(ctxOf(props).wsId);
+  const current = useCanvas((s) => s.appId);
+  const list = (apps.data ?? []).filter((a) => a.id !== current);
+  return (
+    <div className="space-y-1">
+      <select
+        id={props.id}
+        className={inputCls}
+        value={(props.value as string | undefined) ?? ""}
+        disabled={props.disabled || props.readonly}
+        onChange={(e) => props.onChange(e.target.value || undefined)}
+      >
+        <option value="">실행할 앱 선택</option>
+        {list.map((a) => (
+          <option key={a.id} value={a.id}>
+            {a.name}
+            {a.latest_version ? ` (버전 ${a.latest_version})` : " (저장한 버전 없음)"}
+          </option>
+        ))}
+      </select>
+      {apps.data && list.length === 0 && (
+        <p className="text-[11px] text-slate-500">
+          다른 앱이 없어요. 대시보드에서 앱을 먼저 만드세요.
+        </p>
+      )}
+    </div>
+  );
+}
+
+/** 데이터 표 블록: 워크스페이스의 데이터 표 */
+export function DataTableWidget(props: WidgetProps) {
+  const tables = useDataTables(ctxOf(props).wsId);
+  return (
+    <div className="space-y-1">
+      <select
+        id={props.id}
+        className={inputCls}
+        value={(props.value as string | undefined) ?? ""}
+        disabled={props.disabled || props.readonly}
+        onChange={(e) => props.onChange(e.target.value || undefined)}
+      >
+        <option value="">데이터 표 선택</option>
+        {(tables.data ?? []).map((t) => (
+          <option key={t.id} value={t.id}>
+            {t.name} ({t.row_count}행)
+          </option>
+        ))}
+      </select>
+      <Link
+        to="/data"
+        target="_blank"
+        className="text-[11px] font-medium text-indigo-600 hover:underline"
+      >
+        데이터 표 만들기·보기 ↗
+      </Link>
+    </div>
   );
 }
 

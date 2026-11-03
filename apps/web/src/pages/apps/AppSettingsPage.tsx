@@ -1,7 +1,8 @@
-import { Copy, Download, RotateCcw } from "lucide-react";
+import { Copy, Download, Palette, RotateCcw } from "lucide-react";
 import { useEffect, useState, type FormEvent } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { JsonView } from "@/components/canvas/RunPanel";
+import { AppearanceEditor } from "@/components/chat/AppearanceEditor";
 import { ErrorBox, Loading } from "@/components/ErrorBox";
 import { ListPager, ListToolbar, NoMatch } from "@/components/ListControls";
 import { Badge } from "@/components/ui/badge";
@@ -31,6 +32,7 @@ import {
 import { exportApp, useDuplicateApp, useRestoreVersion } from "@/lib/api/v2";
 import { copyText, downloadJson, formatDate } from "@/lib/cn";
 import { useListControls } from "@/lib/useListControls";
+import type { DeploymentV4 } from "@/lib/api/chat";
 import { useProjects } from "@/lib/api/v3";
 import { canEdit, useSession } from "@/store/session";
 import { AppNav } from "@/pages/apps/AppNav";
@@ -71,6 +73,8 @@ function CopyRow({ label, value }: { label: string; value: string }) {
 
 function DeploymentsCard({ appId, editable }: { appId: string; editable: boolean }) {
   const deployments = useDeployments(appId);
+  const appInfo = useApp(appId);
+  const [styling, setStyling] = useState<string | null>(null);
   const dc = useListControls(deployments.data, {
     key: "app-deployments",
     defaultSize: 10,
@@ -207,6 +211,16 @@ function DeploymentsCard({ appId, editable }: { appId: string; editable: boolean
                 {d.access === "roles" && ` (${d.allowed_roles.map((r) => ko.roles[r]).join(", ")})`}
               </span>
               <span className="ml-auto text-xs text-slate-400">{formatDate(d.created_at)}</span>
+              {editable && d.channel !== "api" && (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  aria-expanded={styling === d.id}
+                  onClick={() => setStyling(styling === d.id ? null : d.id)}
+                >
+                  <Palette className="h-3.5 w-3.5" /> 모양 바꾸기
+                </Button>
+              )}
               {editable && (
                 <Button
                   size="sm"
@@ -230,6 +244,16 @@ function DeploymentsCard({ appId, editable }: { appId: string; editable: boolean
               </>
             )}
             {d.channel === "api" && <CopyRow label="API 주소(POST, SSE)" value={d.api_url} />}
+            {styling === d.id && (
+              <AppearanceEditor
+                appId={appId}
+                deploymentId={d.id}
+                initial={(d as DeploymentV4).appearance}
+                widget={d.channel === "web_widget"}
+                appName={appInfo.data?.name ?? "앱"}
+                onClose={() => setStyling(null)}
+              />
+            )}
           </div>
         ))}
         {(deployments.data?.length ?? 0) > 0 && <ListPager c={dc} />}

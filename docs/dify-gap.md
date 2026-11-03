@@ -72,3 +72,45 @@ Dify 공식 문서(docs.dify.ai, 2026-11 조사)의 기능을 Genio와 비교했
 | 시스템 설정 | **추가** 회원가입 허용, 공개 챗 속도 제한 (데모 계정 표시는 ADR 0007로 없앰, 대신 관리자 계정 만들기·비밀번호 재설정) |
 | Dataset Operator 역할 | 범위 밖(역할 5개 유지) |
 | 결제·요금제·SSO | 범위 밖(CLAUDE.md) |
+
+
+---
+# v0.4 (ADR 0008) — n8n·Zapier·Make·Flowise 비교
+
+조사(2026-11): n8n 코어 노드(Webhook·Schedule Trigger·Wait·Merge·Edit Fields·Date & Time·Execute Workflow·Data Table), Zapier(Formatter·Delay·Paths·Tables), Make(Router·Iterator/Aggregator·Data store), Flowise Embed(theme·starter prompts·clearChat).
+
+## 6. 자동화(n8n·Zapier·Make)
+| 기능 | 해당 서비스 | v0.4 |
+|---|---|---|
+| 웹훅으로 시작(외부 호출) | n8n Webhook, Zapier Catch Hook, Make Webhooks | **추가** 앱마다 비밀 주소 `/api/v1/hooks/{token}`(POST·GET), 바로 응답(async) 또는 결과까지 기다림(sync, 최대 30초), 주소 다시 만들기·끄기 |
+| 결과로 응답하기 | n8n Respond to Webhook | **추가** sync 모드가 출력(`text`·`outputs`)을 돌려줌 |
+| 예약 실행 | n8n Schedule Trigger, Zapier Schedule, Make 시나리오 예약 | **추가** cron 5칸 + 시간대(기본 Asia/Seoul) + 고정 입력, 최소 1분, Celery beat |
+| 실패하면 다른 흐름 | n8n Error Workflow, Make error handler | **추가** 앱 기능 `on_failure.app_id` (빌더 테스트·하위 실행은 제외, 무한 반복 방지) |
+| 실행 다시 하기 | n8n Retry execution | **추가** `/runs/{id}/rerun` (입력 고쳐서도 가능) |
+| 지금 실행(트리거 시험) | n8n Test workflow | **추가** `/triggers/{id}/run-now` |
+| 기다리기 | n8n Wait, Zapier Delay | **추가** `wait` (1~300초). 외부 응답이 올 때까지 기다리기는 범위 밖(승인 노드로 대신) |
+| 값 정리 | n8n Edit Fields(Set), Zapier Formatter | **추가** `set_fields` (글·숫자·참거짓·JSON 변환) |
+| 날짜·시간 | n8n Date & Time, Zapier Formatter(Date) | **추가** `date_time` (지금·형식·더하기·차이, 개월 말일 보정) |
+| 하위 흐름 | n8n Execute Workflow, Make Scenario call | **추가** `run_app` (최신 저장 버전, 깊이 2단계) |
+| 내장 저장소 | n8n Data Tables, Make Data store, Zapier Tables | **추가** `data_table` 블록 + 데이터 표 화면·API(추가·덮어쓰기·가져오기·찾기·목록·지우기·개수, CSV 가져오기/내보내기, 표당 5,000줄) |
+| 분기·반복·합치기 | Zapier Paths, Make Router/Iterator/Aggregator | 있음(condition·question_classifier·iteration·loop·list_operator·variable_aggregator) |
+| 병렬 실행 후 합치기 | n8n Merge(Wait for both) | 범위 밖(CLAUDE.md: 병렬 분기 실행) |
+| 수백 개 앱 연동 | n8n·Zapier·Make 통합 | 마켓 커넥터 + http 블록으로 대신(범위 밖: 대량 통합) |
+
+## 7. 캔버스(n8n 편집기)
+| 기능 | v0.4 |
+|---|---|
+| 스티커 메모 | **추가** `Graph.notes` (색 5가지, 실행과 무관) |
+| 블록 끄기(Deactivate) | **추가** `GraphNode.disabled` — 건너뛰고 앞 값을 넘김, 갈림길은 첫 출구, 끈 블록은 설정 오류를 보지 않음, 입력 블록은 끌 수 없음 |
+| 복사·붙여넣기·복제, 되돌리기, 미니맵, 자동 정렬, cURL 가져오기 | **추가**(화면 작업, ADR 0008 §3) |
+| 실행 데이터 고정(Pin data) | 범위 밖(ADR 후보) |
+
+## 8. 챗 경험(Flowise·Dify 웹앱)
+| 기능 | v0.4 |
+|---|---|
+| 답변 실시간 표시(스트리밍) | **추가** `delta` 이벤트 (출력 검열 앱은 제외) |
+| 마크다운·코드 복사·다시 답하기·멈추기 | **추가**(화면) |
+| 이전 대화·새 대화·대화 내보내기 | **추가** 세션 메시지 API + 화면 |
+| 위젯 모양(theme) | **추가** `deployments.appearance` |
+| 빌더 안 대화 시험(Debug & Preview) | **추가** `/apps/{id}/preview/chat` |
+| 리드 수집 폼, 사람 상담원 연결 | 범위 밖(ADR 후보) |

@@ -18,12 +18,15 @@ from api.routers import (
     auth,
     builder,
     connectors,
+    data_tables,
     deployments,
+    hooks,
     knowledge,
     market,
     projects,
     runs,
     service,
+    triggers,
     workspaces,
 )
 from api.services.seed import seed_demo
@@ -65,15 +68,18 @@ for r in (
     auth,
     workspaces,
     connectors,
+    data_tables,
     apps,
     apps_v02,
     runs,
     builder,
     knowledge,
     deployments,
+    hooks,
     market,
     projects,
     service,
+    triggers,
 ):
     app.include_router(r.router, prefix="/api/v1")
 

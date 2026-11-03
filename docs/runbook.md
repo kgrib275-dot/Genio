@@ -75,6 +75,13 @@ make check            # make가 없으면(Windows): PYTHONUTF8=1 bash scripts/ch
 - Web: eslint, prettier, tsc, vitest
 - 빌더 녹화 스냅샷 갱신: `UPDATE_SNAPSHOTS=1 pytest apps/api/tests/test_builder.py`
 
+## 예약 실행(Celery beat, ADR 0008)
+- 워커는 `celery ... worker -B`로 beat를 함께 돌린다. beat가 1분마다 `genio.dispatch_schedules`를 불러 `next_run_at`이 지난 예약 자동 실행을 큐에 넣는다.
+- 워커 컨테이너를 2개 이상 띄우면 `-B`는 하나에만 둔다(둘 다 켜면 예약이 두 번 실행된다).
+- 밀린 예약(워커가 꺼져 있던 동안)은 한 번만 실행하고 다음 시각부터 이어 간다.
+- 웹훅 주소(`/api/v1/hooks/{token}`)는 비밀값이다. 새어 나갔으면 앱 > 자동 실행에서 '주소 다시 만들기'를 누른다. 토큰은 로그에 남기지 않는다.
+- 웹훅·예약은 저장한 버전으로만 실행된다. 버전이 없으면 웹훅은 409, 예약은 건너뛰고 마지막 상태를 `no_version`으로 남긴다.
+
 ## 마이그레이션
 ```bash
 export DATABASE_URL=postgresql+psycopg://genio:genio@127.0.0.1:55432/genio

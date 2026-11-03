@@ -332,7 +332,8 @@ Project = {id, workspace_id, name, description, color: indigo|sky|emerald|amber|
 | POST | `/runs/{id}/rerun` | owner, admin, builder | `{input?}` | 201 `Run` (같은 앱·버전, 입력 생략 시 원래 입력, trigger=`rerun`) |
 
 - 실패하면 다른 앱 실행: 앱 기능 `features.on_failure = {app_id: string|null}`. 실패한 실행이 끝나면 그 앱을 `trigger="on_failure"`, 입력 `{failed_app_id, failed_app_name, run_id, error, input}`로 실행. `on_failure`로 시작된 실행이 실패하면 다시 부르지 않는다.
-- Run.trigger 값: test, chat, api, schedule, webhook, rerun, on_failure, preview.
+- Run.trigger 값: test, chat, api, schedule, webhook, rerun, on_failure, preview, subflow(run_app 블록이 부른 하위 실행).
+- 실패 처리 앱은 test·preview·tool·subflow 실행이 실패할 때는 부르지 않는다(빌더 테스트가 알림을 쏟지 않도록). 실패 처리 앱에 저장한 버전이 없으면 작업본으로 실행한다.
 
 ## 데이터 표
 `DataTable = {id, workspace_id, project_id, name, description, columns: [{key, label, type: text|number|boolean|date|json}], row_count, created_at, updated_at}`

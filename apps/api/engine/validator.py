@@ -41,6 +41,16 @@ def branch_handles(node_type: str, data: dict[str, Any]) -> set[str] | None:
     return None
 
 
+def ordered_branch_handles(node_type: str, data: dict[str, Any]) -> list[str]:
+    """갈림길 출구를 화면 순서대로(끈 블록이 고르는 '첫 번째 출구'용)."""
+    if node_type == "condition":
+        ids = [str(c.get("id")) for c in data.get("cases", []) if c.get("id")]
+        return [*ids, str(data.get("else") or "else")]
+    if node_type == "question_classifier":
+        return [str(c.get("id")) for c in data.get("classes", []) if c.get("id")]
+    return []
+
+
 def _schema_errors(spec: NodeSpec, node_id: str, data: dict[str, Any]) -> list[GraphError]:
     schema = spec.input_schema
     props = schema.get("properties", {})
@@ -96,6 +106,12 @@ def validate_graph(raw: dict[str, Any], env: ValidationEnv) -> ValidationResult:
     specs: dict[str, NodeSpec] = {}
     for node in graph.nodes:
         spec = env.registry.get(node.type)
+        if node.disabled and node.type == "input":
+            errors.append(
+                GraphError(node_id=node.id, message="입력 블록은 끌 수 없어요. 다시 켜 주세요.")
+            )
+        if node.disabled and spec is None:
+            continue  # 꺼 둔 블록은 설치되지 않은 마켓 블록이어도 괜찮다
         if spec is None or (env.allowed_types is not None and node.type not in env.allowed_types):
             errors.append(
                 GraphError(
@@ -105,15 +121,17 @@ def validate_graph(raw: dict[str, Any], env: ValidationEnv) -> ValidationResult:
             )
             continue
         specs[node.id] = spec
+        if node.disabled:
+            continue
         data = {k: v for k, v in node.data.items() if k not in _UI_KEYS}
         errors.extend(_schema_errors(spec, node.id, data))
 
     inputs = [n for n in graph.nodes if n.type == "input"]
-    outputs = [n for n in graph.nodes if n.type == "output"]
+    outputs = [n for n in graph.nodes if n.type == "output" and not n.disabled]
     if len(inputs) != 1:
         errors.append(GraphError(message=f"입력 노드는 정확히 1개여야 해요(지금 {len(inputs)}개)."))
     if not outputs:
-        errors.append(GraphError(message="결과 노드가 최소 1개 있어야 해요."))
+        errors.append(GraphError(message="켜져 있는 결과 노드가 최소 1개 있어야 해요."))
 
     # 연결선
     out_edges: dict[str, list[Any]] = defaultdict(list)
@@ -239,6 +257,8 @@ def validate_graph(raw: dict[str, Any], env: ValidationEnv) -> ValidationResult:
 
     # 참조 변수
     for node in graph.nodes:
+        if node.disabled:
+            continue
         refs = set(iter_refs({k: v for k, v in node.data.items() if k not in _UI_KEYS}))
         for ref_node, ref_field in refs:
             if ref_node in RESERVED_SCOPES:
@@ -259,6 +279,8 @@ def validate_graph(raw: dict[str, Any], env: ValidationEnv) -> ValidationResult:
                 )
                 continue
             spec = specs.get(ref_node)
+            if nodes[ref_node].disabled:
+                continue  # 끈 블록은 앞 단계 값을 그대로 넘기므로 이름을 미리 알 수 없다
             if spec is not None and spec.outputs is not None and ref_field:
                 fields = spec.outputs(nodes[ref_node].data)
                 if fields is not None and nodes[ref_node].data.get("_on_error") in (
@@ -274,8 +296,30 @@ def validate_graph(raw: dict[str, Any], env: ValidationEnv) -> ValidationResult:
                         )
                     )
 
-    # 커넥터·지식베이스
+    # 커넥터·지식베이스·v0.4 블록
     for node in graph.nodes:
+        if node.disabled:
+            continue
+        if node.type == "data_table":
+            op = str(node.data.get("operation") or "")
+            if op in ("upsert", "get") and not str(node.data.get("row_key") or "").strip():
+                errors.append(
+                    GraphError(
+                        node_id=node.id,
+                        field="row_key",
+                        message="덮어쓰기·가져오기는 '고유 키' 칸을 채워야 해요.",
+                    )
+                )
+            if op == "delete" and not (
+                str(node.data.get("row_key") or "").strip() or node.data.get("filter")
+            ):
+                errors.append(
+                    GraphError(
+                        node_id=node.id,
+                        field="filter",
+                        message="지우기는 '고유 키'나 '찾는 조건'을 채워야 해요(전체 지우기는 화면에서만).",
+                    )
+                )
         if node.type == "connector":
             key = str(node.data.get("connector") or "")
             cred = str(node.data.get("credential_id") or "")

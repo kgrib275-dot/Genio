@@ -23,6 +23,8 @@ const AppFeaturesPage = lazy(() => import("@/pages/apps/AppFeaturesPage"));
 const AppLogsPage = lazy(() => import("@/pages/apps/AppLogsPage"));
 const AppMonitorPage = lazy(() => import("@/pages/apps/AppMonitorPage"));
 const AppApiPage = lazy(() => import("@/pages/apps/AppApiPage"));
+const AppTriggersPage = lazy(() => import("@/pages/apps/AppTriggersPage"));
+const DataTablesPage = lazy(() => import("@/pages/data/DataTablesPage"));
 const AdminPage = lazy(() => import("@/pages/admin/AdminPage"));
 const HelpPage = lazy(() => import("@/pages/help/HelpPage"));
 const SettingsPage = lazy(() => import("@/pages/settings/SettingsPage"));
@@ -53,8 +55,11 @@ export default function App() {
             <Route path="apps/:id/logs" element={<AppLogsPage />} />
             <Route path="apps/:id/monitor" element={<AppMonitorPage />} />
             <Route path="apps/:id/api" element={<AppApiPage />} />
+            <Route path="apps/:id/triggers" element={<AppTriggersPage />} />
             <Route path="runs/:id" element={<RunDetailPage />} />
             <Route path="knowledge" element={<KnowledgePage />} />
+            <Route path="data" element={<DataTablesPage />} />
+            <Route path="data/:tableId" element={<DataTablesPage />} />
             <Route path="connectors" element={<ConnectorsPage />} />
             <Route path="market" element={<MarketPage />} />
             <Route path="market/:key" element={<MarketDetailPage />} />

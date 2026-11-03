@@ -28,14 +28,16 @@ from api.engine.templating import TemplateRenderError, evaluate, render, render_
 from api.llm.base import LlmError
 from api.llm.registry import resolve_llm
 from api.market.service import ensure_market_nodes
-from api.models import App, Run, RunStep, StoredFile, WorkflowVersion
+from api.models import App, DataTable, Run, RunStep, StoredFile, WorkflowVersion
 from api.schemas.graph import Graph
 from api.services import knowledge
-from api.services.app_config import decrypt_env_vars
+from api.services.app_config import decrypt_env_vars, merged_features
 from nodes import LlmResult, NodeContext, NodeError, NodeResult, registry
 
 log = logging.getLogger("genio.engine")
 TERMINAL = {"succeeded", "failed"}
+# 실패해도 '실패하면 다른 앱 실행'을 부르지 않는 실행(빌더 시험·하위 실행·실패 처리 자신)
+NO_FAILURE_HOOK = {"on_failure", "test", "preview", "tool", "subflow"}
 
 
 def now() -> datetime:
@@ -169,6 +171,84 @@ class RunServices:
 
         return connector_manifest(self.db, self.workspace_id, key)
 
+    # ---- v0.4 ----
+    def wait(self, *, seconds: float) -> None:
+        time.sleep(max(0.0, min(float(seconds), 300.0)))
+
+    def run_app(self, *, app_id: str, inputs: dict[str, Any]) -> dict[str, Any]:
+        """같은 워크스페이스의 다른 앱(저장한 최신 버전)을 하위 흐름으로 실행한다."""
+        from api.engine.agent import MAX_DEPTH
+
+        if self.depth >= MAX_DEPTH:
+            raise NodeError(
+                "앱이 앱을 너무 깊게 부르고 있어요(최대 2단계). 흐름을 단순하게 바꿔 주세요."
+            )
+        target = self.db.get(App, app_id)
+        if target is None or target.workspace_id != self.workspace_id:
+            raise NodeError("실행할 앱을 찾을 수 없어요. 블록 설정에서 앱을 다시 골라 주세요.")
+        version = self.db.scalar(
+            select(WorkflowVersion)
+            .where(WorkflowVersion.app_id == app_id)
+            .order_by(WorkflowVersion.version.desc())
+            .limit(1)
+        )
+        if version is None:
+            raise NodeError(
+                f"'{target.name}' 앱에 저장한 버전이 없어요. 그 앱에서 '버전 저장'을 먼저 해 주세요."
+            )
+        clean = {k: v for k, v in inputs.items() if not str(k).startswith("__")}
+        child = Run(
+            app_id=app_id,
+            version_id=version.id,
+            trigger="subflow",
+            input={**clean, "__depth": self.depth + 1},
+        )
+        self.db.add(child)
+        self.db.commit()
+        _execute(self.db, child.id)
+        self.db.refresh(child)
+        if child.status == "waiting_approval":
+            raise NodeError(f"'{target.name}' 앱이 사람 승인을 기다리고 있어 결과를 받지 못했어요.")
+        if child.status != "succeeded":
+            raise NodeError(f"'{target.name}' 앱 실행이 실패했어요: {child.error or '원인 미상'}")
+        out = child.output or {}
+        values = out.get("outputs") or {}
+        merged: dict[str, Any] = {}
+        for v in values.values():
+            if isinstance(v, dict):
+                merged.update(v)
+        return {**merged, "text": str(out.get("text", "")), "run_id": child.id}
+
+    def data_table(
+        self,
+        *,
+        table_id: str,
+        operation: str,
+        row_key: str | None,
+        data: dict[str, Any] | None,
+        filter: dict[str, Any] | None,
+        limit: int,
+    ) -> dict[str, Any]:
+        from api.core.errors import AppError
+        from api.services import data_tables
+
+        table = self.db.get(DataTable, table_id)
+        if table is None or table.workspace_id != self.workspace_id:
+            raise NodeError("데이터 표를 찾을 수 없어요. 블록 설정에서 표를 다시 골라 주세요.")
+        try:
+            return data_tables.run_operation(
+                self.db,
+                table,
+                operation=operation,
+                row_key=row_key,
+                data=data,
+                filter=filter,
+                limit=limit,
+            )
+        except AppError as exc:
+            self.db.rollback()
+            raise NodeError(f"{exc.message} {exc.hint}") from None
+
 
 def _next(graph: Graph, node_id: str, handle: str | None) -> str | None:
     edges = [e for e in graph.edges if e.source == node_id]
@@ -177,6 +257,35 @@ def _next(graph: Graph, node_id: str, handle: str | None) -> str | None:
     else:
         edge = next((e for e in edges if not e.source_handle), None)
     return edge.target if edge else None
+
+
+def _next_skipping(graph: Graph, node_id: str) -> str | None:
+    """끈 블록 다음: 일반 출구가 있으면 그쪽, 갈림길이면 정해진 순서의 첫 출구."""
+    from api.engine.validator import ordered_branch_handles
+
+    plain = _next(graph, node_id, None)
+    if plain is not None:
+        return plain
+    node = graph.node(node_id)
+    if node is None:
+        return None
+    for handle in ordered_branch_handles(node.type, node.data):
+        target = _next(graph, node_id, handle)
+        if target is not None:
+            return target
+    return None
+
+
+def _node_timeout(node_type: str, data: dict[str, Any]) -> float | None:
+    """기다리기 블록은 기다리는 시간만큼 제한을 늘린다."""
+    if node_type != "wait":
+        return None
+    try:
+        seconds = float(data.get("seconds") or 0)
+    except (TypeError, ValueError):
+        return None
+    base = get_settings().genio_node_timeout_seconds
+    return max(base, min(seconds, 300.0) + 10)
 
 
 def _share_logs(child: NodeContext, parent: NodeContext) -> NodeContext:
@@ -215,8 +324,9 @@ def _run_with_limits(
     retries: int,
     interval: float | None = None,
     retry_all: bool = False,
+    timeout: float | None = None,
 ) -> NodeResult:
-    timeout = get_settings().genio_node_timeout_seconds
+    timeout = timeout or get_settings().genio_node_timeout_seconds
     attempt = 0
     while True:
         pool = concurrent.futures.ThreadPoolExecutor(max_workers=1)
@@ -256,6 +366,7 @@ def execute_run(run_id: str, *, db: Session | None = None) -> None:
             run.finished_at = now()
             session.commit()
             _publish(run)
+            _after_finish(session, run)
     finally:
         if own:
             session.close()
@@ -282,6 +393,69 @@ def _finish(
         run.finished_at = now()
     db.commit()
     _publish(run)
+    _after_finish(db, run)
+
+
+def _after_finish(db: Session, run: Run) -> None:
+    """끝난 실행의 뒷정리: 트리거 마지막 상태, 실패하면 다른 앱 실행(ADR 0008)."""
+    try:
+        from api.services.triggers import sync_last_status
+
+        sync_last_status(db, run)
+        db.commit()
+    except Exception:
+        log.exception("자동 실행 상태 기록 실패(run=%s)", run.id)
+        db.rollback()
+    if run.status == "failed" and run.trigger not in NO_FAILURE_HOOK:
+        try:
+            _dispatch_on_failure(db, run)
+        except Exception:
+            log.exception("실패 처리 앱 실행 실패(run=%s)", run.id)
+            db.rollback()
+
+
+def _dispatch_on_failure(db: Session, run: Run) -> str | None:
+    app = db.get(App, run.app_id)
+    if app is None:
+        return None
+    target_id = (merged_features(app.features).get("on_failure") or {}).get("app_id")
+    if not target_id:
+        return None
+    target = db.get(App, str(target_id))
+    if target is None or target.workspace_id != app.workspace_id:
+        log.info("실패 처리 앱이 없거나 다른 워크스페이스라 건너뜀(run=%s)", run.id)
+        return None
+    version = db.scalar(
+        select(WorkflowVersion)
+        .where(WorkflowVersion.app_id == target.id)
+        .order_by(WorkflowVersion.version.desc())
+        .limit(1)
+    )
+    snapshot = None
+    if version is None:
+        if not target.draft_graph:
+            return None
+        snapshot = target.draft_graph
+    failed_input = {k: v for k, v in (run.input or {}).items() if not str(k).startswith("__")}
+    child = Run(
+        app_id=target.id,
+        version_id=version.id if version else None,
+        graph_snapshot=snapshot,
+        trigger="on_failure",
+        input={
+            "failed_app_id": app.id,
+            "failed_app_name": app.name,
+            "run_id": run.id,
+            "error": run.error or "",
+            "input": failed_input,
+        },
+    )
+    db.add(child)
+    db.commit()
+    from api.services.queue import enqueue_run
+
+    enqueue_run(child.id)
+    return child.id
 
 
 def _execute(db: Session, run_id: str) -> None:
@@ -357,6 +531,7 @@ def _execute(db: Session, run_id: str) -> None:
     step_seq = db.scalar(select(func.max(RunStep.seq)).where(RunStep.run_id == run.id)) or 0
     last_output_text = str((run.output or {}).get("text", ""))
     output_values: dict[str, Any] = dict((run.output or {}).get("outputs", {}))
+    prev_output: dict[str, Any] = dict(run_input)
     while current is not None:
         visited += 1
         if visited > len(graph.nodes) + 1:
@@ -383,6 +558,18 @@ def _execute(db: Session, run_id: str) -> None:
         db.commit()
         _publish(run, step)
         services.current_node = node.id
+
+        if node.disabled and node.type != "input":
+            # 끈 블록: 실행하지 않고 앞 단계 값을 그대로 넘긴다(분기 블록은 첫 번째 출구로)
+            step.status = "skipped"
+            step.output = dict(prev_output)
+            step.logs = "꺼 둔 블록이라 건너뛰었어요."
+            step.finished_at = now()
+            outputs[node.id] = dict(prev_output)
+            db.commit()
+            _publish(run, step)
+            current = _next_skipping(graph, node.id)
+            continue
 
         def make_ctx(
             extra: dict[str, Any] | None = None, *, _node_id: str = node.id
@@ -430,6 +617,7 @@ def _execute(db: Session, run_id: str) -> None:
                 max(spec.retries, min(user_retries, 5)),
                 interval,
                 retry_all=user_retries > 0,
+                timeout=_node_timeout(node.type, node.data),
             )
         except (NodeError, TemplateRenderError) as exc:
             msg = exc.message if isinstance(exc, NodeError) else str(exc)
@@ -486,6 +674,7 @@ def _execute(db: Session, run_id: str) -> None:
         step.output = result.output
         step.finished_at = now()
         outputs[node.id] = result.output
+        prev_output = result.output
         if node.type == "output":
             last_output_text = str(result.output.get("text", ""))
             output_values[node.id] = result.output

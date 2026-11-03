@@ -2,6 +2,7 @@
 import type { RegistryFieldsType, RegistryWidgetsType, TemplatesType } from "@rjsf/utils";
 import {
   AddButton,
+  AppWidget,
   CodeWidget,
   CopyButton,
   MoveDownButton,
@@ -11,6 +12,7 @@ import {
   ConnectorActionWidget,
   ConnectorWidget,
   CredentialWidget,
+  DataTableWidget,
   JsonField,
   KbWidget,
   TextareaWidget,
@@ -23,6 +25,8 @@ export const nodeWidgets: RegistryWidgetsType = {
   connector: ConnectorWidget,
   credential: CredentialWidget,
   connectorAction: ConnectorActionWidget,
+  app: AppWidget,
+  dataTable: DataTableWidget,
 };
 
 export const nodeFields: RegistryFieldsType = { json: JsonField };

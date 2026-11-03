@@ -1,5 +1,14 @@
-import { ChevronDown, ChevronUp, Play, Plus, Save, ShieldCheck, X } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import {
+  ChevronDown,
+  ChevronUp,
+  MessageCircle,
+  Play,
+  Plus,
+  Save,
+  ShieldCheck,
+  X,
+} from "lucide-react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import { BuilderChat } from "@/components/builder-chat/BuilderChat";
 import { FlowCanvas } from "@/components/canvas/FlowCanvas";
@@ -19,6 +28,9 @@ import { useNodeTypes } from "@/lib/api/workspace";
 import { useCanvas } from "@/store/canvas";
 import { canEdit, useSession } from "@/store/session";
 import { AppNav } from "@/pages/apps/AppNav";
+
+// 대화로 시험하기(Dify 미리 보기). 열 때만 받아 온다.
+const PreviewChatPanel = lazy(() => import("@/components/chat/PreviewChatPanel"));
 
 /** 사용자 편집 후 잠시 기다렸다가 작업본을 서버에 저장한다. */
 function useDraftAutosave(appId: string) {
@@ -57,6 +69,7 @@ export default function BuilderPage() {
   const steps = useCanvas((s) => s.steps);
   const saving = useDraftAutosave(appId);
   const [testOpen, setTestOpen] = useState(false);
+  const [previewOpen, setPreviewOpen] = useState(false);
   const [run, setRun] = useState<Run | null>(null);
   const [running, setRunning] = useState(false);
   const [showPalette, setShowPalette] = useState(false);
@@ -183,6 +196,29 @@ export default function BuilderPage() {
               >
                 <Save className="h-3.5 w-3.5" />
                 <span className="hidden sm:inline">버전 저장</span>
+              </Button>
+            )}
+            {!readOnly && app.data.type === "chat" && (
+              <Button
+                size="sm"
+                variant="outline"
+                title="지금 만든 흐름과 대화해 봐요(로그에는 남지 않아요)"
+                onClick={async () => {
+                  // 바뀐 내용이 있으면 먼저 저장해 최신 작업본으로 대화한다
+                  if (useCanvas.getState().dirty) {
+                    try {
+                      await saveDraft(appId, useCanvas.getState().graph);
+                      useCanvas.getState().markSaved();
+                    } catch (err) {
+                      toast.error(err);
+                      return;
+                    }
+                  }
+                  setPreviewOpen(true);
+                }}
+              >
+                <MessageCircle className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">대화로 시험</span>
               </Button>
             )}
             {!readOnly && (
@@ -334,6 +370,11 @@ export default function BuilderPage() {
         running={running}
         onRun={(input) => void onRun(input)}
       />
+      {previewOpen && (
+        <Suspense fallback={null}>
+          <PreviewChatPanel appId={appId} onClose={() => setPreviewOpen(false)} />
+        </Suspense>
+      )}
     </div>
   );
 }
