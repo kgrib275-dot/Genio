@@ -4,6 +4,8 @@ import {
   FileText,
   Globe,
   Layers,
+  ListOrdered,
+  MessagesSquare,
   RefreshCw,
   Search,
   Settings2,
@@ -44,6 +46,7 @@ import {
   MetadataDialog,
   UrlImportDialog,
 } from "@/pages/knowledge/KbDialogs";
+import { PipelineDialog, QaImportDialog } from "@/pages/knowledge/KbPipelineDialogs";
 import { ProjectDot } from "@/components/projects/ProjectDialog";
 import { useProjects } from "@/lib/api/v3";
 import { useCreateKnowledgeBaseV5, useEmbeddingModels, useToggleDocument } from "@/lib/api/v5b";
@@ -258,7 +261,14 @@ function SearchCard({ kb }: { kb: KnowledgeBaseV2 }) {
                 </Badge>
               ))}
             </div>
-            <p className="whitespace-pre-wrap">{h.content}</p>
+            {h.question !== undefined ? (
+              <div className="space-y-0.5">
+                <p className="font-medium text-slate-800">질문: {h.question}</p>
+                <p className="whitespace-pre-wrap">답: {h.answer}</p>
+              </div>
+            ) : (
+              <p className="whitespace-pre-wrap">{h.content}</p>
+            )}
           </div>
         ))}
       </CardBody>
@@ -275,7 +285,7 @@ function KbDetail({ ws, kb, editable }: { ws: string; kb: KnowledgeBaseV2; edita
   const reprocess = useReprocessDocument(kb.id);
   const fileRef = useRef<HTMLInputElement>(null);
   const settings = normalizeKbSettings(kb.settings);
-  const [dialog, setDialog] = useState<"settings" | "url" | null>(null);
+  const [dialog, setDialog] = useState<"settings" | "url" | "pipeline" | "qa" | null>(null);
   const [metaDoc, setMetaDoc] = useState<KbDocumentV2 | null>(null);
   const [chunkDoc, setChunkDoc] = useState<KbDocumentV2 | null>(null);
   const docList = (docs.data ?? []) as KbDocumentV2[];
@@ -303,6 +313,7 @@ function KbDetail({ ws, kb, editable }: { ws: string; kb: KnowledgeBaseV2; edita
         options: [
           { value: "upload", label: "파일" },
           { value: "url", label: "웹 페이지" },
+          { value: "qa_table", label: "질문·답 표" },
         ],
         match: (d, v) => (d.source ?? "upload") === v,
       },
@@ -314,15 +325,21 @@ function KbDetail({ ws, kb, editable }: { ws: string; kb: KnowledgeBaseV2; edita
       <Card>
         <CardHeader
           title={kb.name}
-          description={`${settings.chunk_mode === "parent_child" ? "부모-자식" : "일반"} 조각 ${settings.chunk_size}자 · ${METHOD_LABEL[settings.retrieval.method]} 검색 · 임베딩 ${kb.embedding_model}`}
+          description={`${{ general: "일반", parent_child: "부모-자식", qa: "질문·답" }[settings.chunk_mode]} 조각 ${settings.chunk_size}자 · ${METHOD_LABEL[settings.retrieval.method]} 검색 · 임베딩 ${kb.embedding_model}`}
           action={
             editable && (
               <div className="flex flex-wrap gap-2">
                 <Button size="sm" variant="outline" onClick={() => setDialog("settings")}>
                   <Settings2 className="h-3.5 w-3.5" /> 설정
                 </Button>
+                <Button size="sm" variant="outline" onClick={() => setDialog("pipeline")}>
+                  <ListOrdered className="h-3.5 w-3.5" /> 처리 순서
+                </Button>
                 <Button size="sm" variant="outline" onClick={() => setDialog("url")}>
                   <Globe className="h-3.5 w-3.5" /> 웹 페이지
+                </Button>
+                <Button size="sm" variant="outline" onClick={() => setDialog("qa")}>
+                  <MessagesSquare className="h-3.5 w-3.5" /> 질문·답 표
                 </Button>
                 <input
                   ref={fileRef}
@@ -423,6 +440,10 @@ function KbDetail({ ws, kb, editable }: { ws: string; kb: KnowledgeBaseV2; edita
         <KbSettingsDialog ws={ws} kb={kb} open onClose={() => setDialog(null)} />
       )}
       {dialog === "url" && <UrlImportDialog kbId={kb.id} open onClose={() => setDialog(null)} />}
+      {dialog === "pipeline" && (
+        <PipelineDialog ws={ws} kb={kb} docs={docList} onClose={() => setDialog(null)} />
+      )}
+      {dialog === "qa" && <QaImportDialog kbId={kb.id} onClose={() => setDialog(null)} />}
       {metaDoc && <MetadataDialog kbId={kb.id} doc={metaDoc} onClose={() => setMetaDoc(null)} />}
       {chunkDoc && (
         <ChunksDialog doc={chunkDoc} editable={editable} onClose={() => setChunkDoc(null)} />

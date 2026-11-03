@@ -441,3 +441,37 @@ Project = {id, workspace_id, name, description, color: indigo|sky|emerald|amber|
 - 작업본 저장 `PUT /apps/{id}/draft`에 `source`(canvas|builder|import, 기본 canvas) — 빌더 지표용.
 - 실행 상세에 `story[]`(실행 이야기)와 단계별 `summary`(한 문장). 빌더 툴 `get_run`.
 - Run.trigger 값 추가: `form`(공유 입력 폼).
+
+## v0.6 지식베이스 Q&A·처리 순서
+
+모두 지식베이스의 소유자·관리자·빌더만 쓸 수 있다(`require_role(EDIT_APPS, via="kb")`). 오류는 `{message, hint}` 두 줄이다.
+
+### 설정(`PATCH /knowledge-bases/{kb_id}`의 `settings`)
+- `chunk_mode`: `general` | `parent_child` | `qa`(v0.6). `qa`이면 일반 문서는 일반 방식으로 나눈 뒤, 조각마다 워크스페이스 기본 AI로 질문·답을 `qa_pairs_per_chunk`쌍(1~10, 기본 3) 만든다. 비용을 막으려고 문서당 앞 40조각까지만 쓴다(미리 보기는 3조각). AI 연결이 없으면 문서가 `failed`가 되고, 두 줄 오류가 남는다.
+- `pipeline`: 문서 처리 순서. 아래 순서는 바꿀 수 없다.
+  - 순서: `extract` → `clean` → `split` → `metadata` → `store`
+  - `extract`·`split`·`store`는 항상 켜져 있다.
+  - `clean`: `collapse_spaces`, `mask_urls`(→`[주소]`), `mask_emails`(→`[이메일]`), `remove_repeated_lines`, `remove_patterns`
+    - `remove_repeated_lines`: 80자 이하이면서 3번 이상 나오는 줄을 지운다(머리글·바닥글).
+    - `remove_patterns`: 정규식, 최대 10개.
+  - `metadata`: `fixed`(꼬리표 묶음), `filename_pattern`(이름 붙은 묶음 정규식). 처리할 때 문서 꼬리표에 더한다.
+  - 정규식이 잘못되면 422를 돌려준다.
+
+### `POST /knowledge-bases/{kb_id}/qa/columns` (multipart `file`: CSV·XLSX, 최대 5MB)
+→ `{columns, question_column, answer_column, sample: [[...]], row_count}`. 질문·답 열은 이름(질문/question/Q, 답/답변/answer/A)으로 추측한다.
+
+### `POST /knowledge-bases/{kb_id}/documents/qa` (multipart `file`, `question_column?`, `answer_column?`)
+- 질문·답 표를 가져온다. 결과는 문서 하나이고 `source`가 `qa_table`이다.
+- 질문과 답이 모두 채워진 줄 하나가 조각 하나가 된다.
+  - 임베딩과 키워드 검색은 질문만 쓴다.
+  - 돌려주는 글(`content`)은 `"질문: …\n답: …"`이다.
+- 고른 열 이름은 문서 꼬리표 `qa_question_column`·`qa_answer_column`에 남는다(다시 나누기용).
+- 검색 결과(`POST /knowledge-bases/{kb_id}/search`, 지식 검색 단계의 `results`)에서 이런 조각은 `question`·`answer`가 더 붙는다. `context`는 그대로 쓴다.
+
+### `POST /knowledge-bases/{kb_id}/preview` (multipart: `file` 또는 `document_id`, `settings?`: JSON 글)
+- 지금 설정에 `settings`를 더해 처리 순서를 돌려 본다.
+- 문서·조각·설정 중 아무것도 저장하지 않는다. 임베딩도 하지 않는다.
+- 응답: `{total, chunks: [{index, content, parent_content, question?, answer?, char_count}] (앞 50개), metadata, log: [문장], text_preview, chunk_mode}`
+
+### `POST /knowledge-bases/{kb_id}/reprocess`
+지식베이스의 모든 문서를 지금 설정으로 다시 나눈다(워커). 응답은 `{queued}`이다.

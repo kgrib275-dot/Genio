@@ -92,7 +92,7 @@ export function KbSettingsDialog({
         </Field>
         <fieldset className="space-y-3">
           <legend className="mb-2 text-sm font-semibold text-slate-800">조각 나누기</legend>
-          <div className="grid gap-2 sm:grid-cols-2">
+          <div className="grid gap-2 sm:grid-cols-3">
             {(
               [
                 ["general", "일반", "정한 길이로 잘라요."],
@@ -100,6 +100,11 @@ export function KbSettingsDialog({
                   "parent_child",
                   "부모-자식",
                   "작은 조각으로 찾고, 그 조각이 든 큰 문단을 돌려줘요.",
+                ],
+                [
+                  "qa",
+                  "질문·답",
+                  "AI가 문서로 질문·답을 만들어 질문으로 찾아요(AI 키 필요). 표는 '질문·답 표'로 가져와요.",
                 ],
               ] as const
             ).map(([v, label, desc]) => (
@@ -151,6 +156,18 @@ export function KbSettingsDialog({
                 onChange={(e) => setS({ ...s, chunk_overlap: num(e.target.value, 0, 1000, 0) })}
               />
             </Field>
+            {s.chunk_mode === "qa" && (
+              <Field label="조각마다 질문·답" htmlFor="kb-qa-n" hint="1~10쌍">
+                <Input
+                  id="kb-qa-n"
+                  type="number"
+                  value={s.qa_pairs_per_chunk}
+                  onChange={(e) =>
+                    setS({ ...s, qa_pairs_per_chunk: num(e.target.value, 1, 10, 3) })
+                  }
+                />
+              </Field>
+            )}
             {s.chunk_mode === "parent_child" && (
               <Field label="자식 크기" htmlFor="kb-child">
                 <Input

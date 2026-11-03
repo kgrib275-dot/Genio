@@ -200,6 +200,9 @@ KB_DEFAULTS: dict[str, Any] = {
     "chunk_size": 800,
     "chunk_overlap": 100,
     "child_chunk_size": 200,
+    # v0.6: 질문·답 형식에서 AI가 조각마다 만들 쌍 수, 문서 처리 순서(kb_pipeline)
+    "qa_pairs_per_chunk": 3,
+    "pipeline": None,
     "retrieval": {
         "method": "vector",
         "top_k": 4,
@@ -219,18 +222,36 @@ def kb_settings(kb: KnowledgeBase) -> dict[str, Any]:
             out["retrieval"].update({kk: vv for kk, vv in v.items() if kk in out["retrieval"]})
         elif k in out:
             out[k] = v
+    from api.services.kb_pipeline import PipelineError, default_pipeline, normalize_pipeline
+
+    try:
+        out["pipeline"] = normalize_pipeline(out["pipeline"])
+    except PipelineError:
+        out["pipeline"] = default_pipeline()
     return out
 
 
 def patch_kb_settings(kb: KnowledgeBase, patch: dict[str, Any]) -> dict[str, Any]:
+    cur = merged_settings(kb, patch)
+    kb.chunk_size = cur["chunk_size"]
+    kb.settings = cur
+    return cur
+
+
+def merged_settings(kb: KnowledgeBase, patch: dict[str, Any]) -> dict[str, Any]:
+    """저장하지 않고 patch를 더한 설정(미리 보기에도 쓴다). 잘못된 정규식은 PipelineError."""
     cur = kb_settings(kb)
     for k, v in patch.items():
         if k == "retrieval" and isinstance(v, dict):
             cur["retrieval"].update({kk: vv for kk, vv in v.items() if kk in cur["retrieval"]})
         elif k in cur:
             cur[k] = v
-    if cur["chunk_mode"] not in ("general", "parent_child"):
+    if cur["chunk_mode"] not in ("general", "parent_child", "qa"):
         cur["chunk_mode"] = "general"
+    from api.services.kb_pipeline import normalize_pipeline
+
+    cur["pipeline"] = normalize_pipeline(cur["pipeline"])  # 잘못된 정규식은 PipelineError
+    cur["qa_pairs_per_chunk"] = max(1, min(int(cur["qa_pairs_per_chunk"] or 3), 10))
     cur["chunk_size"] = max(200, min(int(cur["chunk_size"]), 4000))
     cur["chunk_overlap"] = max(0, min(int(cur["chunk_overlap"]), cur["chunk_size"] // 2))
     cur["child_chunk_size"] = max(50, min(int(cur["child_chunk_size"]), cur["chunk_size"]))
@@ -241,8 +262,6 @@ def patch_kb_settings(kb: KnowledgeBase, patch: dict[str, Any]) -> dict[str, Any
     r["score_threshold"] = max(0.0, min(float(r["score_threshold"]), 1.0))
     r["vector_weight"] = max(0.0, min(float(r["vector_weight"]), 1.0))
     r["rerank"] = bool(r["rerank"])
-    kb.chunk_size = cur["chunk_size"]
-    kb.settings = cur
     return cur
 
 
@@ -270,6 +289,9 @@ def _pieces(text: str, cfg: dict[str, Any]) -> list[tuple[str, str | None]]:
 
 
 def process_document(db: Session, document_id: str) -> None:
+    """문서 처리 순서(v0.6 kb_pipeline)대로 꺼내기 → 정리 → 나누기 → 꼬리표 → 임베딩·저장."""
+    from api.services.kb_pipeline import PipelineError, run_pipeline
+
     doc = db.get(Document, document_id)
     if doc is None:
         return
@@ -280,27 +302,41 @@ def process_document(db: Session, document_id: str) -> None:
     doc.error = None
     db.commit()
     try:
-        content = extract_text(doc.content or b"", doc.filename, doc.mime)
-        pieces = _pieces(content, kb_settings(kb))
+        result = run_pipeline(
+            db,
+            kb.workspace_id,
+            kb_settings(kb),
+            filename=doc.filename,
+            mime=doc.mime,
+            content=doc.content or b"",
+            source=doc.source,
+            doc_metadata=doc.doc_metadata,
+        )
+        pieces = result.pieces
         if not pieces:
             raise ValueError(
                 "문서에서 글자를 찾지 못했어요. 스캔 이미지 PDF는 아직 지원하지 않아요."
             )
-        vectors = _embed(db, kb.workspace_id, [p[0] for p in pieces], kb.embedding_model)
+        vectors = _embed(db, kb.workspace_id, [p.content for p in pieces], kb.embedding_model)
         db.execute(delete(Chunk).where(Chunk.document_id == doc.id))
-        for i, ((piece, parent), vec) in enumerate(zip(pieces, vectors, strict=True)):
+        for i, (piece, vec) in enumerate(zip(pieces, vectors, strict=True)):
+            meta: dict[str, Any] = {"index": i, "filename": doc.filename}
+            if piece.question is not None:
+                meta.update({"qa": True, "question": piece.question, "answer": piece.answer})
             db.add(
                 Chunk(
                     document_id=doc.id,
                     kb_id=kb.id,
-                    content=piece,
-                    parent_content=parent,
+                    content=piece.content,
+                    parent_content=piece.parent,
                     embedding=vec,
                     position=i,
                     enabled=True,
-                    metadata_={"index": i, "filename": doc.filename},
+                    metadata_=meta,
                 )
             )
+        if result.metadata:
+            doc.doc_metadata = {**(doc.doc_metadata or {}), **result.metadata}
         doc.status = "ready"
         db.commit()
     except LlmError as exc:
@@ -308,7 +344,7 @@ def process_document(db: Session, document_id: str) -> None:
         doc.status = "failed"
         doc.error = f"{exc.message} {exc.hint}"
         db.commit()
-    except ValueError as exc:
+    except (ValueError, PipelineError) as exc:
         db.rollback()
         doc.status = "failed"
         doc.error = str(exc)
@@ -505,6 +541,11 @@ def search(
                 "matched": c.content,
                 "score": round(score, 4),
                 "metadata": (d.doc_metadata if d else {}) or {},
+                **(
+                    {"question": c.metadata_.get("question"), "answer": c.metadata_.get("answer")}
+                    if (c.metadata_ or {}).get("qa")
+                    else {}
+                ),
             }
         )
     return out
