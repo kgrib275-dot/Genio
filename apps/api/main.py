@@ -27,11 +27,13 @@ from api.routers import (
     hooks,
     knowledge,
     market,
+    mcp,
     projects,
     runs,
     samples,
     service,
     tasks,
+    tracing,
     triggers,
     workspaces,
 )
@@ -127,7 +129,9 @@ for r in (
     projects,
     samples,
     service,
+    mcp,
     tasks,
+    tracing,
     triggers,
 ):
     app.include_router(r.router, prefix="/api/v1")

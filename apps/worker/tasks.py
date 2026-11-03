@@ -4,6 +4,7 @@ from api.db import SessionLocal
 from api.engine.executor import execute_run
 from api.services.knowledge import process_document
 from api.services.limits import apply_retention, check_alerts
+from api.services.tracing import send_run
 from api.services.triggers import dispatch_schedules
 from worker.celery_app import celery
 
@@ -38,3 +39,10 @@ def apply_retention_task() -> dict[str, int]:
     """보관 기간이 지난 실행 기록·대화를 지운다."""
     with SessionLocal() as db:
         return apply_retention(db)
+
+
+@celery.task(name="genio.send_trace")  # type: ignore[untyped-decorator]
+def send_trace_task(run_id: str) -> dict[str, str | None]:
+    """v0.6 외부 추적: 끝난 실행을 Langfuse·LangSmith로 보낸다(실패해도 실행과 무관)."""
+    with SessionLocal() as db:
+        return send_run(db, run_id)

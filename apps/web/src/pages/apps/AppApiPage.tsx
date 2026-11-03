@@ -20,6 +20,7 @@ import {
 import { copyText, formatDate } from "@/lib/cn";
 import { useListControls } from "@/lib/useListControls";
 import { AppNav } from "@/pages/apps/AppNav";
+import { McpSection } from "@/pages/apps/McpSection";
 
 function CodeBlock({ code }: { code: string }) {
   return (
@@ -178,6 +179,8 @@ export default function AppApiPage() {
             {(keys.data?.length ?? 0) > 0 && <ListPager c={kc} />}
           </CardBody>
         </Card>
+
+        <McpSection appId={appId} />
 
         <Card>
           <CardHeader

@@ -125,12 +125,13 @@ export interface TemplatePreview {
   requires: string[];
 }
 
-export type KeyScope = "chat" | "run" | "logs";
+export type KeyScope = "chat" | "run" | "logs" | "mcp";
 
 export const KEY_SCOPE_LABELS: Record<KeyScope, string> = {
   chat: "대화",
   run: "흐름 실행",
   logs: "기록 읽기",
+  mcp: "MCP 도구",
 };
 
 // ---------------- 연결 정보 ----------------

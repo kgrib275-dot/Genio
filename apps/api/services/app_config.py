@@ -1,6 +1,7 @@
 """앱 기능(App Toolkit) 기본값과 앱 환경 값(비밀 암호화·마스킹)."""
 
 import copy
+import re
 from typing import Any
 
 from api.core.crypto import decrypt_str, encrypt_str, mask
@@ -28,6 +29,8 @@ DEFAULT_FEATURES: dict[str, Any] = {
         "keywords": ["상담원", "사람이랑", "직원 연결"],
         "message": "상담원을 연결해 드릴게요. 잠시만 기다려 주세요. 이어서 적으신 말도 상담원에게 전달돼요.",
     },
+    # v0.6: MCP 서버로 게시(ADR 0010). tool_name은 영문·숫자·_-만(비우면 앱 이름에서 만든다)
+    "mcp": {"enabled": False, "tool_name": "", "description": ""},
 }
 
 
@@ -69,6 +72,10 @@ def patch_features(saved: dict[str, Any] | None, patch: dict[str, Any]) -> dict[
     current["handoff"]["message"] = str(current["handoff"]["message"] or "")[:300]
     target = current["on_failure"].get("app_id")
     current["on_failure"]["app_id"] = (str(target).strip()[:36] or None) if target else None
+    mcp_name = re.sub(r"[^A-Za-z0-9_-]+", "_", str(current["mcp"]["tool_name"] or "")).strip("_")
+    current["mcp"]["tool_name"] = mcp_name[:64]
+    current["mcp"]["enabled"] = bool(current["mcp"]["enabled"])
+    current["mcp"]["description"] = str(current["mcp"]["description"] or "")[:1000]
     thr = float(current["annotation_reply"]["score_threshold"] or 0.85)
     current["annotation_reply"]["score_threshold"] = max(0.5, min(thr, 1.0))
     return current

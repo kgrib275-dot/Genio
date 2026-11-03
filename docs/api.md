@@ -441,3 +441,33 @@ Project = {id, workspace_id, name, description, color: indigo|sky|emerald|amber|
 - 작업본 저장 `PUT /apps/{id}/draft`에 `source`(canvas|builder|import, 기본 canvas) — 빌더 지표용.
 - 실행 상세에 `story[]`(실행 이야기)와 단계별 `summary`(한 문장). 빌더 툴 `get_run`.
 - Run.trigger 값 추가: `form`(공유 입력 폼).
+
+## v0.6 MCP 게시·외부 추적 (ADR 0010)
+
+### MCP 서버로 게시
+| 메서드 | 경로 | 인증 | 설명 |
+|---|---|---|---|
+| POST | `/service/mcp` | 앱 API 키(`Bearer gk-...`), 권한 `mcp` | MCP Streamable HTTP. JSON-RPC 2.0 메시지(또는 일괄 배열)를 받아 JSON으로 답한다. 알림만 오면 202 |
+| GET·DELETE | `/service/mcp` | - | 405(서버가 먼저 보내는 SSE 스트림·세션 없음) |
+
+- 앱 기능 `features.mcp = {enabled, tool_name, description}`. 꺼져 있으면 403. `tool_name`은 영문·숫자·`_-`만(비우면 앱 이름에서, 없으면 `app_<id 앞 8자리>`).
+- 지원 메서드: `initialize`, `notifications/*`(받기만), `ping`, `tools/list`(도구 1개), `tools/call`, `resources/list`·`prompts/list`(빈 목록). 그 밖은 -32601.
+- 프로토콜 버전: `2025-11-25`, `2025-06-18`, `2025-03-26`, `2024-11-05`. 요청한 버전이 목록에 있으면 그대로, 아니면 `2025-11-25`. `MCP-Protocol-Version` 헤더가 목록 밖이면 400.
+- 도구 `inputSchema`: 입력 단계 항목(number→number, boolean→boolean, 나머지 string). 챗 앱은 `query`(필수)가 더해진다.
+- `tools/call`: 저장한 최신 버전을 `trigger="mcp"`로 실행하고 최대 60초 기다린다. 성공하면 `content[0].text` + `structuredContent{text, outputs, run_id}`. 실패·승인 대기·필수값 빠짐·시간 초과는 `isError: true`와 두 줄 안내. 모르는 도구는 -32602.
+- 속도 제한: 키·IP별 분당 60회(서비스 API 공통) + 키별 분당 120회.
+- 앱 API 키 `scopes`에 `mcp`(MCP 도구)를 더했다(최대 4개).
+
+### 외부 추적(Langfuse·LangSmith)
+| 메서드 | 경로 | 권한 | 설명 |
+|---|---|---|---|
+| GET | `/workspaces/{ws}/tracing` | owner, admin | `{langfuse{enabled, host, public_key, secret_key(****abcd), has_secret}, langsmith{enabled, endpoint, project, api_key(****abcd), has_key}}` |
+| PUT | `/workspaces/{ws}/tracing` | owner, admin | 같은 모양으로 저장. 비밀 칸이 비었거나 `****`로 시작하면 저장된 값 유지, `clear_secret`·`clear_key`로 지움. 주소가 http(s)가 아니면 422 |
+| POST | `/workspaces/{ws}/tracing/test` | owner, admin | `{target: langfuse|langsmith}` → 시험 기록 하나를 보내 `{ok, message}` |
+
+- 저장 위치: `workspaces.settings.tracing`(비밀값은 Fernet 암호문). `GET /workspaces/{ws}` 응답에서는 이 키를 뺀다.
+- 실행이 끝나면(성공·실패) 켠 곳에 보낸다. 워커 태스크 `genio.send_trace`(테스트는 바로). 실패는 로그만 남기고 실행에는 영향 없음.
+- Langfuse: `POST {host}/api/public/ingestion`, Basic 인증(공개 키:비밀 키), `batch`에 `trace-create`(실행) + 단계마다 `span-create`, AI 단계는 `generation-create`(model, usage{input, output, total}, costDetails.total).
+- LangSmith: `POST {endpoint}/runs/batch`, 헤더 `x-api-key`, `post`에 루트 실행(chain) + 단계 자식(AI는 llm, http·connector는 tool). `dotted_order`·`trace_id`·`parent_run_id`, AI 단계 `outputs.usage_metadata`.
+- 단계별 AI 사용량은 `run.context.usage[node_id] = {input_tokens, output_tokens, model}`에 남긴다.
+- 외부 호출은 safe_http를 거친다(사설 IP 차단, `GENIO_ALLOW_PRIVATE_NETWORK=true`면 사내 Langfuse 허용). 값 하나는 4,000자까지 잘라 보낸다.
