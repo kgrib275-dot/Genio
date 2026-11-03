@@ -16,6 +16,7 @@ import { Link, Navigate, useSearchParams } from "react-router-dom";
 import { PageContainer } from "@/app/Layout";
 import { StatTile } from "@/components/charts";
 import { ErrorBox, Loading } from "@/components/ErrorBox";
+import { ListPager, ListToolbar, NoMatch } from "@/components/ListControls";
 import { ProjectDot } from "@/components/projects/ProjectDialog";
 import { Card, PageHeader } from "@/components/ui/card";
 import { Tabs } from "@/components/ui/tabs";
@@ -23,6 +24,7 @@ import { HelpButton } from "@/help/HelpButton";
 import type { Project, ProjectStats } from "@/lib/api/types";
 import { useProjectsOverview } from "@/lib/api/v3";
 import { cn, formatCost, timeAgo } from "@/lib/cn";
+import { useListControls } from "@/lib/useListControls";
 import { canViewRuns, useSession } from "@/store/session";
 
 type Days = "7" | "30" | "90";
@@ -227,6 +229,44 @@ export default function ProjectsBoardPage() {
     return list;
   }, [ov.data, sort]);
 
+  const c = useListControls(rows, {
+    key: "projects-board",
+    defaultSize: 20,
+    search: (r) =>
+      `${r.project.name} ${r.project.description} ${r.project.created_by_name} ${r.project.members
+        .map((m) => m.name)
+        .join(" ")}`,
+    filters: [
+      {
+        id: "visibility",
+        label: "공개 범위",
+        options: [
+          { value: "workspace", label: "워크스페이스 전체" },
+          { value: "private", label: "비공개" },
+        ],
+        match: (r, v) => r.project.visibility === v,
+      },
+      {
+        id: "health",
+        label: "상태",
+        options: [
+          { value: "active", label: "실행 있음" },
+          { value: "idle", label: "실행 없음" },
+          { value: "failing", label: "실패 많음" },
+          { value: "waiting", label: "승인 대기 있음" },
+        ],
+        match: (r, v) =>
+          v === "active"
+            ? r.runs > 0
+            : v === "idle"
+              ? r.runs === 0
+              : v === "failing"
+                ? r.failed > 0 && r.failed / Math.max(1, r.runs) >= 0.2
+                : r.waiting_approval > 0,
+      },
+    ],
+  });
+
   if (role && !allowed) return <Navigate to="/" replace />;
 
   const setDays = (v: Days) => {
@@ -309,6 +349,10 @@ export default function ProjectsBoardPage() {
             />
           </div>
 
+          {rows.length > 0 && (
+            <ListToolbar c={c} placeholder="프로젝트 이름·설명·구성원으로 찾기" />
+          )}
+          <NoMatch c={c} />
           {rows.length === 0 && !showUnassigned ? (
             <Card className="flex flex-col items-center gap-2 p-10 text-center">
               <FolderOpen className="h-8 w-8 text-slate-300" />
@@ -319,12 +363,16 @@ export default function ProjectsBoardPage() {
             </Card>
           ) : (
             <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-              {rows.map((r) => (
+              {c.pageItems.map((r) => (
                 <ProjectCard key={r.project.id} project={r.project} stats={r} days={d.days} />
               ))}
-              {showUnassigned && u && <ProjectCard project={null} stats={u} days={d.days} />}
+              {/* '프로젝트 없음' 카드는 검색·필터 없이 볼 때 마지막 페이지에만 */}
+              {showUnassigned && u && !c.active && c.page === c.pages && (
+                <ProjectCard project={null} stats={u} days={d.days} />
+              )}
             </div>
           )}
+          {rows.length > 0 && <ListPager c={c} />}
           <p className="text-xs text-slate-400">
             실행·대화·비용은 최근 {d.days}일 기준이에요. 비공개 프로젝트는 볼 수 있는 사람에게만
             보여요.

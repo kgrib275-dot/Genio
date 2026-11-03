@@ -325,6 +325,7 @@ def list_runs(
     status: str | None = None,
     from_: Annotated[str | None, Query(alias="from")] = None,
     to: str | None = None,
+    limit: int = Query(default=200, ge=1, le=1000),
 ) -> list[dict[str, Any]]:
     q = select(Run, App.name).join(App, App.id == Run.app_id).where(App.workspace_id == ws)
     hidden = hidden_project_ids(ctx.db, ws, ctx.user.id, ctx.role)
@@ -339,7 +340,7 @@ def list_runs(
         q = q.where(Run.created_at >= start)
     if end:
         q = q.where(Run.created_at <= end)
-    rows = ctx.db.execute(q.order_by(Run.created_at.desc()).limit(200)).all()
+    rows = ctx.db.execute(q.order_by(Run.created_at.desc()).limit(limit)).all()
     return [{**run_dict(r), "app_name": name} for r, name in rows]
 
 
@@ -396,13 +397,15 @@ def usage(
 
 
 @router.get("/workspaces/{ws}/audit-logs")
-def audit_logs(ws: str, ctx: Managers) -> list[dict[str, Any]]:
+def audit_logs(
+    ws: str, ctx: Managers, limit: int = Query(default=200, ge=1, le=1000)
+) -> list[dict[str, Any]]:
     rows = ctx.db.execute(
         select(AuditLog, User.email)
         .outerjoin(User, User.id == AuditLog.user_id)
         .where(AuditLog.workspace_id == ws)
         .order_by(AuditLog.created_at.desc())
-        .limit(200)
+        .limit(limit)
     ).all()
     return [
         {

@@ -1,3 +1,4 @@
+import { DataView } from "@/components/DataView";
 import {
   AlertTriangle,
   Check,
@@ -37,11 +38,7 @@ export function ToolCallCard({ call }: { call: ToolCallRecord }) {
         <span className="font-medium text-slate-700">{TOOL_LABEL[call.name] ?? call.name}</span>
         {call.summary && <span className="truncate text-slate-500">{call.summary}</span>}
       </button>
-      {open && (
-        <pre className="mx-2 mb-1 max-h-40 overflow-auto whitespace-pre-wrap break-all rounded bg-slate-900 px-2 py-1.5 font-mono text-[11px] text-slate-100">
-          {JSON.stringify(call.input ?? {}, null, 2)}
-        </pre>
-      )}
+      {open && <DataView value={call.input ?? {}} className="mx-2 mb-1 max-h-40" />}
     </div>
   );
 }

@@ -3,6 +3,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { JsonView } from "@/components/canvas/RunPanel";
 import { ErrorBox, Loading } from "@/components/ErrorBox";
+import { ListPager, ListToolbar, NoMatch } from "@/components/ListControls";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
@@ -29,6 +30,7 @@ import {
 } from "@/lib/api/types";
 import { exportApp, useDuplicateApp, useRestoreVersion } from "@/lib/api/v2";
 import { copyText, downloadJson, formatDate } from "@/lib/cn";
+import { useListControls } from "@/lib/useListControls";
 import { useProjects } from "@/lib/api/v3";
 import { canEdit, useSession } from "@/store/session";
 import { AppNav } from "@/pages/apps/AppNav";
@@ -69,6 +71,32 @@ function CopyRow({ label, value }: { label: string; value: string }) {
 
 function DeploymentsCard({ appId, editable }: { appId: string; editable: boolean }) {
   const deployments = useDeployments(appId);
+  const dc = useListControls(deployments.data, {
+    key: "app-deployments",
+    defaultSize: 10,
+    search: (d) =>
+      [CHANNEL_LABEL[d.channel], `버전 ${d.version}`, d.share_url ?? "", d.api_url ?? ""].join(" "),
+    filters: [
+      {
+        id: "channel",
+        label: "방식",
+        options: (Object.keys(CHANNEL_LABEL) as Channel[]).map((c) => ({
+          value: c,
+          label: CHANNEL_LABEL[c],
+        })),
+        match: (d, v) => d.channel === v,
+      },
+      {
+        id: "access",
+        label: "공개 범위",
+        options: (Object.keys(ACCESS_LABEL) as Access[]).map((a) => ({
+          value: a,
+          label: ACCESS_LABEL[a],
+        })),
+        match: (d, v) => d.access === v,
+      },
+    ],
+  });
   const versions = useVersions(appId);
   const create = useCreateDeployment(appId);
   const remove = useDeleteDeployment(appId);
@@ -165,7 +193,11 @@ function DeploymentsCard({ appId, editable }: { appId: string; editable: boolean
             아직 배포가 없어요. 먼저 &apos;버전 저장&apos;을 한 뒤 배포하세요.
           </p>
         )}
-        {(deployments.data ?? []).map((d) => (
+        {(deployments.data?.length ?? 0) > 0 && (
+          <ListToolbar c={dc} placeholder="링크·주소로 찾기" />
+        )}
+        <NoMatch c={dc} />
+        {dc.pageItems.map((d) => (
           <div key={d.id} className="rounded-md border border-slate-200 p-3">
             <div className="flex flex-wrap items-center gap-2">
               <Badge tone="indigo">{CHANNEL_LABEL[d.channel]}</Badge>
@@ -200,6 +232,7 @@ function DeploymentsCard({ appId, editable }: { appId: string; editable: boolean
             {d.channel === "api" && <CopyRow label="API 주소(POST, SSE)" value={d.api_url} />}
           </div>
         ))}
+        {(deployments.data?.length ?? 0) > 0 && <ListPager c={dc} />}
       </CardBody>
     </Card>
   );
@@ -209,6 +242,11 @@ function VersionsCard({ appId, editable }: { appId: string; editable: boolean })
   const versions = useVersions(appId);
   const restore = useRestoreVersion(appId);
   const [shown, setShown] = useState<VersionDetail | null>(null);
+  const vc = useListControls(versions.data, {
+    key: "app-versions",
+    defaultSize: 10,
+    search: (v) => `버전 ${v.version} ${v.note ?? ""}`,
+  });
   return (
     <Card>
       <CardHeader
@@ -220,8 +258,12 @@ function VersionsCard({ appId, editable }: { appId: string; editable: boolean })
         {versions.data?.length === 0 && (
           <p className="px-5 py-4 text-sm text-slate-500">아직 저장한 버전이 없어요.</p>
         )}
-        <ul className="divide-y divide-slate-100">
-          {(versions.data ?? []).map((v) => (
+        {(versions.data?.length ?? 0) > 0 && (
+          <ListToolbar c={vc} placeholder="버전 번호·메모로 찾기" className="px-4 pb-3 sm:px-5" />
+        )}
+        <NoMatch c={vc} />
+        <ul className="divide-y divide-slate-100 border-t border-slate-100 empty:hidden">
+          {vc.pageItems.map((v) => (
             <li
               key={v.id}
               className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2.5 text-sm sm:px-5"
@@ -267,6 +309,9 @@ function VersionsCard({ appId, editable }: { appId: string; editable: boolean })
             </li>
           ))}
         </ul>
+        {(versions.data?.length ?? 0) > 0 && (
+          <ListPager c={vc} className="border-t border-slate-100 px-4 py-2 sm:px-5" />
+        )}
         {shown && (
           <div className="border-t border-slate-100 px-5 py-3">
             <div className="mb-1 flex items-center justify-between">

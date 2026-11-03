@@ -105,7 +105,7 @@ function qs(params: Record<string, string | undefined>): string {
 export function useWorkspaceRuns(ws: string, filter: RunFilter = {}, enabled = true) {
   return useQuery({
     queryKey: ["ws-runs", ws, filter],
-    queryFn: () => api.get<Run[]>(`/workspaces/${ws}/runs${qs({ ...filter })}`),
+    queryFn: () => api.get<Run[]>(`/workspaces/${ws}/runs${qs({ limit: "1000", ...filter })}`),
     enabled: Boolean(ws) && enabled,
   });
 }
@@ -121,7 +121,7 @@ export function useUsage(ws: string, range: { from?: string; to?: string } = {})
 export function useAuditLogs(ws: string, enabled = true) {
   return useQuery({
     queryKey: ["audit-logs", ws],
-    queryFn: () => api.get<AuditLog[]>(`/workspaces/${ws}/audit-logs`),
+    queryFn: () => api.get<AuditLog[]>(`/workspaces/${ws}/audit-logs?limit=1000`),
     enabled: Boolean(ws) && enabled,
   });
 }

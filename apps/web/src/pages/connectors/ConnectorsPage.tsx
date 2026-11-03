@@ -3,6 +3,7 @@ import { useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { PageContainer } from "@/app/Layout";
 import { ErrorBox, Loading } from "@/components/ErrorBox";
+import { ListPager, ListToolbar, NoMatch } from "@/components/ListControls";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody, CardHeader, Empty, PageHeader } from "@/components/ui/card";
@@ -16,6 +17,7 @@ import {
   useDeleteCredential,
 } from "@/lib/api/resources";
 import { formatDate } from "@/lib/cn";
+import { optionsFrom, useListControls } from "@/lib/useListControls";
 import { canEdit, canManage, useSession } from "@/store/session";
 
 function NewCredentialForm({ ws }: { ws: string }) {
@@ -105,6 +107,18 @@ export default function ConnectorsPage() {
   const creds = useCredentials(ws, canEdit(role));
   const del = useDeleteCredential(ws);
   const manage = canManage(role);
+  const cc = useListControls(creds.data, {
+    key: "credentials",
+    search: (c) => `${c.name} ${c.connector_name}`,
+    filters: [
+      {
+        id: "connector",
+        label: "서비스",
+        options: optionsFrom(creds.data, (c) => c.connector_name),
+        match: (c, v) => c.connector_name === v,
+      },
+    ],
+  });
 
   if (!canEdit(role)) {
     return (
@@ -131,8 +145,16 @@ export default function ConnectorsPage() {
             {creds.data?.length === 0 && (
               <p className="px-5 py-6 text-sm text-slate-500">아직 등록된 연결 정보가 없어요.</p>
             )}
+            {(creds.data ?? []).length > 0 && (
+              <ListToolbar
+                c={cc}
+                placeholder="이름·서비스로 찾기"
+                className="border-b border-slate-100 px-5 pb-3"
+              />
+            )}
+            <NoMatch c={cc} />
             <ul className="divide-y divide-slate-100">
-              {(creds.data ?? []).map((c) => (
+              {cc.pageItems.map((c) => (
                 <li key={c.id} className="flex flex-wrap items-center gap-3 px-5 py-3 text-sm">
                   <Badge tone="blue">{c.connector_name}</Badge>
                   <span className="font-medium">{c.name}</span>
@@ -163,6 +185,9 @@ export default function ConnectorsPage() {
                 </li>
               ))}
             </ul>
+            {(creds.data ?? []).length > 0 && (
+              <ListPager c={cc} className="border-t border-slate-100 px-5 py-2.5" />
+            )}
           </CardBody>
         </Card>
         <Card>

@@ -119,7 +119,8 @@ export function startRun(
 export function useAppRuns(appId: string) {
   return useQuery({
     queryKey: ["app-runs", appId],
-    queryFn: () => api.get<Run[]>(`/apps/${appId}/runs`),
+    // 목록 화면에서 검색·필터·페이지를 브라우저에서 하므로 넉넉히 받아 온다
+    queryFn: () => api.get<Run[]>(`/apps/${appId}/runs?limit=500`),
     enabled: Boolean(appId),
   });
 }

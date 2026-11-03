@@ -104,10 +104,15 @@ export function sendPublicFeedback(
 }
 
 // ---------------- 로그·주석·모니터링 ----------------
-export function useConversations(appId: string, page = 1) {
+/** 대화 목록(서버에서 페이지·검색). q는 메시지 내용 검색. */
+export function useConversations(appId: string, page = 1, size = 30, q = "") {
   return useQuery({
-    queryKey: ["conversations", appId, page],
-    queryFn: () => api.get<ConversationSummary[]>(`/apps/${appId}/conversations?page=${page}`),
+    queryKey: ["conversations", appId, page, size, q],
+    queryFn: () =>
+      api.get<ConversationSummary[]>(
+        `/apps/${appId}/conversations?page=${page}&size=${size}${q ? `&q=${encodeURIComponent(q)}` : ""}`,
+      ),
+    placeholderData: (prev) => prev,
     enabled: Boolean(appId),
   });
 }

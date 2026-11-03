@@ -17,6 +17,7 @@ import { PageContainer } from "@/app/Layout";
 import { AppIcon, Avatar } from "@/components/AppIcon";
 import { ProjectDialog, ProjectDot } from "@/components/projects/ProjectDialog";
 import { ErrorBox, Loading } from "@/components/ErrorBox";
+import { ListPager, ListToolbar, NoMatch } from "@/components/ListControls";
 import { Badge, StatusBadge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, Empty } from "@/components/ui/card";
@@ -34,6 +35,7 @@ import { HelpButton } from "@/help/HelpButton";
 import { toast } from "@/components/ui/toast-store";
 import { useWorkspaceRuns } from "@/lib/api/workspace";
 import { cn, timeAgo } from "@/lib/cn";
+import { useListControls } from "@/lib/useListControls";
 import { canEdit, canViewRuns, useSession } from "@/store/session";
 import { setPendingPrompt } from "@/store/pendingPrompt";
 
@@ -551,6 +553,31 @@ export default function DashboardPage() {
   const editable = canEdit(role);
   const appList = apps.data ?? [];
   const byId = new Map(projectList.map((p) => [p.id, p]));
+  const c = useListControls(apps.data, {
+    key: "dashboard-apps",
+    defaultSize: 20,
+    search: (a) => `${a.name} ${a.description}`,
+    filters: [
+      {
+        id: "type",
+        label: "종류",
+        options: (Object.keys(ko.appTypes) as AppType[]).map((t) => ({
+          value: t,
+          label: ko.appTypes[t],
+        })),
+        match: (a, v) => a.type === v,
+      },
+      {
+        id: "status",
+        label: "상태",
+        options: [
+          { value: "published", label: "배포됨" },
+          { value: "draft", label: "만드는 중" },
+        ],
+        match: (a, v) => a.status === v,
+      },
+    ],
+  });
   const setFilter = (v: string) => {
     const next = new URLSearchParams(params);
     if (v) next.set("project", v);
@@ -603,8 +630,12 @@ export default function DashboardPage() {
                 : "아직 사용할 수 있는 앱이 없어요. 관리자가 앱을 배포하면 여기에 보여요."}
           </Empty>
         )}
+        {appList.length > 0 && (
+          <ListToolbar c={c} placeholder="앱 이름·설명으로 찾기" className="mb-3" />
+        )}
+        <NoMatch c={c} />
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {appList.map((app) => {
+          {c.pageItems.map((app) => {
             const proj = !filter && app.project_id ? byId.get(app.project_id) : undefined;
             const body = (
               <Card className="group h-full p-4 transition-all hover:-translate-y-0.5 hover:border-indigo-200 hover:shadow-lift">
@@ -648,6 +679,7 @@ export default function DashboardPage() {
             );
           })}
         </div>
+        {appList.length > 0 && <ListPager c={c} className="mt-3" />}
       </section>
 
       {canViewRuns(role) && (runs.data ?? []).length > 0 && (

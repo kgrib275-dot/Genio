@@ -2,7 +2,7 @@
 
 from typing import Annotated, Any, Literal
 
-from fastapi import APIRouter, Depends, Response
+from fastapi import APIRouter, Depends, Query, Response
 from pydantic import BaseModel, Field, ValidationError
 from sqlalchemy import or_, select
 
@@ -269,8 +269,10 @@ def create_run(app_id: str, body: RunIn, ctx: AppBuilders) -> dict[str, Any]:
 
 
 @router.get("/apps/{app_id}/runs")
-def list_app_runs(app_id: str, ctx: AppViewers) -> list[dict[str, Any]]:
+def list_app_runs(
+    app_id: str, ctx: AppViewers, limit: int = Query(default=50, ge=1, le=1000)
+) -> list[dict[str, Any]]:
     rows = ctx.db.scalars(
-        select(Run).where(Run.app_id == app_id).order_by(Run.created_at.desc()).limit(50)
+        select(Run).where(Run.app_id == app_id).order_by(Run.created_at.desc()).limit(limit)
     )
     return [run_dict(r) for r in rows]

@@ -1,16 +1,13 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
+import { DataView } from "@/components/DataView";
 import { StatusBadge } from "@/components/ui/badge";
 import type { GraphNode, Run, RunStep } from "@/lib/api/types";
 import { formatCost } from "@/lib/cn";
 
+/** 실행 입력·출력 등 데이터를 읽기 쉬운 목록으로(원본 보기 가능) */
 export function JsonView({ value }: { value: unknown }) {
-  if (value === null || value === undefined) return <span className="text-slate-400">-</span>;
-  return (
-    <pre className="max-h-48 overflow-auto whitespace-pre-wrap break-all rounded bg-slate-50 p-2 text-[11px] text-slate-700">
-      {typeof value === "string" ? value : JSON.stringify(value, null, 2)}
-    </pre>
-  );
+  return <DataView value={value} />;
 }
 
 export function StepRow({ step, label }: { step: RunStep; label: string }) {

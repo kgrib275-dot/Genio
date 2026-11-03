@@ -71,7 +71,7 @@
 | POST | `/apps/{id}/versions` | owner, admin, builder | `{graph?, note?}` (graph 없으면 작업본) | 201 `Version` / 422 검증 실패(`errors`) |
 | POST | `/apps/{id}/validate` | owner, admin, builder | `{graph?}` | `{valid, errors: [{node_id, field, message}]}` |
 | POST | `/apps/{id}/runs` | owner, admin, builder | `{input: {...}, version?: number}` (version 없으면 작업본 실행) | 201 `Run` |
-| GET | `/apps/{id}/runs` | owner, admin, builder, operator | | `[Run]` 최근 50개 |
+| GET | `/apps/{id}/runs` | owner, admin, builder, operator | | `[Run]` 최근 `?limit=`개(기본 50, 최대 1000) |
 | GET | `/runs/{id}` | owner, admin, builder, operator | | `RunDetail` |
 | GET | `/runs/{id}/events` | owner, admin, builder, operator | | SSE |
 | POST | `/runs/{id}/approve` | 승인 노드의 approver_roles (비면 owner, admin, builder, operator) | `{approved: bool, comment?}` | `RunDetail` |
@@ -169,9 +169,9 @@ SSE `/builder/sessions/{id}/messages` 이벤트(순서대로 여러 번):
 ## 운영
 | 메서드 | 경로 | 권한 | 응답 |
 |---|---|---|---|
-| GET | `/workspaces/{ws}/runs?app=&status=&from=&to=` | owner, admin, builder, operator | `[Run + {app_name}]` 최근 200개 |
+| GET | `/workspaces/{ws}/runs?app=&status=&from=&to=&limit=` | owner, admin, builder, operator | `[Run + {app_name}]` 최근 limit개(기본 200, 최대 1000) |
 | GET | `/workspaces/{ws}/usage?from=&to=` | owner, admin, builder, operator | `{total_runs, total_input_tokens, total_output_tokens, total_cost, by_app: [{app_id, app_name, runs, input_tokens, output_tokens, cost}]}` |
-| GET | `/workspaces/{ws}/audit-logs` | owner, admin | `[{id, user_id, user_email, action, target_type, target_id, meta, created_at}]` 최근 200개 |
+| GET | `/workspaces/{ws}/audit-logs` | owner, admin | `[{id, user_id, user_email, action, target_type, target_id, meta, created_at}]` 최근 `?limit=`개(기본 200, 최대 1000) |
 
 ---
 
@@ -225,7 +225,7 @@ env_vars = [{key, value, secret: bool}]   # 응답에서 secret 값은 "****abcd
 | POST | `/public/apps/{token}/messages/{message_id}/feedback` | 접근 규칙 | `{rating: "like"|"dislike"|null, comment?}` | `{ok}` |
 
 ## 로그·주석·모니터링
-| GET | `/apps/{id}/conversations?page=` | VIEW_RUNS | | `[{id, user_name, external_session_id, message_count, likes, dislikes, created_at, last_message_at, first_question}]` |
+| GET | `/apps/{id}/conversations?page=&size=&q=` | VIEW_RUNS | | `[{id, user_name, external_session_id, message_count, likes, dislikes, created_at, last_message_at, first_question}]` — size 기본 30·최대 100, q는 메시지 내용 검색 |
 | GET | `/conversations/{id}/messages` | VIEW_RUNS | | `[{id, role, content, run_id, feedback, created_at, annotated, moderated}]` |
 | GET | `/apps/{id}/annotations` | owner, admin, builder | | `[{id, question, answer, hit_count, created_at}]` |
 | POST | `/apps/{id}/annotations` | owner, admin, builder | `{question, answer}` | `Annotation` |

@@ -151,6 +151,14 @@ def test_features_moderation_annotation_followup_feedback(
     # 로그
     convs = client.get(f"/api/v1/apps/{app_id}/conversations", headers=team.h("operator")).json()
     assert len(convs) == 3 and sum(c["likes"] for c in convs) == 1
+    # 메시지 내용 검색·페이지 크기
+    base = f"/api/v1/apps/{app_id}/conversations"
+    hit = client.get(f"{base}?q=연차", headers=team.h("operator")).json()
+    assert len(hit) == 1 and "연차" in hit[0]["first_question"]
+    assert client.get(f"{base}?q=없는말xyz", headers=team.h("operator")).json() == []
+    assert len(client.get(f"{base}?size=2", headers=team.h("operator")).json()) == 2
+    assert len(client.get(f"{base}?size=2&page=2", headers=team.h("operator")).json()) == 1
+    assert client.get(f"{base}?size=101", headers=team.h("operator")).status_code == 422
     msgs = client.get(
         f"/api/v1/conversations/{convs[0]['id']}/messages", headers=team.h("operator")
     ).json()

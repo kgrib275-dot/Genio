@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { JsonView, StepRow } from "@/components/canvas/RunPanel";
 import { ErrorBox, Loading } from "@/components/ErrorBox";
+import { ListPager, ListToolbar, NoMatch } from "@/components/ListControls";
 import { StatusBadge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
@@ -12,6 +13,8 @@ import { useApproveRun, useRun } from "@/lib/api/apps";
 import { streamRunEvents } from "@/lib/api/builder";
 import type { Run, RunDetail, RunStep } from "@/lib/api/types";
 import { formatCost, formatDate } from "@/lib/cn";
+import { useListControls } from "@/lib/useListControls";
+import { RUN_STATUS } from "@/lib/runLabels";
 import { PageContainer } from "@/app/Layout";
 
 const TERMINAL = new Set(["succeeded", "failed"]);
@@ -143,17 +146,44 @@ export default function RunDetailPage() {
           </CardBody>
         </Card>
       </div>
-      <Card className="mt-6">
-        <CardHeader title="단계별 진행" />
-        <ul>
-          {steps.map((s) => (
-            <StepRow key={s.id} step={s} label={labelOf(s.node_id)} />
-          ))}
-          {steps.length === 0 && (
-            <li className="px-5 py-4 text-sm text-slate-500">아직 진행된 단계가 없어요.</li>
-          )}
-        </ul>
-      </Card>
+      <StepsCard steps={steps} labelOf={labelOf} />
     </PageContainer>
+  );
+}
+
+/** 단계별 진행: 블록 이름 검색, 상태 필터, 개수 */
+function StepsCard({ steps, labelOf }: { steps: RunStep[]; labelOf: (id: string) => string }) {
+  const sc = useListControls(steps, {
+    key: "run-steps",
+    defaultSize: 50,
+    search: (s) => `${labelOf(s.node_id)} ${s.node_id}`,
+    filters: [
+      {
+        id: "status",
+        label: "상태",
+        options: Object.entries(RUN_STATUS).map(([value, label]) => ({ value, label })),
+        match: (s, v) => s.status === v,
+      },
+    ],
+  });
+  return (
+    <Card className="mt-6">
+      <CardHeader title="단계별 진행" />
+      {steps.length > 0 && (
+        <ListToolbar c={sc} placeholder="블록 이름으로 찾기" className="px-4 pb-3 sm:px-5" />
+      )}
+      <NoMatch c={sc} />
+      <ul className="border-t border-slate-100">
+        {sc.pageItems.map((s) => (
+          <StepRow key={s.id} step={s} label={labelOf(s.node_id)} />
+        ))}
+        {steps.length === 0 && (
+          <li className="px-5 py-4 text-sm text-slate-500">아직 진행된 단계가 없어요.</li>
+        )}
+      </ul>
+      {steps.length > 0 && (
+        <ListPager c={sc} className="border-t border-slate-100 px-4 py-2 sm:px-5" />
+      )}
+    </Card>
   );
 }

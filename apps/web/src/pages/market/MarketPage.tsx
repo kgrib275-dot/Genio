@@ -1,16 +1,10 @@
 import { HelpButton } from "@/help/HelpButton";
-import {
-  LayoutTemplate,
-  MessageSquareText,
-  Plug,
-  Puzzle,
-  Search,
-  type LucideIcon,
-} from "lucide-react";
+import { LayoutTemplate, MessageSquareText, Plug, Puzzle, type LucideIcon } from "lucide-react";
 import { useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { PageContainer } from "@/app/Layout";
 import { ErrorBox, Loading } from "@/components/ErrorBox";
+import { ListPager, ListToolbar, NoMatch } from "@/components/ListControls";
 import { Badge, StatusBadge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, Empty, PageHeader } from "@/components/ui/card";
@@ -20,6 +14,7 @@ import { ko } from "@/i18n/ko";
 import { useInstallations, useMarketItems, useUninstall } from "@/lib/api/resources";
 import type { MarketType } from "@/lib/api/types";
 import { cn, formatDate } from "@/lib/cn";
+import { useListControls } from "@/lib/useListControls";
 
 const FALLBACK_ICON = { Icon: Puzzle, tile: "bg-slate-100 text-slate-600" };
 const TYPE_ICON: Record<string, { Icon: LucideIcon; tile: string }> = {
@@ -34,13 +29,34 @@ function Installed({ ws }: { ws: string }) {
   const role = useSession((s) => s.role);
   const list = useInstallations(ws);
   const uninstall = useUninstall(ws);
+  const c = useListControls(list.data, {
+    key: "market-installed",
+    search: (i) => `${i.item_name} ${i.item_key}`,
+    filters: [
+      {
+        id: "type",
+        label: "종류",
+        options: (Object.keys(ko.marketTypes) as MarketType[]).map((t) => ({
+          value: t,
+          label: ko.marketTypes[t],
+        })),
+        match: (i, v) => i.type === v,
+      },
+    ],
+  });
   if (list.isLoading) return <Loading />;
   if (list.error) return <ErrorBox error={list.error} />;
   if (!list.data?.length) return <Empty>아직 설치한 아이템이 없어요.</Empty>;
   return (
     <Card className="overflow-hidden">
+      <ListToolbar
+        c={c}
+        placeholder="설치한 아이템 찾기"
+        className="border-b border-slate-100 p-3 sm:px-5"
+      />
+      <NoMatch c={c} />
       <ul className="divide-y divide-slate-100">
-        {list.data.map((i) => (
+        {c.pageItems.map((i) => (
           <li key={i.id} className="flex items-center gap-3 px-5 py-3 text-sm">
             <Badge tone="indigo">{ko.marketTypes[i.type] ?? i.type}</Badge>
             <Link to={`/market/${i.item_key}`} className="font-medium hover:underline">
@@ -73,6 +89,7 @@ function Installed({ ws }: { ws: string }) {
           </li>
         ))}
       </ul>
+      <ListPager c={c} className="border-t border-slate-100 px-5 py-2.5" />
     </Card>
   );
 }
@@ -81,9 +98,33 @@ export default function MarketPage() {
   const ws = useSession((s) => s.workspaceId);
   const [params, setParams] = useSearchParams();
   const type = params.get("type") ?? "";
-  const [q, setQ] = useState("");
   const [tab, setTab] = useState<"all" | "installed">("all");
-  const items = useMarketItems(ws, { type: type || undefined, q: q || undefined });
+  const items = useMarketItems(ws, { type: type || undefined });
+  const c = useListControls(items.data, {
+    key: "market-items",
+    defaultSize: 20,
+    search: (it) => `${it.name} ${it.summary} ${it.publisher} ${it.tags.join(" ")}`,
+    filters: [
+      {
+        id: "installed",
+        label: "설치",
+        options: [
+          { value: "yes", label: "설치됨" },
+          { value: "no", label: "설치 안 함" },
+        ],
+        match: (it, v) => Boolean(it.installed) === (v === "yes"),
+      },
+      {
+        id: "price",
+        label: "가격",
+        options: [
+          { value: "free", label: "무료" },
+          { value: "paid", label: "유료" },
+        ],
+        match: (it, v) => it.price > 0 === (v === "paid"),
+      },
+    ],
+  });
 
   return (
     <PageContainer>
@@ -131,22 +172,16 @@ export default function MarketPage() {
                 {c.label}
               </button>
             ))}
-            <div className="ml-auto flex w-64 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 shadow-sm focus-within:border-indigo-400">
-              <Search className="h-4 w-4 text-slate-400" />
-              <input
-                aria-label="검색"
-                className="w-full bg-transparent text-sm placeholder:text-slate-400 focus:outline-none"
-                placeholder="이름·설명 검색"
-                value={q}
-                onChange={(e) => setQ(e.target.value)}
-              />
-            </div>
           </div>
+          {(items.data ?? []).length > 0 && (
+            <ListToolbar c={c} placeholder="이름·설명·태그로 찾기" className="mb-4" />
+          )}
           {items.isLoading && <Loading />}
           <ErrorBox error={items.error} />
           {items.data?.length === 0 && <Empty>조건에 맞는 아이템이 없어요.</Empty>}
+          <NoMatch c={c} />
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {(items.data ?? []).map((it) => (
+            {c.pageItems.map((it) => (
               <Link key={it.key} to={`/market/${it.key}`}>
                 <Card className="flex h-full flex-col p-4 transition-all hover:-translate-y-0.5 hover:border-indigo-200 hover:shadow-lift">
                   <div className="flex items-start gap-3">
@@ -185,6 +220,7 @@ export default function MarketPage() {
               </Link>
             ))}
           </div>
+          {(items.data ?? []).length > 0 && <ListPager c={c} className="mt-3" />}
         </>
       )}
     </PageContainer>

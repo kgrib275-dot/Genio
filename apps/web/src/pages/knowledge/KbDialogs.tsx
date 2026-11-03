@@ -1,6 +1,7 @@
 import { Eye, EyeOff, Pencil, Plus, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { ErrorBox, Loading } from "@/components/ErrorBox";
+import { ListPager, ListToolbar, NoMatch } from "@/components/ListControls";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
@@ -17,6 +18,7 @@ import {
 } from "@/lib/api/v2";
 import { useProjects } from "@/lib/api/v3";
 import { cn } from "@/lib/cn";
+import { useListControls } from "@/lib/useListControls";
 
 export function KbSettingsDialog({
   ws,
@@ -397,13 +399,31 @@ export function ChunksDialog({
   const chunks = useChunks(doc.id);
   const update = useUpdateChunk(doc.id);
   const [editing, setEditing] = useState<{ id: string; content: string } | null>(null);
+  const cc = useListControls(chunks.data, {
+    key: "kb-chunks",
+    defaultSize: 10,
+    search: (c) => `${c.content} ${c.parent_content ?? ""}`,
+    filters: [
+      {
+        id: "enabled",
+        label: "검색 사용",
+        options: [
+          { value: "on", label: "검색에 씀" },
+          { value: "off", label: "검색에서 뺌" },
+        ],
+        match: (c, v) => c.enabled === (v === "on"),
+      },
+    ],
+  });
   return (
     <Dialog open onClose={onClose} title={`조각 보기 · ${doc.filename}`} wide>
       <div className="space-y-2">
         {chunks.isLoading && <Loading />}
         <ErrorBox error={chunks.error ?? update.error} />
         {chunks.data?.length === 0 && <p className="text-sm text-slate-500">조각이 없어요.</p>}
-        {(chunks.data ?? []).map((c) => (
+        {(chunks.data ?? []).length > 0 && <ListToolbar c={cc} placeholder="조각 내용으로 찾기" />}
+        <NoMatch c={cc} />
+        {cc.pageItems.map((c) => (
           <div
             key={c.id}
             className={cn(
@@ -481,6 +501,7 @@ export function ChunksDialog({
             )}
           </div>
         ))}
+        {(chunks.data ?? []).length > 0 && <ListPager c={cc} className="pt-1" />}
       </div>
     </Dialog>
   );

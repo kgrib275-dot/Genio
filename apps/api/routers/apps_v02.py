@@ -224,16 +224,24 @@ async def upload_file(
 # ---------------- 로그 ----------------
 @router.get("/apps/{app_id}/conversations")
 def list_conversations(
-    app_id: str, ctx: AppViewers, page: int = Query(default=1, ge=1)
+    app_id: str,
+    ctx: AppViewers,
+    page: int = Query(default=1, ge=1),
+    size: int = Query(default=30, ge=1, le=100),
+    q: str | None = Query(default=None, max_length=200),
 ) -> list[dict[str, Any]]:
-    size = 30
+    stmt = select(Conversation).where(Conversation.app_id == app_id)
+    if q and q.strip():
+        # 대화 안의 메시지 내용으로 찾는다
+        hit = (
+            select(Message.conversation_id)
+            .where(Message.content.ilike(f"%{q.strip()}%"))
+            .distinct()
+        )
+        stmt = stmt.where(Conversation.id.in_(hit))
     convs = list(
         ctx.db.scalars(
-            select(Conversation)
-            .where(Conversation.app_id == app_id)
-            .order_by(Conversation.created_at.desc())
-            .offset((page - 1) * size)
-            .limit(size)
+            stmt.order_by(Conversation.created_at.desc()).offset((page - 1) * size).limit(size)
         )
     )
     ids = [c.id for c in convs]

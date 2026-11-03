@@ -1,18 +1,14 @@
 import { Link, useParams } from "react-router-dom";
 import { ErrorBox, Loading } from "@/components/ErrorBox";
+import { ListPager, ListToolbar, NoMatch } from "@/components/ListControls";
 import { StatusBadge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { useApp, useAppRuns } from "@/lib/api/apps";
 import type { Run } from "@/lib/api/types";
 import { formatCost, formatDate } from "@/lib/cn";
+import { RUN_FILTERS, runSearchText, TRIGGER } from "@/lib/runLabels";
+import { useListControls } from "@/lib/useListControls";
 import { AppNav } from "@/pages/apps/AppNav";
-
-const TRIGGER: Record<string, string> = {
-  test: "테스트",
-  chat: "챗",
-  api: "API",
-  schedule: "예약",
-};
 
 export function RunTable({ runs, showApp }: { runs: Run[]; showApp?: boolean }) {
   if (runs.length === 0)
@@ -81,6 +77,29 @@ export function RunTable({ runs, showApp }: { runs: Run[]; showApp?: boolean }) 
   );
 }
 
+function RunList({ runs }: { runs: Run[] }) {
+  const c = useListControls(runs, {
+    key: "app-runs",
+    search: runSearchText,
+    filters: RUN_FILTERS,
+  });
+  if (runs.length === 0)
+    return (
+      <Card className="overflow-hidden">
+        <RunTable runs={[]} />
+      </Card>
+    );
+  return (
+    <div className="space-y-3">
+      <ListToolbar c={c} placeholder="결과·오류 내용으로 찾기" />
+      <Card className="overflow-hidden">
+        {c.total > 0 ? <RunTable runs={c.pageItems} /> : <NoMatch c={c} />}
+      </Card>
+      <ListPager c={c} />
+    </div>
+  );
+}
+
 export default function AppRunsPage() {
   const { id: appId = "" } = useParams();
   const app = useApp(appId);
@@ -91,11 +110,7 @@ export default function AppRunsPage() {
       <div className="mx-auto max-w-6xl px-4 py-6 sm:px-8">
         <ErrorBox error={app.error ?? runs.error} />
         {runs.isLoading && <Loading />}
-        {runs.data && (
-          <Card className="overflow-hidden">
-            <RunTable runs={runs.data} />
-          </Card>
-        )}
+        {runs.data && <RunList runs={runs.data} />}
       </div>
     </div>
   );

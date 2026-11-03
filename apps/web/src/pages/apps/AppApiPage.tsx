@@ -2,6 +2,7 @@ import { Copy, KeyRound, Plus, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { useParams } from "react-router-dom";
 import { ErrorBox, Loading } from "@/components/ErrorBox";
+import { ListPager, ListToolbar, NoMatch } from "@/components/ListControls";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Dialog } from "@/components/ui/dialog";
@@ -12,6 +13,7 @@ import { useApp } from "@/lib/api/apps";
 import type { NewApiKey } from "@/lib/api/types";
 import { useApiKeys, useCreateApiKey, useDeleteApiKey } from "@/lib/api/v2";
 import { copyText, formatDate } from "@/lib/cn";
+import { useListControls } from "@/lib/useListControls";
 import { AppNav } from "@/pages/apps/AppNav";
 
 function CodeBlock({ code }: { code: string }) {
@@ -38,6 +40,22 @@ export default function AppApiPage() {
   const { id: appId = "" } = useParams();
   const app = useApp(appId);
   const keys = useApiKeys(appId);
+  const kc = useListControls(keys.data, {
+    key: "app-api-keys",
+    defaultSize: 10,
+    search: (k) => `${k.name} ${k.prefix}`,
+    filters: [
+      {
+        id: "used",
+        label: "사용",
+        options: [
+          { value: "used", label: "쓴 적 있음" },
+          { value: "unused", label: "쓴 적 없음" },
+        ],
+        match: (k, v) => (v === "used" ? Boolean(k.last_used_at) : !k.last_used_at),
+      },
+    ],
+  });
   const create = useCreateApiKey(appId);
   const del = useDeleteApiKey(appId);
   const [name, setName] = useState("");
@@ -84,8 +102,10 @@ export default function AppApiPage() {
             {keys.data?.length === 0 && (
               <p className="text-sm text-slate-500">아직 만든 키가 없어요.</p>
             )}
-            <ul className="divide-y divide-slate-100 rounded-xl border border-slate-200">
-              {(keys.data ?? []).map((k) => (
+            {(keys.data?.length ?? 0) > 0 && <ListToolbar c={kc} placeholder="키 이름으로 찾기" />}
+            <NoMatch c={kc} />
+            <ul className="divide-y divide-slate-100 rounded-xl border border-slate-200 empty:hidden">
+              {kc.pageItems.map((k) => (
                 <li key={k.id} className="flex flex-wrap items-center gap-2 px-4 py-3 text-sm">
                   <KeyRound className="h-4 w-4 text-slate-400" />
                   <span className="font-medium">{k.name}</span>
@@ -115,6 +135,7 @@ export default function AppApiPage() {
                 </li>
               ))}
             </ul>
+            {(keys.data?.length ?? 0) > 0 && <ListPager c={kc} />}
           </CardBody>
         </Card>
 

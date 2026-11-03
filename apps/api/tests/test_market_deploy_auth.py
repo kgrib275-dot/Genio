@@ -48,6 +48,17 @@ def test_install_connector_and_paid_item(client: TestClient, team: Team) -> None
     assert any(
         entry["action"] == "market.install" and entry["meta"]["price"] == 1000 for entry in logs
     )
+    # 개수 제한(limit): 1~1000
+    one = client.get(
+        f"/api/v1/workspaces/{team.ws}/audit-logs?limit=1", headers=team.h("owner")
+    ).json()
+    assert len(one) == 1 and one[0]["id"] == logs[0]["id"]
+    assert (
+        client.get(
+            f"/api/v1/workspaces/{team.ws}/audit-logs?limit=1001", headers=team.h("owner")
+        ).status_code
+        == 422
+    )
 
 
 def test_market_node_registered_per_workspace(client: TestClient, team: Team) -> None:

@@ -12,6 +12,7 @@ import {
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { PageContainer } from "@/app/Layout";
 import { ErrorBox, Loading } from "@/components/ErrorBox";
+import { ListPager, ListToolbar, NoMatch } from "@/components/ListControls";
 import { Badge, StatusBadge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody, CardHeader, Empty, PageHeader } from "@/components/ui/card";
@@ -35,6 +36,7 @@ import {
 } from "@/lib/api/types";
 import { searchKnowledgeBaseV2, useReprocessDocument } from "@/lib/api/v2";
 import { cn, formatBytes, formatDate } from "@/lib/cn";
+import { useListControls } from "@/lib/useListControls";
 import {
   ChunksDialog,
   KbSettingsDialog,
@@ -256,6 +258,35 @@ function KbDetail({ ws, kb, editable }: { ws: string; kb: KnowledgeBaseV2; edita
   const [metaDoc, setMetaDoc] = useState<KbDocumentV2 | null>(null);
   const [chunkDoc, setChunkDoc] = useState<KbDocumentV2 | null>(null);
   const docList = (docs.data ?? []) as KbDocumentV2[];
+  const dc = useListControls(docList, {
+    key: "kb-documents",
+    search: (d) =>
+      `${d.filename} ${d.url ?? ""} ${Object.entries(d.metadata ?? {})
+        .map(([k, v]) => `${k} ${v}`)
+        .join(" ")}`,
+    filters: [
+      {
+        id: "status",
+        label: "상태",
+        options: [
+          { value: "ready", label: "준비됨" },
+          { value: "processing", label: "처리 중" },
+          { value: "uploaded", label: "올림" },
+          { value: "failed", label: "실패" },
+        ],
+        match: (d, v) => d.status === v,
+      },
+      {
+        id: "source",
+        label: "가져온 곳",
+        options: [
+          { value: "upload", label: "파일" },
+          { value: "url", label: "웹 페이지" },
+        ],
+        match: (d, v) => (d.source ?? "upload") === v,
+      },
+    ],
+  });
 
   return (
     <div className="min-w-0 space-y-6">
@@ -309,8 +340,16 @@ function KbDetail({ ws, kb, editable }: { ws: string; kb: KnowledgeBaseV2; edita
               PDF, TXT, MD 파일을 올리거나 웹 페이지를 가져오면 질문에 답할 때 써요.
             </p>
           )}
+          {docList.length > 0 && (
+            <ListToolbar
+              c={dc}
+              placeholder="파일 이름·주소·정보로 찾기"
+              className="border-t border-slate-100 px-4 py-3 sm:px-5"
+            />
+          )}
+          <NoMatch c={dc} />
           <ul className="divide-y divide-slate-100 border-t border-slate-100">
-            {docList.map((d) => (
+            {dc.pageItems.map((d) => (
               <DocRow
                 key={d.id}
                 d={d}
@@ -330,6 +369,9 @@ function KbDetail({ ws, kb, editable }: { ws: string; kb: KnowledgeBaseV2; edita
               />
             ))}
           </ul>
+          {docList.length > 0 && (
+            <ListPager c={dc} className="border-t border-slate-100 px-4 py-2.5 sm:px-5" />
+          )}
         </CardBody>
       </Card>
       {editable && <SearchCard key={kb.id} kb={kb} />}
@@ -369,6 +411,11 @@ export default function KnowledgePage() {
   }, [kbs.data, selected]);
 
   const kb = (kbs.data ?? []).find((k) => k.id === selected) as KnowledgeBaseV2 | undefined;
+  const kc = useListControls(kbs.data, {
+    key: "kb-list",
+    defaultSize: 10,
+    search: (k) => `${k.name} ${k.project_id ? (projectById.get(k.project_id)?.name ?? "") : ""}`,
+  });
 
   return (
     <PageContainer>
@@ -445,8 +492,10 @@ export default function KnowledgePage() {
             </Field>
           )}
           {kbs.isLoading && <Loading />}
+          {(kbs.data ?? []).length > 0 && <ListToolbar c={kc} placeholder="지식베이스 찾기" />}
+          <NoMatch c={kc} />
           <ul className="flex gap-1 overflow-x-auto pb-1 md:block md:space-y-1 md:overflow-visible">
-            {(kbs.data ?? []).map((k) => (
+            {kc.pageItems.map((k) => (
               <li key={k.id} className="group flex shrink-0 items-center">
                 <button
                   type="button"
@@ -486,6 +535,7 @@ export default function KnowledgePage() {
               </li>
             ))}
           </ul>
+          {(kbs.data ?? []).length > kc.size && <ListPager c={kc} />}
         </div>
         <div className="min-w-0">
           {kb ? (
