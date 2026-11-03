@@ -411,3 +411,27 @@ def test_delete_app_with_runs_deployments_and_chats(client: TestClient, team: Te
     assert res.status_code == 204, res.text
     assert client.get(f"/api/v1/public/apps/{token}").status_code == 404
     assert client.get(f"/api/v1/workspaces/{team.ws}/runs", headers=team.h("owner")).json() == []
+
+
+def test_login_trims_email_and_hints_ime(client: TestClient, team: Team) -> None:
+    ok = client.post(
+        "/api/v1/auth/login", json={"email": "  Owner@Test.local ", "password": "password123!"}
+    )
+    assert ok.status_code == 200
+    bad = client.post(
+        "/api/v1/auth/login", json={"email": "owner@test.local", "password": "ㅔㅁㄴㄴ재같123!"}
+    )
+    assert bad.status_code == 401 and "한/영" in bad.json()["detail"]["hint"]
+
+
+def test_demo_accounts_only_in_demo_mode(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from api.config import get_settings
+    from api.services.seed import DEMO_PASSWORD
+
+    assert client.get("/api/v1/auth/demo-accounts").json()["enabled"] is False
+    monkeypatch.setattr(get_settings(), "genio_seed_demo", True)
+    data = client.get("/api/v1/auth/demo-accounts").json()
+    assert data["enabled"] and len(data["accounts"]) == 5
+    assert data["password"] == DEMO_PASSWORD

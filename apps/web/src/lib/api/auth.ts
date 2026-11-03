@@ -19,8 +19,24 @@ function useTokenMutation<V>(fn: (v: V) => Promise<Tokens>) {
 
 export function useLogin() {
   return useTokenMutation((v: { email: string; password: string }) =>
-    api.post<Tokens>("/auth/login", v),
+    api.post<Tokens>("/auth/login", { ...v, email: v.email.trim() }),
   );
+}
+
+export interface DemoAccounts {
+  enabled: boolean;
+  password: string;
+  accounts: { email: string; name: string; role: string }[];
+}
+
+/** 데모 모드일 때 로그인 화면에 보여 줄 공개 데모 계정 */
+export function useDemoAccounts() {
+  return useQuery({
+    queryKey: ["demo-accounts"],
+    queryFn: () => api.get<DemoAccounts>("/auth/demo-accounts"),
+    staleTime: Infinity,
+    retry: false,
+  });
 }
 
 export function useSignup() {

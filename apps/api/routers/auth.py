@@ -9,12 +9,14 @@ from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from api.config import get_settings
 from api.core.audit import audit
 from api.core.errors import AppError, not_found
 from api.core.security import create_tokens, decode_token, hash_password, verify_password
 from api.deps import CurrentUser, DbDep
 from api.models import Invitation, Membership, Organization, User, Workspace
 from api.services.apps import slugify
+from api.services.seed import DEMO_PASSWORD, DEMO_USERS
 
 router = APIRouter(tags=["auth"])
 
@@ -76,12 +78,26 @@ def signup(body: SignupIn, db: DbDep) -> dict[str, str]:
 
 @router.post("/auth/login")
 def login(body: LoginIn, db: DbDep) -> dict[str, str]:
-    user = db.scalar(select(User).where(User.email == body.email.lower()))
+    user = db.scalar(select(User).where(User.email == body.email.strip().lower()))
     if user is None or not verify_password(body.password, user.password_hash):
         raise AppError(
-            401, "이메일 또는 비밀번호가 맞지 않아요.", "입력한 내용을 확인하고 다시 시도하세요."
+            401,
+            "이메일 또는 비밀번호가 맞지 않아요.",
+            "한/영 키가 한글로 되어 있지 않은지, 이메일에 빈칸이 없는지 확인하고 다시 시도하세요.",
         )
     return create_tokens(user.id)
+
+
+@router.get("/auth/demo-accounts")
+def demo_accounts() -> dict[str, Any]:
+    """데모 모드(GENIO_SEED_DEMO)일 때만 로그인 화면에 보여 줄 공개 데모 계정."""
+    if not get_settings().genio_seed_demo:
+        return {"enabled": False, "password": "", "accounts": []}
+    return {
+        "enabled": True,
+        "password": DEMO_PASSWORD,
+        "accounts": [{"email": e, "name": n, "role": r} for e, n, r in DEMO_USERS],
+    }
 
 
 @router.post("/auth/refresh")
