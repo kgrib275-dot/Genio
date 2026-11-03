@@ -67,7 +67,7 @@ def create_trigger(
     t = AppTrigger(
         app_id=app_id,
         kind=body.kind,
-        name=body.name.strip() or ("웹훅" if body.kind == "webhook" else "예약"),
+        name=body.name.strip() or ("외부에서 받기" if body.kind == "webhook" else "예약"),
         enabled=body.enabled,
         config=svc.clean_config(body.kind, body.config),
         token=svc.new_token() if body.kind == "webhook" else None,
@@ -138,7 +138,7 @@ def rotate_token(trigger_id: str, request: Request, ctx: TriggerEditors) -> dict
     t = _get(ctx, trigger_id)
     if t.kind != "webhook":
         raise AppError(
-            409, "예약에는 주소가 없어요.", "웹훅 자동 실행에서만 주소를 다시 만들 수 있어요."
+            409, "예약에는 주소가 없어요.", "외부에서 받기에서만 주소를 다시 만들 수 있어요."
         )
     t.token = svc.new_token()
     audit(
@@ -189,7 +189,7 @@ def rotate_secret(trigger_id: str, request: Request, ctx: TriggerEditors) -> dic
     t = _get(ctx, trigger_id)
     if t.kind != "webhook":
         raise AppError(
-            409, "예약에는 서명이 필요 없어요.", "외부에서 받기(웹훅)에서만 서명을 쓸 수 있어요."
+            409, "예약에는 서명이 필요 없어요.", "외부에서 받기에서만 서명을 쓸 수 있어요."
         )
     raw = svc.set_secret(t)
     audit(

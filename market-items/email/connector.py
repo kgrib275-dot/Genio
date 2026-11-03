@@ -12,7 +12,9 @@ def send_email(params: dict[str, Any], secrets: dict[str, Any], net: Any) -> dic
     to = [a.strip() for a in str(params["to"]).replace(";", ",").split(",") if a.strip()]
     bad = [a for a in to if not EMAIL_RE.match(a)]
     if not to or bad:
-        raise NodeError("받는 사람 메일 주소 형식이 올바르지 않아요: " + ", ".join(bad or ["(비어 있음)"]))
+        raise NodeError(
+            "받는 사람 메일 주소 형식이 올바르지 않아요: " + ", ".join(bad or ["(비어 있음)"])
+        )
     try:
         port = int(secrets.get("port", 587))
     except (TypeError, ValueError) as exc:

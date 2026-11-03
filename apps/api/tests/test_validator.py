@@ -1,4 +1,4 @@
-"""그래프 검증: 순환·참조·필수 노드·분기·병렬·형식·커넥터·지식베이스."""
+"""그래프 검증: 순환·참조·필수 단계·분기·병렬·형식·커넥터·지식베이스."""
 
 import copy
 from typing import Any
@@ -76,15 +76,15 @@ def test_input_count_and_output_required() -> None:
     g["edges"] = [e for e in g["edges"] if e["target"] not in ("n4", "n5")]
     g["nodes"].append({"id": "n6", "type": "input", "data": {"fields": [{"key": "x"}]}})
     msgs = messages(validate_graph(g, env()))
-    assert any("입력 노드는 정확히 1개" in m for m in msgs)
-    assert any("결과 노드" in m for m in msgs)
+    assert any("입력 단계는 정확히 1개" in m for m in msgs)
+    assert any("결과 단계" in m for m in msgs)
 
 
 def test_missing_reference_and_field() -> None:
     g = base_graph()
     g["nodes"][3]["data"]["template"] = "{{n9.text}} {{n2.nope}}"
     msgs = messages(validate_graph(g, env()))
-    assert any("없는 노드 'n9'" in m for m in msgs)
+    assert any("없는 단계 'n9'" in m for m in msgs)
     assert any("'nope' 값이 없어요" in m for m in msgs)
 
 
@@ -125,18 +125,18 @@ def test_unknown_type_and_disallowed_type() -> None:
     g["nodes"].append({"id": "n7", "type": "teleport", "data": {}})
     g["edges"].append({"id": "e9", "source": "n5", "target": "n7"})
     msgs = messages(validate_graph(g, env()))
-    assert any("'teleport' 노드는" in m for m in msgs)
+    assert any("'teleport' 단계는" in m for m in msgs)
     msgs = messages(
         validate_graph(base_graph(), env(allowed_types={"input", "output", "condition"}))
     )
-    assert any("'llm' 노드는" in m for m in msgs)
+    assert any("'llm' 단계는" in m for m in msgs)
 
 
 def test_unreachable_node() -> None:
     g = base_graph()
     g["nodes"].append({"id": "n8", "type": "output", "data": {"template": "x"}})
     msgs = messages(validate_graph(g, env()))
-    assert any("이어지지 않은 노드" in m for m in msgs)
+    assert any("이어지지 않은 단계" in m for m in msgs)
 
 
 def test_connector_credential_checks() -> None:

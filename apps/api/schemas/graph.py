@@ -1,7 +1,7 @@
 """워크플로우 그래프 스키마(설계서 §4)의 단일 정의.
 
 프런트 타입은 이 모델의 JSON Schema에서 생성한다(`scripts/gen_types.py`). 다른 곳에 따로 쓰지 않는다.
-노드별 data 형식은 각 NodeSpec의 input_schema가 정한다.
+단계별 data 형식은 각 NodeSpec의 input_schema가 정한다.
 """
 
 from typing import Any, Literal
@@ -33,7 +33,7 @@ class GraphNode(BaseModel):
     type: str = Field(min_length=1, max_length=64)
     position: Position = Field(default_factory=Position)
     data: dict[str, Any] = Field(default_factory=dict)
-    # v0.4: 끈 블록은 실행하지 않고 건너뛴다(입력을 그대로 다음으로 넘김)
+    # v0.4: 끈 단계는 실행하지 않고 건너뛴다(입력을 그대로 다음으로 넘김)
     disabled: bool | None = None
 
 

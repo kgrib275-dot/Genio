@@ -565,7 +565,7 @@ function DefaultModels({ ws }: { ws: string }) {
     <Card>
       <CardHeader
         title="기본 모델"
-        description="노드에서 'AI 연결'을 기본으로 둔 경우와 문서 임베딩에 쓸 연결이에요."
+        description="단계에서 'AI 연결'을 기본으로 둔 경우와 문서 임베딩에 쓸 연결이에요."
       />
       <CardBody className="space-y-3">
         <div className="grid gap-3 sm:grid-cols-2">
@@ -665,7 +665,7 @@ export function LlmSection({
     <div className="space-y-6">
       <div className="grid gap-6 lg:grid-cols-[3fr_2fr]">
         <Card className="min-w-0">
-          <CardHeader title="AI 연결" description="빌더와 AI 노드가 이 키로 모델을 불러요." />
+          <CardHeader title="AI 연결" description="빌더와 AI 단계가 이 키로 모델을 불러요." />
           <CardBody className="p-0">
             {list.isLoading && <Loading />}
             <ErrorBox error={list.error} />

@@ -8,7 +8,7 @@ import type {
 export type GraphNode = Required<Pick<GeneratedNode, "id" | "type">> & {
   position: { x: number; y: number };
   data: Record<string, unknown>;
-  /** 끈 블록(실행하지 않고 건너뜀) */
+  /** 끈 단계(실행하지 않고 건너뜀) */
   disabled?: boolean | null;
 };
 

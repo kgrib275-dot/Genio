@@ -1,4 +1,4 @@
-// cURL 명령을 웹 요청 블록 설정(방식·주소·헤더·본문)으로 바꾼다.
+// cURL 명령을 웹 요청 단계 설정(방식·주소·헤더·본문)으로 바꾼다.
 
 export interface ParsedCurl {
   method: string;

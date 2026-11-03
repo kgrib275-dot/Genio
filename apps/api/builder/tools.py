@@ -39,26 +39,26 @@ from nodes import NodeError, registry
 TOOL_DEFS: list[ToolDef] = [
     ToolDef(
         "get_graph",
-        "현재 작업 중인 흐름 그래프를 가져온다. 노드에는 순번이 붙어 있어 '두 번째 노드'처럼 지칭된 노드를 찾을 수 있다.",
+        "현재 작업 중인 흐름 그래프를 가져온다. 단계에는 순번이 붙어 있어 '두 번째 단계'처럼 지칭된 단계를 찾을 수 있다.",
         {"type": "object", "properties": {}, "additionalProperties": False},
     ),
     ToolDef(
         "list_available_nodes",
-        "쓸 수 있는 노드 타입, 설치된 서비스(커넥터)와 동작, 연결 정보(이름만), 지식베이스, 설치하지 않은 마켓 아이템 목록을 가져온다.",
+        "쓸 수 있는 단계 타입, 설치된 서비스(커넥터)와 동작, 연결 정보(이름만), 지식베이스, 설치하지 않은 마켓 아이템 목록을 가져온다.",
         {"type": "object", "properties": {}, "additionalProperties": False},
     ),
     ToolDef(
         "add_node",
-        "노드를 하나 추가한다. after를 주면 그 노드 바로 뒤에 붙이고 선을 이어 준다(after 다음에 있던 노드는 새 노드 뒤로 밀린다). after가 갈림길(condition·question_classifier)이면 handle에 분기 이름을, 실패 길이면 handle='fail'을 준다.",
+        "단계를 하나 추가한다. after를 주면 그 단계 바로 뒤에 붙이고 선을 이어 준다(after 다음에 있던 단계는 새 단계 뒤로 밀린다). after가 갈림길(condition·question_classifier)이면 handle에 분기 이름을, 실패 길이면 handle='fail'을 준다.",
         {
             "type": "object",
             "properties": {
-                "type": {"type": "string", "description": "노드 타입(list_available_nodes 참고)"},
+                "type": {"type": "string", "description": "단계 타입(list_available_nodes 참고)"},
                 "data": {
                     "type": "object",
-                    "description": "노드 설정. label(화면 이름)을 꼭 넣는다.",
+                    "description": "단계 설정. label(화면 이름)을 꼭 넣는다.",
                 },
-                "after": {"type": "string", "description": "이 노드 id 뒤에 붙인다"},
+                "after": {"type": "string", "description": "이 단계 id 뒤에 붙인다"},
                 "handle": {"type": "string", "description": "after가 condition일 때 분기 이름"},
             },
             "required": ["type", "data"],
@@ -67,7 +67,7 @@ TOOL_DEFS: list[ToolDef] = [
     ),
     ToolDef(
         "update_node",
-        "노드 설정을 고친다. data에 준 키만 바꾸고 나머지는 유지한다. 값을 null로 주면 그 키를 지운다.",
+        "단계 설정을 고친다. data에 준 키만 바꾸고 나머지는 유지한다. 값을 null로 주면 그 키를 지운다.",
         {
             "type": "object",
             "properties": {"id": {"type": "string"}, "data": {"type": "object"}},
@@ -77,7 +77,7 @@ TOOL_DEFS: list[ToolDef] = [
     ),
     ToolDef(
         "remove_node",
-        "노드와 그 노드에 이어진 선을 지운다. 앞뒤가 하나씩 이어져 있었다면 앞뒤를 다시 이어 준다.",
+        "단계와 그 단계에 이어진 선을 지운다. 앞뒤가 하나씩 이어져 있었다면 앞뒤를 다시 이어 준다.",
         {
             "type": "object",
             "properties": {"id": {"type": "string"}},
@@ -87,7 +87,7 @@ TOOL_DEFS: list[ToolDef] = [
     ),
     ToolDef(
         "connect",
-        "두 노드를 선으로 잇는다. source가 갈림길(condition·question_classifier)이면 handle(분기 이름)이, 실패 길이면 handle='fail'이 필요하다. 조건이 아닌 노드에서 이미 나가는 선이 있으면 새 선으로 바꾼다.",
+        "두 단계를 선으로 잇는다. source가 갈림길(condition·question_classifier)이면 handle(분기 이름)이, 실패 길이면 handle='fail'이 필요하다. 조건이 아닌 단계에서 이미 나가는 선이 있으면 새 선으로 바꾼다.",
         {
             "type": "object",
             "properties": {
@@ -114,7 +114,7 @@ TOOL_DEFS: list[ToolDef] = [
     ),
     ToolDef(
         "suggest_market_item",
-        "필요한 서비스(커넥터)나 노드가 설치돼 있지 않을 때 마켓 아이템 설치를 제안한다. item_key를 알면 같이 준다. 이 툴을 부르면 이번 차례는 끝나고 사용자의 설치를 기다린다.",
+        "필요한 서비스(커넥터)나 단계가 설치돼 있지 않을 때 마켓 아이템 설치를 제안한다. item_key를 알면 같이 준다. 이 툴을 부르면 이번 차례는 끝나고 사용자의 설치를 기다린다.",
         {
             "type": "object",
             "properties": {
@@ -134,7 +134,7 @@ TOOL_DEFS: list[ToolDef] = [
         "현재 흐름을 주어진 입력으로 테스트 실행하고 결과를 요약해 돌려준다. 실행 전에 검증을 먼저 통과해야 한다.",
         {
             "type": "object",
-            "properties": {"input": {"type": "object", "description": "입력 노드 항목 키별 값"}},
+            "properties": {"input": {"type": "object", "description": "입력 단계 항목 키별 값"}},
             "required": ["input"],
             "additionalProperties": False,
         },
@@ -150,7 +150,7 @@ TOOL_DEFS: list[ToolDef] = [
     ),
     ToolDef(
         "validate",
-        "흐름 그래프를 검증하고 노드별 오류를 돌려준다. 이 검증을 통과하기 전에는 완료라고 말하지 않는다.",
+        "흐름 그래프를 검증하고 단계별 오류를 돌려준다. 이 검증을 통과하기 전에는 완료라고 말하지 않는다.",
         {"type": "object", "properties": {}, "additionalProperties": False},
     ),
 ]
@@ -212,7 +212,7 @@ class BuilderToolbox:
         return ToolOutcome(
             True,
             {"summary": summarize(g), "graph": g.dump()},
-            f"노드 {len(g.nodes)}개, 선 {len(g.edges)}개",
+            f"단계 {len(g.nodes)}개, 선 {len(g.edges)}개",
         )
 
     def t_list_available_nodes(self) -> ToolOutcome:
@@ -298,7 +298,7 @@ class BuilderToolbox:
                 "knowledge_bases": [{"id": k[0], "name": k[1], "documents": k[2]} for k in kb_rows],
                 "market_not_installed": market,
             },
-            f"노드 {len(node_types)}종, 서비스 {len(connectors)}개, 연결 정보 {len(creds)}개, 지식베이스 {len(kb_rows)}개",
+            f"단계 {len(node_types)}종, 서비스 {len(connectors)}개, 연결 정보 {len(creds)}개, 지식베이스 {len(kb_rows)}개",
         )
 
     def _new_id(self, g: Graph) -> str:
@@ -313,13 +313,13 @@ class BuilderToolbox:
         spec = registry.get(node_type)
         if spec is None:
             raise ToolError(
-                f"'{node_type}' 노드 타입은 없어요. list_available_nodes로 쓸 수 있는 타입을 확인하세요."
+                f"'{node_type}' 단계 타입은 없어요. list_available_nodes로 쓸 수 있는 타입을 확인하세요."
             )
         if spec.source == "market" and node_type not in market_node_types(
             self.db, self.app.workspace_id
         ):
             raise ToolError(
-                f"'{node_type}' 노드는 설치되지 않았어요. suggest_market_item으로 설치를 제안하세요."
+                f"'{node_type}' 단계는 설치되지 않았어요. suggest_market_item으로 설치를 제안하세요."
             )
 
     def t_add_node(
@@ -330,31 +330,31 @@ class BuilderToolbox:
         ops: list[dict[str, Any]] = []
         if type == "input" and any(n.type == "input" for n in g.nodes):
             raise ToolError(
-                "입력 노드는 하나만 둘 수 있어요. 기존 입력 노드를 update_node로 고치세요."
+                "입력 단계는 하나만 둘 수 있어요. 기존 입력 단계를 update_node로 고치세요."
             )
         node_id = self._new_id(g)
         prev = g.node(after) if after else None
         if after and prev is None:
-            raise ToolError(f"'{after}' 노드가 없어요. get_graph로 id를 확인하세요.")
+            raise ToolError(f"'{after}' 단계가 없어요. get_graph로 id를 확인하세요.")
         if prev is not None:
             branch_offset = 0.0
             cases = _exits(prev)
             if handle == "fail":
                 if prev.data.get("_on_error") != "branch":
                     raise ToolError(
-                        "'fail' 출구를 쓰려면 먼저 그 노드의 _on_error를 'branch'로 바꾸세요."
+                        "'fail' 출구를 쓰려면 먼저 그 단계의 _on_error를 'branch'로 바꾸세요."
                     )
                 branch_offset = 200.0
             elif cases is not None:
                 if not handle:
                     raise ToolError(
-                        f"갈림길 노드 뒤에 붙이려면 handle(분기 이름)이 필요해요: {', '.join(cases)}"
+                        f"갈림길 단계 뒤에 붙이려면 handle(분기 이름)이 필요해요: {', '.join(cases)}"
                     )
                 if handle not in cases:
                     raise ToolError(f"'{handle}' 분기가 없어요. 가능한 분기: {', '.join(cases)}")
                 branch_offset = (cases.index(handle) - (len(cases) - 1) / 2) * 160
             elif handle:
-                raise ToolError(f"'{prev.id}' 노드에는 '{handle}' 출구가 없어요.")
+                raise ToolError(f"'{prev.id}' 단계에는 '{handle}' 출구가 없어요.")
             pos = Position(x=prev.position.x + 300, y=prev.position.y + branch_offset)
         else:
             max_x = max((n.position.x for n in g.nodes), default=-300)
@@ -378,7 +378,7 @@ class BuilderToolbox:
             ops.append({"op": "add_edge", "edge": e1.model_dump(by_alias=True, exclude_none=True)})
             if old and type not in ("output",):
                 if type in ("condition", "question_classifier"):
-                    pass  # 갈림길 노드 뒤 연결은 에이전트가 분기별로 정한다
+                    pass  # 갈림길 단계 뒤 연결은 에이전트가 분기별로 정한다
                 else:
                     e2 = GraphEdge(id=self._new_edge_id(g), source=node_id, target=old[0].target)
                     g.edges.append(e2)
@@ -387,13 +387,13 @@ class BuilderToolbox:
                     )
         self.save(g)
         label = data.get("label") or type
-        return ToolOutcome(True, {"node_id": node_id}, f"'{label}' 노드 추가({node_id})", ops)
+        return ToolOutcome(True, {"node_id": node_id}, f"'{label}' 단계 추가({node_id})", ops)
 
     def t_update_node(self, id: str, data: dict[str, Any]) -> ToolOutcome:
         g = self.graph()
         node = g.node(id)
         if node is None:
-            raise ToolError(f"'{id}' 노드가 없어요. get_graph로 id를 확인하세요.")
+            raise ToolError(f"'{id}' 단계가 없어요. get_graph로 id를 확인하세요.")
         new_data = copy.deepcopy(node.data)
         for k, v in data.items():
             if v is None:
@@ -414,7 +414,7 @@ class BuilderToolbox:
         g = self.graph()
         node = g.node(id)
         if node is None:
-            raise ToolError(f"'{id}' 노드가 없어요.")
+            raise ToolError(f"'{id}' 단계가 없어요.")
         ins = [e for e in g.edges if e.target == id]
         outs = [e for e in g.edges if e.source == id]
         ops: list[dict[str, Any]] = []
@@ -434,28 +434,28 @@ class BuilderToolbox:
             ops.append({"op": "add_edge", "edge": e.model_dump(by_alias=True, exclude_none=True)})
         self.save(g)
         return ToolOutcome(
-            True, {"removed": id}, f"'{node.data.get('label') or id}' 노드 삭제", ops
+            True, {"removed": id}, f"'{node.data.get('label') or id}' 단계 삭제", ops
         )
 
     def t_connect(self, source: str, target: str, handle: str | None = None) -> ToolOutcome:
         g = self.graph()
         src, dst = g.node(source), g.node(target)
         if src is None or dst is None:
-            raise ToolError("없는 노드를 이으려고 했어요. get_graph로 id를 확인하세요.")
+            raise ToolError("없는 단계를 이으려고 했어요. get_graph로 id를 확인하세요.")
         if source == target:
-            raise ToolError("노드를 자기 자신과 이을 수 없어요.")
+            raise ToolError("단계를 자기 자신과 이을 수 없어요.")
         ops: list[dict[str, Any]] = []
         cases = _exits(src)
         if handle == "fail":
             if src.data.get("_on_error") != "branch":
                 raise ToolError(
-                    "'fail' 출구를 쓰려면 먼저 그 노드의 _on_error를 'branch'로 바꾸세요."
+                    "'fail' 출구를 쓰려면 먼저 그 단계의 _on_error를 'branch'로 바꾸세요."
                 )
             old = [e for e in g.edges if e.source == source and e.source_handle == "fail"]
         elif cases is not None:
             if not handle or handle not in cases:
                 raise ToolError(
-                    f"갈림길 노드에서 이을 때는 분기 이름이 필요해요: {', '.join(cases)}"
+                    f"갈림길 단계에서 이을 때는 분기 이름이 필요해요: {', '.join(cases)}"
                 )
             old = [e for e in g.edges if e.source == source and e.source_handle == handle]
         else:
@@ -668,7 +668,7 @@ class ToolError(Exception):
 
 
 def _exits(node: GraphNode) -> list[str] | None:
-    """갈림길 노드의 분기 이름 목록(순서 유지). 갈림길이 아니면 None."""
+    """갈림길 단계의 분기 이름 목록(순서 유지). 갈림길이 아니면 None."""
     if node.type == "condition":
         return [str(c.get("id")) for c in node.data.get("cases", []) if c.get("id")] + [
             str(node.data.get("else") or "else")

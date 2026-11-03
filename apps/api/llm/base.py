@@ -87,7 +87,7 @@ class ChatAdapter(Protocol):
 
 def json_instruction(schema: dict[str, Any]) -> str:
     return (
-        "\n\n반드시 아래 JSON Schema에 맞는 JSON 객체 하나만 답하세요. 설명이나 코드 블록 표시는 쓰지 마세요.\n"
+        "\n\n반드시 아래 JSON Schema에 맞는 JSON 객체 하나만 답하세요. 설명이나 코드 단계 표시는 쓰지 마세요.\n"
         + json.dumps(schema, ensure_ascii=False)
     )
 

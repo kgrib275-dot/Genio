@@ -136,7 +136,7 @@ CASES: list[tuple[str, str, Call]] = [
         lambda c, t, r: c.get(f"/api/v1/workspaces/{t.ws}/members", headers=t.h(r)),
     ),
     (
-        "노드 목록",
+        "단계 목록",
         "any_member",
         lambda c, t, r: c.get(f"/api/v1/workspaces/{t.ws}/nodes", headers=t.h(r)),
     ),

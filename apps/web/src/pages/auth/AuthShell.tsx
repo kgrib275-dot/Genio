@@ -47,7 +47,7 @@ function prefersReducedMotion(): boolean {
   }
 }
 
-/** 요청 문장을 한 글자씩 치고, 흐름 블록을 하나씩 띄우는 시연. 끝나면 다음 예시로. */
+/** 요청 문장을 한 글자씩 치고, 흐름 단계를 하나씩 띄우는 시연. 끝나면 다음 예시로. */
 function BuilderDemo() {
   const [idx, setIdx] = useState(0);
   const [typed, setTyped] = useState(0);
@@ -105,7 +105,7 @@ function BuilderDemo() {
         </span>
         {done ? "흐름을 만들었어요. 바로 테스트해 볼 수 있어요." : "흐름을 그리는 중…"}
       </div>
-      {/* 흐름 블록 */}
+      {/* 흐름 단계 */}
       <ol className="relative mt-4 space-y-2.5 pl-1">
         {sc.steps.map((s, i) => {
           const Icon = s.icon;

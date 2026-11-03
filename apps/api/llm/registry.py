@@ -41,7 +41,7 @@ def default_factory(provider: str, api_key: str, base_url: str | None) -> ChatAd
     )
 
 
-# 테스트에서 가짜 어댑터로 바꿀 수 있게 모듈 변수로 둔다
+# 테스트에서 가짜 어댑터로 바꿀 수 있게 모듈 값으로 둔다
 adapter_factory: AdapterFactory = default_factory
 
 
@@ -95,7 +95,7 @@ def resolve_llm(
         if chosen is None:
             raise LlmError(
                 f"'{ref}' AI 연결을 찾지 못했어요.",
-                "노드 설정에서 AI 연결을 '기본'으로 바꾸거나 다시 고르세요.",
+                "단계 설정에서 AI 연결을 '기본'으로 바꾸거나 다시 고르세요.",
             )
     secret = decrypt_str(chosen.api_key_encrypted)
     adapter = adapter_factory(chosen.provider, secret, chosen.base_url)

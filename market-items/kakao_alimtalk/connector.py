@@ -10,7 +10,10 @@ BASE = "https://api-alimtalk.cloud.toast.com/alimtalk/v2.3/appkeys/"
 
 
 def _headers(secrets: dict[str, Any]) -> dict[str, str]:
-    return {"X-Secret-Key": str(secrets.get("secret_key") or ""), "Content-Type": "application/json;charset=UTF-8"}
+    return {
+        "X-Secret-Key": str(secrets.get("secret_key") or ""),
+        "Content-Type": "application/json;charset=UTF-8",
+    }
 
 
 def _header_ok(res: dict[str, Any]) -> dict[str, Any]:
@@ -31,7 +34,14 @@ def send(params: dict[str, Any], secrets: dict[str, Any], net: Any) -> dict[str,
     body = {
         "senderKey": str(secrets.get("sender_key") or ""),
         "templateCode": str(params["template_code"]),
-        "recipientList": [{"recipientNo": to, "templateParameter": {str(k): str(v) for k, v in (params.get("parameters") or {}).items()}}],
+        "recipientList": [
+            {
+                "recipientNo": to,
+                "templateParameter": {
+                    str(k): str(v) for k, v in (params.get("parameters") or {}).items()
+                },
+            }
+        ],
     }
     url = BASE + quote(str(secrets.get("app_key") or "")) + "/messages"
     data = _header_ok(net.http("POST", url, headers=_headers(secrets), json=body))
@@ -40,6 +50,11 @@ def send(params: dict[str, Any], secrets: dict[str, Any], net: Any) -> dict[str,
 
 
 def test(secrets: dict[str, Any], net: Any) -> dict[str, Any]:
-    url = BASE + quote(str(secrets.get("app_key") or "")) + "/senders/" + quote(str(secrets.get("sender_key") or ""))
+    url = (
+        BASE
+        + quote(str(secrets.get("app_key") or ""))
+        + "/senders/"
+        + quote(str(secrets.get("sender_key") or ""))
+    )
     _header_ok(net.http("GET", url, headers=_headers(secrets)))
     return {"message": "알림톡 발신 프로필을 확인했어요."}

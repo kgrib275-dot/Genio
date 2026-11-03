@@ -39,7 +39,7 @@ PREVIEW_PREFIX = "preview:"
 
 # ---------------- 답 조각(delta) 중계 ----------------
 class DeltaSource(Protocol):
-    """실행 중 AI 블록이 흘려보내는 답 조각을 받는 곳. 테스트는 가짜로 바꿔 끼운다."""
+    """실행 중 AI 단계가 흘려보내는 답 조각을 받는 곳. 테스트는 가짜로 바꿔 끼운다."""
 
     def poll(self, timeout: float) -> list[dict[str, Any]]: ...
 
@@ -439,7 +439,7 @@ def _wait_for_answer(
                 continue
             node_id = str(d.get("node_id") or "")
             if last_node is not None and node_id != last_node:
-                # 다른 AI 블록이 시작됨 → 지금까지 보여 준 조각을 지운다
+                # 다른 AI 단계가 시작됨 → 지금까지 보여 준 조각을 지운다
                 yield ("delta_reset", {})
             last_node = node_id
             yield ("delta", {"text": str(d.get("text", "")), "node_id": node_id})

@@ -1,4 +1,4 @@
-// 노드 설정 폼의 사용자 정의 위젯(설계서 §9: JSON Schema → 폼 자동 생성)
+// 단계 설정 폼의 사용자 정의 위젯(설계서 §9: JSON Schema → 폼 자동 생성)
 import { useIsDark } from "@/store/theme";
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import type { FieldProps, IconButtonProps, WidgetProps } from "@rjsf/utils";
@@ -108,7 +108,7 @@ export function KbWidget(props: WidgetProps) {
   );
 }
 
-/** 다른 앱 실행 블록: 같은 워크스페이스의 다른 앱(지금 앱 제외) */
+/** 다른 앱 실행 단계: 같은 워크스페이스의 다른 앱(지금 앱 제외) */
 export function AppWidget(props: WidgetProps) {
   const apps = useApps(ctxOf(props).wsId);
   const current = useCanvas((s) => s.appId);
@@ -139,7 +139,7 @@ export function AppWidget(props: WidgetProps) {
   );
 }
 
-/** 데이터 표 블록: 워크스페이스의 데이터 표 */
+/** 데이터 표 단계: 워크스페이스의 데이터 표 */
 export function DataTableWidget(props: WidgetProps) {
   const tables = useDataTables(ctxOf(props).wsId);
   return (

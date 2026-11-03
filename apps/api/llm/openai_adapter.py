@@ -50,7 +50,7 @@ def _map_error(exc: Exception) -> LlmError:
         )
     if isinstance(exc, openai.BadRequestError):
         return LlmError(
-            "AI가 요청 형식을 받아들이지 않았어요.", "모델 이름과 노드 설정을 확인하세요."
+            "AI가 요청 형식을 받아들이지 않았어요.", "모델 이름과 단계 설정을 확인하세요."
         )
     if isinstance(exc, openai.APIConnectionError):
         return LlmError(

@@ -16,7 +16,7 @@ const base: Graph = {
 };
 
 describe("applyPatch", () => {
-  it("노드를 추가하고 같은 id면 바꿔 끼운다", () => {
+  it("단계를 추가하고 같은 id면 바꿔 끼운다", () => {
     const g = applyPatch(base, [
       {
         op: "add_node",
@@ -32,12 +32,12 @@ describe("applyPatch", () => {
     expect(base.nodes).toHaveLength(2);
   });
 
-  it("노드 data를 합쳐서 고친다", () => {
+  it("단계 data를 합쳐서 고친다", () => {
     const g = applyPatch(base, [{ op: "update_node", id: "n2", data: { template: "b" } }]);
     expect(g.nodes[1]?.data).toEqual({ label: "결과", template: "b" });
   });
 
-  it("노드를 지우면 이어진 선도 지운다", () => {
+  it("단계를 지우면 이어진 선도 지운다", () => {
     const g = applyPatch(base, [{ op: "remove_node", id: "n2" }]);
     expect(g.nodes.map((n) => n.id)).toEqual(["n1"]);
     expect(g.edges).toEqual([]);
@@ -53,7 +53,7 @@ describe("applyPatch", () => {
     expect(removed.edges.map((e) => e.id)).toEqual(["e2"]);
   });
 
-  it("하이라이트할 노드 id를 모은다", () => {
+  it("하이라이트할 단계 id를 모은다", () => {
     expect(
       touchedNodeIds([
         { op: "update_node", id: "n2", data: {} },

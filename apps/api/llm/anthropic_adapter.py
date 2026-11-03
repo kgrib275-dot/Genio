@@ -43,7 +43,7 @@ def _map_error(exc: Exception) -> LlmError:
         return LlmError("AI 요청이 너무 많아요.", "잠시 후 다시 시도하세요.", retryable=True)
     if isinstance(exc, anthropic.BadRequestError):
         return LlmError(
-            "AI가 요청 형식을 받아들이지 않았어요.", "모델 이름과 노드 설정을 확인하세요."
+            "AI가 요청 형식을 받아들이지 않았어요.", "모델 이름과 단계 설정을 확인하세요."
         )
     if isinstance(exc, anthropic.APIConnectionError):
         return LlmError(
@@ -197,7 +197,7 @@ class AnthropicAdapter:
             if role == "user":
                 out.append({"role": "user", "content": m["content"]})
             elif role == "assistant":
-                # 같은 대화 안에서는 원본 블록(생각 블록 포함)을 바꾸지 않고 그대로 돌려준다
+                # 같은 대화 안에서는 원본 단계(생각 단계 포함)을 바꾸지 않고 그대로 돌려준다
                 content = m.get("native") if m.get("native") is not None else m["content"]
                 out.append({"role": "assistant", "content": content})
             elif role == "tool":

@@ -1,4 +1,4 @@
-"""앱 기능(App Toolkit) 기본값과 앱 환경 변수(비밀 암호화·마스킹)."""
+"""앱 기능(App Toolkit) 기본값과 앱 환경 값(비밀 암호화·마스킹)."""
 
 import copy
 from typing import Any
@@ -74,7 +74,7 @@ def patch_features(saved: dict[str, Any] | None, patch: dict[str, Any]) -> dict[
     return current
 
 
-# ---------------- 환경 변수 ----------------
+# ---------------- 환경 값 ----------------
 # 저장 형식: [{"key", "secret": bool, "value"(비밀 아님) | "value_enc"(비밀)}]
 
 

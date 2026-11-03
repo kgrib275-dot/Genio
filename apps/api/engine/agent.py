@@ -1,4 +1,4 @@
-"""agent 노드: AI가 도구(웹 읽기·지식 검색·서비스 연결·다른 앱)를 스스로 골라 쓰는 루프."""
+"""agent 단계: AI가 도구(웹 읽기·지식 검색·서비스 연결·다른 앱)를 스스로 골라 쓰는 루프."""
 
 import json
 import re
@@ -121,7 +121,7 @@ def call_tool(services: "RunServices", spec: dict[str, Any], args: dict[str, Any
     if kind == "connector":
         cred = str(spec.get("credential_id") or "")
         if not cred or services.db.get(ConnectorCredential, cred) is None:
-            raise NodeError("에이전트 도구의 연결 정보가 없어요. 노드 설정에서 골라 주세요.")
+            raise NodeError("에이전트 도구의 연결 정보가 없어요. 단계 설정에서 골라 주세요.")
         out = services.run_connector(
             connector=str(spec["connector"]),
             credential_id=cred,

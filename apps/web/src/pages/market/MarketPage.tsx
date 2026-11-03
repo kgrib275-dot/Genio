@@ -158,7 +158,7 @@ export default function MarketPage() {
     <PageContainer>
       <PageHeader
         title="마켓"
-        description="필요한 서비스 연결·노드·템플릿을 설치해서 바로 써요."
+        description="필요한 서비스 연결·단계·템플릿을 설치해서 바로 써요."
         help={<HelpButton page="market" />}
       />
       <Tabs

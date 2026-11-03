@@ -300,7 +300,7 @@ function TriggerDialog({
         editing
           ? "자동 실행 고치기"
           : kind === "webhook"
-            ? "웹훅 만들기(바깥에서 부르기)"
+            ? "외부에서 받기 만들기"
             : "예약 만들기(정해진 시간에)"
       }
       footer={
@@ -519,7 +519,7 @@ function TriggerDialog({
               </div>
               <p className="mt-1 text-[11px] text-slate-400">
                 숫자·true/false는 그 값으로, 나머지는 글로 넣어요. 템플릿으로 오늘 날짜 같은 값이
-                필요하면 흐름 안에서 날짜·시간 블록을 쓰세요.
+                필요하면 흐름 안에서 날짜·시간 단계를 쓰세요.
               </p>
             </div>
           </>
@@ -588,13 +588,13 @@ function TriggerItem({
         </span>
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-semibold text-slate-900">
-            {t.name || (isHook ? "웹훅" : "예약")}
+            {t.name || (isHook ? "외부에서 받기" : "예약")}
           </p>
           <p className="text-xs text-slate-500">
             {isHook
               ? t.config.mode === "sync"
-                ? "웹훅 · 결과 기다리기"
-                : "웹훅 · 바로 받기"
+                ? "외부에서 받기 · 결과 기다리기"
+                : "외부에서 받기 · 바로 받기"
               : `${describeCron(t.config.cron ?? "")} · ${TIMEZONES.find((z) => z.value === t.config.timezone)?.label ?? t.config.timezone ?? ""}`}
             {t.config.version ? ` · 버전 ${t.config.version}` : " · 최근 버전"}
           </p>
@@ -804,13 +804,13 @@ export default function AppTriggersPage() {
     key: "triggers",
     defaultSize: 10,
     search: (t) =>
-      `${t.name} ${t.kind === "webhook" ? "웹훅" : "예약"} ${t.config.cron ? describeCron(t.config.cron) : ""}`,
+      `${t.name} ${t.kind === "webhook" ? "외부에서 받기" : "예약"} ${t.config.cron ? describeCron(t.config.cron) : ""}`,
     filters: [
       {
         id: "kind",
         label: "종류",
         options: [
-          { value: "webhook", label: "웹훅" },
+          { value: "webhook", label: "외부에서 받기" },
           { value: "schedule", label: "예약" },
         ],
         match: (t, v) => t.kind === v,
@@ -835,7 +835,8 @@ export default function AppTriggersPage() {
           <div>
             <h2 className="text-lg font-bold text-slate-900">자동 실행</h2>
             <p className="text-sm text-slate-500">
-              바깥 서비스가 주소로 부르거나(웹훅), 정해진 시간마다(예약) 이 흐름을 실행해요.
+              바깥 서비스가 주소로 부르거나(외부에서 받기), 정해진 시간마다(예약) 이 흐름을
+              실행해요.
             </p>
           </div>
           {editable && (
@@ -844,7 +845,7 @@ export default function AppTriggersPage() {
                 variant="outline"
                 onClick={() => setDialog({ kind: "webhook", editing: null })}
               >
-                <Webhook className="h-4 w-4" /> 웹훅 만들기
+                <Webhook className="h-4 w-4" /> 외부에서 받기 만들기
               </Button>
               <Button onClick={() => setDialog({ kind: "schedule", editing: null })}>
                 <CalendarClock className="h-4 w-4" /> 예약 만들기
@@ -860,7 +861,7 @@ export default function AppTriggersPage() {
           <Empty icon={<CalendarClock className="h-10 w-10" />}>
             <p className="font-medium text-slate-700">아직 자동 실행이 없어요</p>
             <p className="max-w-md">
-              <b>웹훅</b>은 쇼핑몰·설문·다른 자동화 도구가 주소로 부르면 흐름을 실행해요.{" "}
+              <b>외부에서 받기</b>는 쇼핑몰·설문·다른 자동화 도구가 주소로 부르면 흐름을 실행해요.{" "}
               <b>예약</b>은 &quot;평일 아침 9시&quot;처럼 정한 시간에 실행해요.
             </p>
           </Empty>

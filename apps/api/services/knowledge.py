@@ -411,7 +411,7 @@ def search(
 ) -> list[dict[str, Any]]:
     kb = db.get(KnowledgeBase, kb_id)
     if kb is None or kb.workspace_id != workspace_id:
-        raise NodeError("지식베이스를 찾을 수 없어요. 노드 설정에서 다시 골라 주세요.")
+        raise NodeError("지식베이스를 찾을 수 없어요. 단계 설정에서 다시 골라 주세요.")
     if not query.strip():
         return []
     cfg = kb_settings(kb)["retrieval"]

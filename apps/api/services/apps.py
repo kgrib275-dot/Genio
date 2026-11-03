@@ -150,7 +150,7 @@ def save_version(
         raise AppError(
             422,
             "흐름에 고칠 부분이 있어 저장하지 못했어요.",
-            "빨간 테두리 노드를 눌러 오류를 고친 뒤 다시 저장하세요.",
+            "빨간 테두리 단계를 눌러 오류를 고친 뒤 다시 저장하세요.",
             errors=[e.model_dump() for e in result.errors],
         )
     last = latest_version(db, app.id)

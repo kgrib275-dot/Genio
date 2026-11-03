@@ -1,4 +1,4 @@
-"""코드 노드 샌드박스 프로세스(code_runner가 `python -I`로 실행). stdin JSON → stdout JSON 한 줄."""
+"""코드 단계 샌드박스 프로세스(code_runner가 `python -I`로 실행). stdin JSON → stdout JSON 한 줄."""
 
 import json
 import sys

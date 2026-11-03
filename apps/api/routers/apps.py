@@ -293,7 +293,7 @@ def create_run(app_id: str, body: RunIn, ctx: AppBuilders) -> dict[str, Any]:
             raise AppError(
                 422,
                 "흐름에 고칠 부분이 있어 실행하지 못했어요.",
-                "빨간 테두리 노드의 오류를 먼저 고치세요.",
+                "빨간 테두리 단계의 오류를 먼저 고치세요.",
                 errors=[e.model_dump() for e in result.errors],
             )
         run = Run(

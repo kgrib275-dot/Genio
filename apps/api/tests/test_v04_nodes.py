@@ -1,4 +1,4 @@
-"""v0.4 블록: 기다리기·값 정리·날짜·시간·다른 앱 실행·데이터 표, 끈 블록 건너뛰기, 캔버스 메모(ADR 0008)."""
+"""v0.4 단계: 기다리기·값 정리·날짜·시간·다른 앱 실행·데이터 표, 끈 단계 건너뛰기, 캔버스 메모(ADR 0008)."""
 
 from typing import Any
 
@@ -11,7 +11,7 @@ from api.tests.fakes import FakeAdapter
 
 
 def chain(*nodes: dict[str, Any], edges: list[dict[str, Any]] | None = None) -> dict[str, Any]:
-    """앞뒤로 이어진 그래프(첫 노드는 input)."""
+    """앞뒤로 이어진 그래프(첫 단계는 input)."""
     all_nodes = [
         {"id": "n1", "type": "input", "data": {"fields": [{"key": "message", "type": "text"}]}},
         *nodes,
@@ -25,7 +25,7 @@ def chain(*nodes: dict[str, Any], edges: list[dict[str, Any]] | None = None) -> 
 
 
 def make_app(
-    client: TestClient, team: Team, graph: dict[str, Any], *, save: bool = False, name: str = "블록"
+    client: TestClient, team: Team, graph: dict[str, Any], *, save: bool = False, name: str = "단계"
 ) -> str:
     app_id: str = client.post(
         f"/api/v1/workspaces/{team.ws}/apps", json={"name": name}, headers=team.h("builder")
@@ -246,7 +246,7 @@ def test_run_app_subflow(client: TestClient, team: Team) -> None:
 
 def test_disabled_nodes_skip(client: TestClient, team: Team, fake_llm: FakeAdapter) -> None:
     add_llm(client, team)
-    # 끈 LLM 블록은 설정이 비어 있어도(필수 칸 없음) 검증을 통과하고, 실행에서 건너뛴다
+    # 끈 LLM 단계는 설정이 비어 있어도(필수 칸 없음) 검증을 통과하고, 실행에서 건너뛴다
     g = chain(
         {"id": "n2", "type": "llm", "data": {}, "disabled": True},
         out("{{n1.message}}/{{n2.message}}"),
@@ -288,7 +288,7 @@ def test_disabled_input_rejected_and_notes_kept(client: TestClient, team: Team) 
     app_id = make_app(client, team, g)
     res = client.post(f"/api/v1/apps/{app_id}/runs", json={"input": {}}, headers=team.h("builder"))
     assert res.status_code == 422
-    assert any("입력 블록은 끌 수 없어요" in e["message"] for e in res.json()["detail"]["errors"])
+    assert any("입력 단계는 끌 수 없어요" in e["message"] for e in res.json()["detail"]["errors"])
 
     noted = chain(out("x"))
     noted["notes"] = [

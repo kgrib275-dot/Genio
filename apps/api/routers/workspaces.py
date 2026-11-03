@@ -1,4 +1,4 @@
-"""워크스페이스: 멤버·초대·역할, AI 연결(LLM 키), 노드 카탈로그, 템플릿, 운영(실행 이력·사용량·감사 로그)."""
+"""워크스페이스: 멤버·초대·역할, AI 연결(LLM 키), 단계 카탈로그, 템플릿, 운영(실행 이력·사용량·감사 로그)."""
 
 import json
 import time
@@ -293,7 +293,7 @@ def delete_provider(ws: str, provider_id: str, ctx: SecretManagers) -> Response:
     return Response(status_code=204)
 
 
-# ---------------- 노드·템플릿·프롬프트 ----------------
+# ---------------- 단계·템플릿·프롬프트 ----------------
 @router.get("/workspaces/{ws}/nodes")
 def list_nodes(ws: str, ctx: Members) -> list[dict[str, Any]]:
     market.ensure_market_nodes(ctx.db)

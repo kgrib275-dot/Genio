@@ -1,4 +1,4 @@
-// 웹 요청 블록: cURL 명령을 붙여 넣으면 방식·주소·헤더·본문을 채운다.
+// 웹 요청 단계: cURL 명령을 붙여 넣으면 방식·주소·헤더·본문을 채운다.
 import { ClipboardPaste } from "lucide-react";
 import { useState } from "react";
 import { parseCurl } from "@/components/canvas/curl";

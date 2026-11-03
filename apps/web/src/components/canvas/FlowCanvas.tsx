@@ -62,7 +62,7 @@ function typingInField(target: EventTarget | null): boolean {
 interface Menu {
   x: number;
   y: number;
-  /** 블록 위에서 열었으면 블록 id, 빈 곳이면 null */
+  /** 단계 위에서 열었으면 단계 id, 빈 곳이면 null */
   nodeId: string | null;
   flow: { x: number; y: number };
 }
@@ -113,8 +113,8 @@ function Inner({ specs, readOnly }: { specs: NodeType[]; readOnly?: boolean }) {
   const dark = useIsDark();
   const specMap = useMemo(() => new Map(specs.map((s) => [s.type, s])), [specs]);
 
-  // fitView 속성은 첫 렌더에만 적용된다. 흐름을 불러오거나 빌더가 노드를 더하고 빼면
-  // 화면에 다 보이도록 다시 맞춘다(노드를 끌어 옮길 때는 맞추지 않음).
+  // fitView 속성은 첫 렌더에만 적용된다. 흐름을 불러오거나 빌더가 단계를 더하고 빼면
+  // 화면에 다 보이도록 다시 맞춘다(단계를 끌어 옮길 때는 맞추지 않음).
   const nodeIdsKey = graph.nodes.map((n) => n.id).join(",");
   useEffect(() => {
     if (!nodeIdsKey) return;
@@ -137,7 +137,7 @@ function Inner({ specs, readOnly }: { specs: NodeType[]; readOnly?: boolean }) {
 
   const nodes: FlowNode[] = useMemo(
     () => [
-      // 메모는 블록 뒤에 깔린다
+      // 메모는 단계 뒤에 깔린다
       ...(graph.notes ?? []).map((m): NoteFlowNode => ({
         id: NOTE_PREFIX + m.id,
         type: "note",

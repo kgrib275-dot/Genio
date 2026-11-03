@@ -643,6 +643,6 @@ def test_done_claim_without_validation_gets_note(
         ),
         text_turn("완료했어요!"),
     ]
-    events = send(client, team, sid, "AI 노드 하나 넣어 줘")
+    events = send(client, team, sid, "AI 단계 하나 넣어 줘")
     done = next(d for n, d in events if n == "done")
     assert "아직 검증을 통과하지 못했어요" in done["content"]

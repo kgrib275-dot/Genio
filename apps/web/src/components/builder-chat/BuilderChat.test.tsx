@@ -30,7 +30,7 @@ vi.mock("@/lib/api/builder", async (orig) => {
           created_at: now,
         },
       });
-      onEvent({ event: "text", data: { delta: "분류 노드를 " } });
+      onEvent({ event: "text", data: { delta: "분류 단계를 " } });
       onEvent({ event: "text", data: { delta: "추가할게요." } });
       onEvent({ event: "tool_call", data: { id: "t1", name: "add_node", input: { type: "llm" } } });
       onEvent({
@@ -85,7 +85,7 @@ describe("BuilderChatView", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: "보내기" }));
 
-    expect(await screen.findByText("분류 노드를 추가할게요.")).toBeInTheDocument();
+    expect(await screen.findByText("분류 단계를 추가할게요.")).toBeInTheDocument();
     expect(screen.getByText("문의를 분류해 줘")).toBeInTheDocument();
     expect(screen.getByText("단계 추가")).toBeInTheDocument();
     expect(screen.getByText("어느 채널로 보낼까요?")).toBeInTheDocument();

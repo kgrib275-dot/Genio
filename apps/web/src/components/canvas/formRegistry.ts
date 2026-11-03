@@ -1,4 +1,4 @@
-// 노드 설정 폼에 넘기는 rjsf 위젯·필드·버튼 묶음
+// 단계 설정 폼에 넘기는 rjsf 위젯·필드·버튼 묶음
 import type { RegistryFieldsType, RegistryWidgetsType, TemplatesType } from "@rjsf/utils";
 import {
   AddButton,

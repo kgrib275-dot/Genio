@@ -105,7 +105,7 @@ def test_trigger_permissions(client: TestClient, team: Team) -> None:
 def test_webhook_async_sync_rotate_disable(client: TestClient, team: Team) -> None:
     app_id = make_app(client, team, echo_graph(), save=False)
     t = add_trigger(client, team, app_id, "webhook", {"mode": "async"}).json()
-    assert t["kind"] == "webhook" and "/api/v1/hooks/" in t["url"] and t["name"] == "웹훅"
+    assert t["kind"] == "webhook" and "/api/v1/hooks/" in t["url"] and t["name"] == "외부에서 받기"
     path = hook_path(t["url"])
     # 저장한 버전이 없으면 409
     nov = client.post(path, json={"message": "x"})

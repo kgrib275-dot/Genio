@@ -1,6 +1,6 @@
-"""v0.4 노드 5종(ADR 0008): 기다리기, 값 정리, 날짜·시간, 다른 앱 실행, 데이터 표.
+"""v0.4 단계 5종(ADR 0008): 기다리기, 값 정리, 날짜·시간, 다른 앱 실행, 데이터 표.
 
-n8n Wait·Edit Fields·Date & Time·Execute Workflow·Data Table에 해당한다. 기본 노드와 같은 NodeSpec 인터페이스.
+n8n Wait·Edit Fields·Date & Time·Execute Workflow·Data Table에 해당한다. 기본 단계와 같은 NodeSpec 인터페이스.
 """
 
 import json

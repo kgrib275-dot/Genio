@@ -1,4 +1,4 @@
-// v0.4 API 훅: 자동 실행(웹훅·예약), 실행 다시 하기, 데이터 표(docs/api.md v0.4)
+// v0.4 API 훅: 자동 실행(외부에서 받기·예약), 실행 다시 하기, 데이터 표(docs/api.md v0.4)
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, rawRequest, toApiError } from "@/lib/api/client";
 import type {

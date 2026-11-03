@@ -36,7 +36,7 @@ export const ko = {
   },
   marketTypes: {
     template: "템플릿",
-    node: "노드",
+    node: "단계",
     connector: "서비스 연결",
     prompt_pack: "프롬프트 모음",
   },

@@ -1,6 +1,6 @@
 import type { NodeType } from "@/lib/api/types";
 
-/** condition 노드의 분기 핸들 id 목록(case id들 + 나머지). */
+/** condition 단계의 분기 핸들 id 목록(case id들 + 나머지). */
 export function conditionHandles(data: Record<string, unknown>): string[] {
   const cases = (data.cases as { id?: string }[] | undefined) ?? [];
   const ids = cases.map((c) => c.id).filter((x): x is string => Boolean(x));
@@ -13,7 +13,7 @@ export interface BranchHandle {
   label: string;
 }
 
-/** 분기 노드(condition, question_classifier)의 출구 핸들. 다른 노드는 빈 목록. */
+/** 분기 단계(condition, question_classifier)의 출구 핸들. 다른 단계는 빈 목록. */
 export function branchHandles(type: string, data: Record<string, unknown>): BranchHandle[] {
   if (type === "condition") return conditionHandles(data).map((id) => ({ id, label: id }));
   if (type === "question_classifier") {
@@ -36,7 +36,7 @@ export function hasFailHandle(data: Record<string, unknown>): boolean {
   return data._on_error === "branch";
 }
 
-/** 새 노드의 기본 data(스키마 기본값 + 종류별 시작 값). */
+/** 새 단계의 기본 data(스키마 기본값 + 종류별 시작 값). */
 export function defaultData(spec: NodeType | undefined): Record<string, unknown> {
   const props = (spec?.input_schema.properties ?? {}) as Record<string, { default?: unknown }>;
   const data: Record<string, unknown> = { label: spec?.label ?? "" };

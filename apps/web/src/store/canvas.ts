@@ -54,7 +54,7 @@ export function applyPatch(graph: Graph, ops: PatchOp[]): Graph {
   return { ...graph, nodes, edges };
 }
 
-/** patch가 건드린 노드 id 목록(하이라이트용). */
+/** patch가 건드린 단계 id 목록(하이라이트용). */
 export function touchedNodeIds(ops: PatchOp[]): string[] {
   const ids = new Set<string>();
   for (const op of ops) {
@@ -105,7 +105,7 @@ interface CanvasState {
   /** 사용자 편집 횟수. 늘어나면 작업본 저장을 예약한다. */
   editSeq: number;
   selectedId: string | null;
-  /** 함께 고른 블록들(복사·끄기·삭제 대상). selectedId는 설정 패널에 여는 블록 하나. */
+  /** 함께 고른 단계들(복사·끄기·삭제 대상). selectedId는 설정 패널에 여는 단계 하나. */
   selectedIds: string[];
   /** 되돌리기·다시 하기 기록 */
   history: History;

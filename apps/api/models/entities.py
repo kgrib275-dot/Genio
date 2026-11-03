@@ -1,7 +1,7 @@
 """모든 테이블 정의. 컬럼 삭제·이름 변경 금지(추가만)."""
 
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from typing import Any
 
@@ -17,6 +17,9 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    event,
+    func,
+    select,
 )
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -115,7 +118,7 @@ class App(Base):
     project_id: Mapped[str | None] = mapped_column(
         ForeignKey("projects.id", ondelete="SET NULL"), nullable=True, index=True
     )
-    # v0.2: 앱 기능(App Toolkit)·환경 변수(비밀은 value_enc에 암호화)
+    # v0.2: 앱 기능(App Toolkit)·환경 값(비밀은 value_enc에 암호화)
     features: Mapped[dict[str, Any]] = mapped_column(JsonType, default=dict, server_default="{}")
     env_vars: Mapped[list[dict[str, Any]]] = mapped_column(
         JsonType, default=list, server_default="[]"
@@ -202,7 +205,7 @@ class Conversation(Base):
     )
     user_id: Mapped[str | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     external_session_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
-    # v0.2: 대화 변수({{conv.x}})
+    # v0.2: 대화 값({{conv.x}})
     variables: Mapped[dict[str, Any]] = mapped_column(JsonType, default=dict, server_default="{}")
     # v0.5: 상담원 전환 bot | handoff(사람 대기·응대 중) | closed
     status: Mapped[str] = mapped_column(String(20), default="bot", server_default="bot")
@@ -515,7 +518,7 @@ class ProjectMember(Base):
     user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
 
 
-# ---------- v0.4 자동 실행(웹훅·예약)과 데이터 표 ----------
+# ---------- v0.4 자동 실행(외부에서 받기·예약)과 데이터 표 ----------
 class AppTrigger(Base):
     """앱을 자동으로 실행하는 방법. kind=webhook(외부 호출) | schedule(예약)."""
 
@@ -622,3 +625,21 @@ class HumanTask(Base):
     completed_by: Mapped[str | None] = mapped_column(
         ForeignKey("users.id", name="human_tasks_completed_by_fkey"), nullable=True
     )
+
+
+# 대화 메시지는 저장 시각 순서가 곧 대화 순서다. 같은 순간(시계 해상도 안)에 저장되면 순서가
+# 뒤바뀔 수 있어, 같은 대화의 직전 메시지보다 늘 뒤가 되게 맞춘다(대화 기억 순서 보장).
+@event.listens_for(Message, "before_insert")
+def _message_after_previous(_mapper: Any, connection: Any, target: Message) -> None:
+    last = connection.execute(
+        select(func.max(Message.created_at)).where(
+            Message.conversation_id == target.conversation_id
+        )
+    ).scalar()
+    now = target.created_at or utcnow()
+    if last is not None:
+        if last.tzinfo is None and now.tzinfo is not None:
+            last = last.replace(tzinfo=now.tzinfo)
+        if now <= last:
+            now = last + timedelta(microseconds=1)
+    target.created_at = now

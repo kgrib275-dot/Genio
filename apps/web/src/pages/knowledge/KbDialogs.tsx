@@ -351,7 +351,7 @@ export function MetadataDialog({
     >
       <div className="space-y-2 text-sm">
         <p className="text-xs text-slate-500">
-          예: 부서=인사, 연도=2026. 검색이나 지식 검색 노드에서 꼬리표로 거를 수 있어요.
+          예: 부서=인사, 연도=2026. 검색이나 지식 검색 단계에서 꼬리표로 거를 수 있어요.
         </p>
         {rows.map(([k, v], i) => (
           <div key={i} className="flex gap-2">

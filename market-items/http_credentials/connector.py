@@ -12,5 +12,11 @@ def test(secrets: dict[str, Any], net: Any) -> dict[str, Any]:
     if secrets.get("header_name") and secrets.get("header_value"):
         kinds.append("헤더(" + str(secrets.get("header_name")) + ")")
     if not kinds:
-        return {"message": "아직 넣은 인증 값이 없어요. 토큰·아이디/비밀번호·헤더 중 하나를 넣으세요."}
-    return {"message": "쓸 수 있는 인증: " + ", ".join(kinds) + ". 실제 호출은 HTTP 단계의 '시험 호출'로 확인하세요."}
+        return {
+            "message": "아직 넣은 인증 값이 없어요. 토큰·아이디/비밀번호·헤더 중 하나를 넣으세요."
+        }
+    return {
+        "message": "쓸 수 있는 인증: "
+        + ", ".join(kinds)
+        + ". 실제 호출은 HTTP 단계의 '시험 호출'로 확인하세요."
+    }

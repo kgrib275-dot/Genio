@@ -45,7 +45,7 @@ def test_delta_relay(client: TestClient, team: Team, monkeypatch: pytest.MonkeyP
         [
             {"node_id": "n2", "text": "안"},
             {"node_id": "n2", "text": "녕"},
-            {"node_id": "n4", "text": "다른 블록"},
+            {"node_id": "n4", "text": "다른 단계"},
         ],
     )
     ev = chat(client, token, "안녕")
@@ -56,7 +56,7 @@ def test_delta_relay(client: TestClient, team: Team, monkeypatch: pytest.MonkeyP
         ("delta", {"text": "안", "node_id": "n2"}),
         ("delta", {"text": "녕", "node_id": "n2"}),
         ("delta_reset", {}),
-        ("delta", {"text": "다른 블록", "node_id": "n4"}),
+        ("delta", {"text": "다른 단계", "node_id": "n4"}),
     ]
     # 조각 다음에 최종 답이 오고, 구독은 닫힌다
     assert names.index("answer") > names.index("delta")

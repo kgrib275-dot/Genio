@@ -1,4 +1,4 @@
-"""마켓(설치·번들 검증·노드 등록), 배포·공개 챗(접근 규칙·속도 제한·위젯), 지식베이스, 인증."""
+"""마켓(설치·번들 검증·단계 등록), 배포·공개 챗(접근 규칙·속도 제한·위젯), 지식베이스, 인증."""
 
 import json
 from pathlib import Path
@@ -97,7 +97,7 @@ def test_market_node_registered_per_workspace(client: TestClient, team: Team) ->
         "variables": {},
     }
     app_id = client.post(
-        f"/api/v1/workspaces/{team.ws}/apps", json={"name": "노드"}, headers=team.h("builder")
+        f"/api/v1/workspaces/{team.ws}/apps", json={"name": "단계"}, headers=team.h("builder")
     ).json()["id"]
     client.put(f"/api/v1/apps/{app_id}/draft", json={"graph": graph}, headers=team.h("builder"))
     run = client.post(

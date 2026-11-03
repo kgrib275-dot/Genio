@@ -5,11 +5,11 @@ import type { Graph, GraphEdge, GraphNode, GraphNote, NoteColor } from "@/lib/ap
 // ---------------- 복사·붙여넣기 ----------------
 export interface Clip {
   nodes: GraphNode[];
-  /** 복사한 블록끼리 이어진 연결만 */
+  /** 복사한 단계끼리 이어진 연결만 */
   edges: GraphEdge[];
 }
 
-/** 고른 블록과 그 사이 연결을 복사한다. */
+/** 고른 단계와 그 사이 연결을 복사한다. */
 export function copySelection(graph: Graph, ids: string[]): Clip | null {
   const set = new Set(ids);
   const nodes = graph.nodes.filter((n) => set.has(n.id));
@@ -32,7 +32,7 @@ function maxNum(ids: string[], prefix: string): number {
   return max;
 }
 
-/** 템플릿 안의 {{옛id.값}} 참조를 새 id로 바꾼다(복사한 블록끼리만). */
+/** 템플릿 안의 {{옛id.값}} 참조를 새 id로 바꾼다(복사한 단계끼리만). */
 export function remapRefs(value: unknown, map: Map<string, string>): unknown {
   if (typeof value === "string") {
     return value.replace(/\{\{(\s*)([A-Za-z_][A-Za-z0-9_]*)(?=[.\s}|])/g, (all, sp, id) => {
@@ -51,11 +51,11 @@ export function remapRefs(value: unknown, map: Map<string, string>): unknown {
 export interface PasteResult {
   graph: Graph;
   newIds: string[];
-  /** 시작 블록처럼 하나만 있어야 해서 뺀 개수 */
+  /** 시작 단계처럼 하나만 있어야 해서 뺀 개수 */
   skipped: number;
 }
 
-/** 복사한 블록을 새 id로 붙여 넣는다. 시작(입력) 블록은 하나만 둘 수 있어 뺀다. */
+/** 복사한 단계를 새 id로 붙여 넣는다. 시작(입력) 단계는 하나만 둘 수 있어 뺀다. */
 export function pasteClip(graph: Graph, clip: Clip, offset = { x: 40, y: 40 }): PasteResult {
   const hasInput = graph.nodes.some((n) => n.type === "input");
   const usable = clip.nodes.filter((n) => !(n.type === "input" && hasInput));
@@ -92,7 +92,7 @@ export function pasteClip(graph: Graph, clip: Clip, offset = { x: 40, y: 40 }): 
 }
 
 // ---------------- 끄기·켜기 ----------------
-/** 고른 블록을 끄거나 켠다. 하나라도 켜져 있으면 모두 끄고, 모두 꺼져 있으면 모두 켠다. */
+/** 고른 단계를 끄거나 켠다. 하나라도 켜져 있으면 모두 끄고, 모두 꺼져 있으면 모두 켠다. */
 export function toggleDisabled(graph: Graph, ids: string[]): Graph {
   const set = new Set(ids);
   const targets = graph.nodes.filter((n) => set.has(n.id));
@@ -158,7 +158,7 @@ function nodeHeight(n: GraphNode): number {
   return 84 + branches * 24 + (d._on_error === "branch" ? 24 : 0);
 }
 
-/** 왼쪽에서 오른쪽으로 흐르게 블록 위치를 다시 잡는다. */
+/** 왼쪽에서 오른쪽으로 흐르게 단계 위치를 다시 잡는다. */
 export function autoLayout(graph: Graph): Graph {
   if (graph.nodes.length === 0) return graph;
   const g = new dagre.graphlib.Graph();

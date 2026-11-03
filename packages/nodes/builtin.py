@@ -1,4 +1,4 @@
-"""기본 노드 9종(설계서 §4). 1단계 6종 + knowledge_search, connector, approval."""
+"""기본 단계 9종(설계서 §4). 1단계 6종 + knowledge_search, connector, approval."""
 
 from typing import Any
 
@@ -87,7 +87,7 @@ def _run_llm(data: dict[str, Any], ctx: NodeContext) -> NodeResult:
         # 이전 대화는 지시가 아니라 자료라는 것이 드러나게 구분해 넣는다(프롬프트 인젝션 기본 방어).
         prompt = f"{quote_block('이전 대화', history)}\n\n{prompt}"
     if not prompt.strip():
-        raise NodeError("프롬프트가 비어 있어요. 노드 설정에서 프롬프트를 채워 주세요.")
+        raise NodeError("프롬프트가 비어 있어요. 단계 설정에서 프롬프트를 채워 주세요.")
     temp = data.get("temperature")
     kwargs: dict[str, Any] = {
         "provider": str(data.get("provider") or "default"),
@@ -413,7 +413,7 @@ CODE = NodeSpec(
         ),
         "required": ["code"],
     },
-    output_schema={"type": "object", "description": "result 변수의 내용"},
+    output_schema={"type": "object", "description": "result 값의 내용"},
     ui_schema={"code": {"ui:widget": "code"}, "inputs": {"ui:widget": "json"}},
     run=_run_code,
     outputs=None,
@@ -467,7 +467,7 @@ KNOWLEDGE_SEARCH = NodeSpec(
     type="knowledge_search",
     label="지식 검색",
     category="AI",
-    description="올려 둔 문서에서 질문과 가까운 내용을 찾아요. 결과를 AI 응답 노드에 넘겨 답하게 해요.",
+    description="올려 둔 문서에서 질문과 가까운 내용을 찾아요. 결과를 AI 응답 단계에 넘겨 답하게 해요.",
     input_schema={
         "type": "object",
         "properties": _props(
@@ -518,7 +518,7 @@ def _run_connector(data: dict[str, Any], ctx: NodeContext) -> NodeResult:
     if not (connector and action):
         raise NodeError("연결할 서비스와 동작을 골라 주세요.")
     if not credential_id:
-        raise NodeError("연결 정보가 선택되지 않았어요. 노드 설정에서 연결 정보를 골라 주세요.")
+        raise NodeError("연결 정보가 선택되지 않았어요. 단계 설정에서 연결 정보를 골라 주세요.")
     params = ctx.render_value(data.get("params") or {})
     if not isinstance(params, dict):
         raise NodeError("동작 설정 값은 항목:값 형태여야 해요.")

@@ -248,7 +248,7 @@ export type { PublicFeatures };
 // ---------------- 대화로 시험하기 ----------------
 type GraphLike = { nodes?: { type: string; data?: Record<string, unknown> }[] } | null | undefined;
 
-/** 작업본 그래프의 입력 블록에서 입력 항목을 꺼낸다(서버 input_fields와 같은 규칙) */
+/** 작업본 그래프의 입력 단계에서 입력 항목을 꺼낸다(서버 input_fields와 같은 규칙) */
 export function inputFieldsOfGraph(graph: GraphLike): PublicAppV2["input_fields"] {
   const node = graph?.nodes?.find((n) => n.type === "input");
   const fields = (node?.data?.fields ?? []) as {

@@ -10,7 +10,7 @@ interface Retry {
   interval_ms?: number;
 }
 
-/** 노드 공통 "실패했을 때" 설정(_retry, _on_error, _default). 바뀐 data 전체를 onChange로 넘긴다. */
+/** 단계 공통 "실패했을 때" 설정(_retry, _on_error, _default). 바뀐 data 전체를 onChange로 넘긴다. */
 export function FailureSettings({
   data,
   onChange,

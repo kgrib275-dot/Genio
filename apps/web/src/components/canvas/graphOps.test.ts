@@ -28,7 +28,7 @@ const g = (): Graph => ({
 });
 
 describe("복사·붙여넣기", () => {
-  it("고른 블록끼리의 연결만 복사한다", () => {
+  it("고른 단계끼리의 연결만 복사한다", () => {
     const clip = copySelection(g(), ["n2", "n3"]);
     expect(clip?.nodes.map((n) => n.id)).toEqual(["n2", "n3"]);
     expect(clip?.edges.map((e) => e.id)).toEqual(["e2"]);
@@ -50,7 +50,7 @@ describe("복사·붙여넣기", () => {
     for (const id of r.newIds) expect(id).toMatch(/^[A-Za-z_][A-Za-z0-9_]*$/);
   });
 
-  it("시작 블록은 하나만 둘 수 있어 붙여넣기에서 뺀다", () => {
+  it("시작 단계는 하나만 둘 수 있어 붙여넣기에서 뺀다", () => {
     const base = g();
     const clip = copySelection(base, ["n1", "n2"]);
     if (!clip) throw new Error("clip");

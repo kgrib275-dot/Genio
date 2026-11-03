@@ -1,4 +1,4 @@
-"""환경 변수 기반 설정. 값의 의미는 .env.example 참고."""
+"""환경 값 기반 설정. 값의 의미는 .env.example 참고."""
 
 from functools import lru_cache
 

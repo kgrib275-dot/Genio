@@ -1,4 +1,4 @@
-"""마켓 노드 예시: 글자 다듬기. 기본 노드와 같은 NodeSpec 인터페이스로 등록한다."""
+"""마켓 단계 예시: 글자 다듬기. 기본 단계와 같은 NodeSpec 인터페이스로 등록한다."""
 
 import re
 from typing import Any
@@ -45,7 +45,10 @@ SPEC = NodeSpec(
         },
         "required": ["text", "operation"],
     },
-    output_schema={"type": "object", "properties": {"text": {"type": "string"}, "length": {"type": "integer"}}},
+    output_schema={
+        "type": "object",
+        "properties": {"text": {"type": "string"}, "length": {"type": "integer"}},
+    },
     ui_schema={"text": {"ui:widget": "textarea"}},
     run=run,
     outputs=lambda d: ["text", "length"],

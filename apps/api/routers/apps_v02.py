@@ -1,4 +1,4 @@
-"""v0.2 앱 기능: 기능 설정·환경 변수·내보내기/가져오기/복제/되돌리기, 파일, 로그·주석·모니터링, API 키.
+"""v0.2 앱 기능: 기능 설정·환경 값·내보내기/가져오기/복제/되돌리기, 파일, 로그·주석·모니터링, API 키.
 v0.4: 대화로 시험하기(작업본 챗 미리 보기)."""
 
 import hashlib
@@ -52,7 +52,7 @@ def _detail(ctx: Ctx, app: App) -> dict[str, Any]:
     return svc.app_detail(ctx.db, app)
 
 
-# ---------------- 기능·환경 변수 ----------------
+# ---------------- 기능·환경 값 ----------------
 @router.patch("/apps/{app_id}/features")
 def update_features(app_id: str, body: dict[str, Any], ctx: AppBuilders) -> dict[str, Any]:
     app = svc.get_app(ctx.db, app_id)
@@ -639,7 +639,7 @@ def preview_chat(app_id: str, body: PreviewChatIn, ctx: AppBuilders) -> Streamin
         raise AppError(
             422,
             "흐름에 고칠 부분이 있어 대화해 볼 수 없어요.",
-            "빨간 테두리 블록의 오류를 먼저 고치세요.",
+            "빨간 테두리 단계의 오류를 먼저 고치세요.",
             errors=[e.model_dump() for e in result.errors],
         )
     req = ChatRequest(

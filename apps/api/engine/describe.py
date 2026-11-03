@@ -137,7 +137,7 @@ def _count(value: Any) -> int:
 
 
 def describe_step(node: dict[str, Any] | None, step: dict[str, Any], label: str) -> str:
-    """단계 하나를 한 문장으로. node는 그래프의 노드(dict), step은 step_dict 결과."""
+    """단계 하나를 한 문장으로. node는 그래프의 단계(dict), step은 step_dict 결과."""
     status = str(step.get("status") or "")
     ntype = str((node or {}).get("type") or "")
     data = _data(node, step)

@@ -125,7 +125,7 @@ def clean_webhook(config: dict[str, Any]) -> dict[str, Any]:
     if mode not in ("async", "sync"):
         raise AppError(
             422,
-            "웹훅 응답 방식을 알 수 없어요.",
+            "외부에서 받기 응답 방식을 알 수 없어요.",
             "바로 응답(async) 또는 결과까지 기다림(sync)을 고르세요.",
         )
     out: dict[str, Any] = {"mode": mode, "require_signature": bool(config.get("require_signature"))}

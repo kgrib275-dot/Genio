@@ -53,7 +53,7 @@ def message_dict(m: BuilderMessage) -> dict[str, Any]:
 
 
 def _history_text(m: BuilderMessage) -> str:
-    """이전 차례는 텍스트로만 넘긴다(툴 블록·생각 블록을 다음 차례에 다시 보내지 않음)."""
+    """이전 차례는 텍스트로만 넘긴다(툴 단계·생각 단계를 다음 차례에 다시 보내지 않음)."""
     text = m.content or ""
     rec = m.graph_patch or {}
     extras = []

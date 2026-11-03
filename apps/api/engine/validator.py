@@ -1,5 +1,5 @@
-"""그래프 검증(설계서 §4): 형식, 노드 타입, 노드 설정, 순환, input 1개·output ≥1개,
-참조 변수, 분기 핸들, 병렬 분기 금지, 커넥터 연결 정보·지식베이스 존재."""
+"""그래프 검증(설계서 §4): 형식, 단계 타입, 단계 설정, 순환, input 1개·output ≥1개,
+참조 값, 분기 핸들, 병렬 분기 금지, 커넥터 연결 정보·지식베이스 존재."""
 
 from collections import defaultdict, deque
 from dataclasses import dataclass, field
@@ -12,7 +12,7 @@ from api.engine.templating import iter_refs
 from api.schemas.graph import Graph, GraphError, ValidationResult
 from nodes import NodeRegistry, NodeSpec
 
-# 노드 설정에 담기지만 검증 대상에서 빼는 키(캔버스 UI용)
+# 단계 설정에 담기지만 검증 대상에서 빼는 키(캔버스 UI용)
 _UI_KEYS = {"label", "note", "_retry", "_on_error", "_default"}
 # 그래프 바깥에서 쓸 수 있는 예약 이름
 RESERVED_SCOPES = {"input", "vars", "env", "conv", "item", "index", "loop"}
@@ -21,7 +21,7 @@ RESERVED_SCOPES = {"input", "vars", "env", "conv", "item", "index", "loop"}
 @dataclass
 class ValidationEnv:
     registry: NodeRegistry
-    # 워크스페이스에서 쓸 수 있는 노드 타입(설치된 마켓 노드 포함). None이면 레지스트리 전체
+    # 워크스페이스에서 쓸 수 있는 단계 타입(설치된 마켓 단계 포함). None이면 레지스트리 전체
     allowed_types: set[str] | None = None
     # 연결 정보 id → 커넥터 key. None이면 검사하지 않음
     credentials: dict[str, str] | None = None
@@ -35,7 +35,7 @@ APPROVAL_HANDLES = ("approved", "rejected")
 
 
 def branch_handles(node_type: str, data: dict[str, Any]) -> set[str] | None:
-    """갈림길 노드의 출구 이름. 갈림길이 아니면 None."""
+    """갈림길 단계의 출구 이름. 갈림길이 아니면 None."""
     if node_type == "condition":
         h = {str(c.get("id")) for c in data.get("cases", []) if c.get("id")}
         h.add(str(data.get("else") or "else"))
@@ -48,7 +48,7 @@ def branch_handles(node_type: str, data: dict[str, Any]) -> set[str] | None:
 
 
 def ordered_branch_handles(node_type: str, data: dict[str, Any]) -> list[str]:
-    """갈림길 출구를 화면 순서대로(끈 블록이 고르는 '첫 번째 출구'용)."""
+    """갈림길 출구를 화면 순서대로(끈 단계가 고르는 '첫 번째 출구'용)."""
     if node_type == "condition":
         ids = [str(c.get("id")) for c in data.get("cases", []) if c.get("id")]
         return [*ids, str(data.get("else") or "else")]
@@ -104,27 +104,27 @@ def validate_graph(raw: dict[str, Any], env: ValidationEnv) -> ValidationResult:
 
     if len(nodes) != len(graph.nodes):
         errors.append(
-            GraphError(message="같은 id를 가진 노드가 있어요. 노드 id는 서로 달라야 해요.")
+            GraphError(message="같은 id를 가진 단계가 있어요. 단계 id는 서로 달라야 해요.")
         )
     edge_ids = [e.id for e in graph.edges]
     if len(set(edge_ids)) != len(edge_ids):
         errors.append(GraphError(message="같은 id를 가진 연결선이 있어요."))
 
-    # 노드 타입·설정
+    # 단계 타입·설정
     specs: dict[str, NodeSpec] = {}
     for node in graph.nodes:
         spec = env.registry.get(node.type)
         if node.disabled and node.type == "input":
             errors.append(
-                GraphError(node_id=node.id, message="입력 블록은 끌 수 없어요. 다시 켜 주세요.")
+                GraphError(node_id=node.id, message="입력 단계는 끌 수 없어요. 다시 켜 주세요.")
             )
         if node.disabled and spec is None:
-            continue  # 꺼 둔 블록은 설치되지 않은 마켓 블록이어도 괜찮다
+            continue  # 꺼 둔 단계는 설치되지 않은 마켓 단계여도 괜찮다
         if spec is None or (env.allowed_types is not None and node.type not in env.allowed_types):
             errors.append(
                 GraphError(
                     node_id=node.id,
-                    message=f"'{node.type}' 노드는 이 워크스페이스에서 쓸 수 없어요. 마켓에서 설치했는지 확인하세요.",
+                    message=f"'{node.type}' 단계는 이 워크스페이스에서 쓸 수 없어요. 마켓에서 설치했는지 확인하세요.",
                 )
             )
             continue
@@ -137,9 +137,9 @@ def validate_graph(raw: dict[str, Any], env: ValidationEnv) -> ValidationResult:
     inputs = [n for n in graph.nodes if n.type == "input"]
     outputs = [n for n in graph.nodes if n.type == "output" and not n.disabled]
     if len(inputs) != 1:
-        errors.append(GraphError(message=f"입력 노드는 정확히 1개여야 해요(지금 {len(inputs)}개)."))
+        errors.append(GraphError(message=f"입력 단계는 정확히 1개여야 해요(지금 {len(inputs)}개)."))
     if not outputs:
-        errors.append(GraphError(message="켜져 있는 결과 노드가 최소 1개 있어야 해요."))
+        errors.append(GraphError(message="켜져 있는 결과 단계가 최소 1개 있어야 해요."))
 
     # 연결선
     out_edges: dict[str, list[Any]] = defaultdict(list)
@@ -148,13 +148,13 @@ def validate_graph(raw: dict[str, Any], env: ValidationEnv) -> ValidationResult:
         bad = False
         for end in (e.source, e.target):
             if end not in nodes:
-                errors.append(GraphError(message=f"연결선 {e.id}가 없는 노드 '{end}'를 가리켜요."))
+                errors.append(GraphError(message=f"연결선 {e.id}가 없는 단계 '{end}'를 가리켜요."))
                 bad = True
         if bad:
             continue
         if e.source == e.target:
             errors.append(
-                GraphError(node_id=e.source, message="노드가 자기 자신으로 연결돼 있어요.")
+                GraphError(node_id=e.source, message="단계가 자기 자신으로 연결돼 있어요.")
             )
             continue
         out_edges[e.source].append(e)
@@ -173,7 +173,7 @@ def validate_graph(raw: dict[str, Any], env: ValidationEnv) -> ValidationResult:
                     errors.append(
                         GraphError(
                             node_id=nid,
-                            message="'실패' 길을 쓰려면 이 노드의 '실패했을 때'를 '실패 길로 보내기'로 바꿔 주세요.",
+                            message="'실패' 길을 쓰려면 이 단계의 '실패했을 때'를 '실패 길로 보내기'로 바꿔 주세요.",
                         )
                     )
                 elif "fail" in used:
@@ -202,14 +202,14 @@ def validate_graph(raw: dict[str, Any], env: ValidationEnv) -> ValidationResult:
             else:
                 if h:
                     errors.append(
-                        GraphError(node_id=nid, message=f"이 노드에는 '{h}' 출구가 없어요.")
+                        GraphError(node_id=nid, message=f"이 단계에는 '{h}' 출구가 없어요.")
                     )
                 plain += 1
         if plain > 1:
             errors.append(
                 GraphError(
                     node_id=nid,
-                    message="한 노드에서 여러 곳으로 동시에 갈 수 없어요(병렬 분기는 아직 지원하지 않아요).",
+                    message="한 단계에서 여러 곳으로 동시에 갈 수 없어요(병렬 분기는 아직 지원하지 않아요).",
                 )
             )
 
@@ -251,7 +251,7 @@ def validate_graph(raw: dict[str, Any], env: ValidationEnv) -> ValidationResult:
         ancestors[nid] = acc
         return acc
 
-    # 입력 노드에서 닿지 않는 노드
+    # 입력 단계에서 닿지 않는 단계
     if len(inputs) == 1:
         start = inputs[0].id
         for node in graph.nodes:
@@ -259,11 +259,11 @@ def validate_graph(raw: dict[str, Any], env: ValidationEnv) -> ValidationResult:
                 errors.append(
                     GraphError(
                         node_id=node.id,
-                        message="입력 노드에서 이어지지 않은 노드예요. 선으로 연결해 주세요.",
+                        message="입력 단계에서 이어지지 않은 단계예요. 선으로 연결해 주세요.",
                     )
                 )
 
-    # 참조 변수
+    # 참조 값
     for node in graph.nodes:
         if node.disabled:
             continue
@@ -274,7 +274,7 @@ def validate_graph(raw: dict[str, Any], env: ValidationEnv) -> ValidationResult:
             if ref_node not in nodes:
                 errors.append(
                     GraphError(
-                        node_id=node.id, message=f"없는 노드 '{ref_node}'의 값을 쓰고 있어요."
+                        node_id=node.id, message=f"없는 단계 '{ref_node}'의 값을 쓰고 있어요."
                     )
                 )
                 continue
@@ -282,13 +282,13 @@ def validate_graph(raw: dict[str, Any], env: ValidationEnv) -> ValidationResult:
                 errors.append(
                     GraphError(
                         node_id=node.id,
-                        message=f"'{ref_node}' 노드는 이 노드보다 앞에 있지 않아 값을 쓸 수 없어요.",
+                        message=f"'{ref_node}' 단계는 이 단계보다 앞에 있지 않아 값을 쓸 수 없어요.",
                     )
                 )
                 continue
             spec = specs.get(ref_node)
             if nodes[ref_node].disabled:
-                continue  # 끈 블록은 앞 단계 값을 그대로 넘기므로 이름을 미리 알 수 없다
+                continue  # 끈 단계는 앞 단계 값을 그대로 넘기므로 이름을 미리 알 수 없다
             if spec is not None and spec.outputs is not None and ref_field:
                 fields = spec.outputs(nodes[ref_node].data)
                 if fields is not None and nodes[ref_node].data.get("_on_error") in (
@@ -300,11 +300,11 @@ def validate_graph(raw: dict[str, Any], env: ValidationEnv) -> ValidationResult:
                     errors.append(
                         GraphError(
                             node_id=node.id,
-                            message=f"'{ref_node}' 노드에는 '{ref_field}' 값이 없어요. 쓸 수 있는 값: {', '.join(fields) or '없음'}",
+                            message=f"'{ref_node}' 단계에는 '{ref_field}' 값이 없어요. 쓸 수 있는 값: {', '.join(fields) or '없음'}",
                         )
                     )
 
-    # 커넥터·지식베이스·v0.4 블록
+    # 커넥터·지식베이스·v0.4 단계
     for node in graph.nodes:
         if node.disabled:
             continue

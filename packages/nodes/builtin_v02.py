@@ -1,4 +1,4 @@
-"""v0.2 노드 10종(docs/dify-gap.md §1). 기본 노드와 같은 NodeSpec 인터페이스."""
+"""v0.2 단계 10종(docs/dify-gap.md §1). 기본 단계와 같은 NodeSpec 인터페이스."""
 
 import json
 from typing import Any
@@ -191,7 +191,7 @@ TEMPLATE = NodeSpec(
     type="template",
     label="글 틀",
     category="기본",
-    description="여러 노드의 값을 하나의 글로 엮어요. Jinja2 문법(반복·조건)을 쓸 수 있어요.",
+    description="여러 단계의 값을 하나의 글로 엮어요. Jinja2 문법(반복·조건)을 쓸 수 있어요.",
     input_schema={
         "type": "object",
         "properties": {"label": LABEL, "template": {"type": "string", "title": "글 틀"}},
@@ -529,7 +529,7 @@ def _run_doc(data: dict[str, Any], ctx: NodeContext) -> NodeResult:
     ids = [str(v) for v in (value if isinstance(value, list) else [value]) if v]
     if not ids:
         raise NodeError(
-            "읽을 파일이 없어요. 입력 노드에 파일 항목을 두고 {{n1.파일키}}를 넣어 주세요."
+            "읽을 파일이 없어요. 입력 단계에 파일 항목을 두고 {{n1.파일키}}를 넣어 주세요."
         )
     texts, names = [], []
     for fid in ids:
@@ -548,7 +548,7 @@ DOCUMENT_EXTRACTOR = NodeSpec(
     type="document_extractor",
     label="파일 읽기",
     category="기본",
-    description="올린 PDF·텍스트 파일에서 글을 꺼내요. 다음 AI 노드에 {{노드.text}}로 넘겨요.",
+    description="올린 PDF·텍스트 파일에서 글을 꺼내요. 다음 AI 단계에 {{단계.text}}로 넘겨요.",
     input_schema={
         "type": "object",
         "properties": {
@@ -599,9 +599,9 @@ def _run_assigner(data: dict[str, Any], ctx: NodeContext) -> NodeResult:
 
 VARIABLE_ASSIGNER = NodeSpec(
     type="variable_assigner",
-    label="대화 변수 저장",
+    label="대화 값 저장",
     category="흐름",
-    description="챗봇이 대화 내내 기억할 값(이름, 선택한 메뉴 등)을 저장해요. 다른 노드에서 {{conv.이름}}으로 써요.",
+    description="챗봇이 대화 내내 기억할 값(이름, 선택한 메뉴 등)을 저장해요. 다른 단계에서 {{conv.이름}}으로 써요.",
     input_schema={
         "type": "object",
         "properties": {
@@ -612,7 +612,7 @@ VARIABLE_ASSIGNER = NodeSpec(
                 "items": {
                     "type": "object",
                     "properties": {
-                        "variable": {"type": "string", "title": "변수 이름(영문)"},
+                        "variable": {"type": "string", "title": "값 이름(영문)"},
                         "value": {"type": "string", "title": "값"},
                         "mode": {
                             "type": "string",
@@ -627,7 +627,7 @@ VARIABLE_ASSIGNER = NodeSpec(
         },
         "required": ["assignments"],
     },
-    output_schema={"type": "object", "description": "저장한 변수"},
+    output_schema={"type": "object", "description": "저장한 값"},
     ui_schema={},
     run=_run_assigner,
     outputs=None,

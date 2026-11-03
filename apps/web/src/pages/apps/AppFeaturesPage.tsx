@@ -344,7 +344,7 @@ export function FeaturesForm({
         <FeatureRow
           icon={<FileUp className="h-4 w-4" />}
           title="파일 첨부"
-          description="사용자가 챗에 파일을 붙일 수 있어요. 흐름의 '문서 읽기' 노드로 읽어요."
+          description="사용자가 챗에 파일을 붙일 수 있어요. 흐름의 '문서 읽기' 단계로 읽어요."
           enabled={f.file_upload.enabled}
           disabled={readOnly}
           onToggle={(v) => setF({ ...f, file_upload: { ...f.file_upload, enabled: v } })}
@@ -407,7 +407,7 @@ function EnvVarsCard({ app, readOnly }: { app: AppDetailV2; readOnly: boolean })
   return (
     <Card>
       <CardHeader
-        title="환경 변수"
+        title="환경 값"
         description={"흐름 어디서나 {{env.이름}}으로 써요. 비밀 값은 암호화되고 가려져요."}
         action={
           !readOnly && (
@@ -416,7 +416,7 @@ function EnvVarsCard({ app, readOnly }: { app: AppDetailV2; readOnly: boolean })
               disabled={save.isPending || invalid || dup}
               onClick={() =>
                 save.mutate(rows, {
-                  onSuccess: () => toast.success("환경 변수를 저장했어요."),
+                  onSuccess: () => toast.success("환경 값을 저장했어요."),
                   onError: (err) => toast.error(err),
                 })
               }
@@ -427,7 +427,7 @@ function EnvVarsCard({ app, readOnly }: { app: AppDetailV2; readOnly: boolean })
         }
       />
       <CardBody className="space-y-2">
-        {rows.length === 0 && <p className="text-sm text-slate-500">아직 환경 변수가 없어요.</p>}
+        {rows.length === 0 && <p className="text-sm text-slate-500">아직 환경 값이 없어요.</p>}
         {rows.map((r, i) => (
           <div
             key={i}
@@ -482,7 +482,7 @@ function EnvVarsCard({ app, readOnly }: { app: AppDetailV2; readOnly: boolean })
               variant="ghost"
               size="sm"
               className="h-10 text-slate-400"
-              aria-label="변수 지우기"
+              aria-label="값 지우기"
               disabled={readOnly}
               onClick={() => setRows(rows.filter((_, j) => j !== i))}
             >
@@ -503,7 +503,7 @@ function EnvVarsCard({ app, readOnly }: { app: AppDetailV2; readOnly: boolean })
             variant="outline"
             onClick={() => setRows([...rows, { key: "", value: "", secret: false }])}
           >
-            <Variable className="h-3.5 w-3.5" /> 변수 추가
+            <Variable className="h-3.5 w-3.5" /> 값 추가
           </Button>
         )}
         <ErrorBox error={save.error} />

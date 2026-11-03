@@ -51,7 +51,7 @@ class GoogleAdapter:
         if resp.status_code == 429:
             raise LlmError("AI 요청이 너무 많아요.", "잠시 후 다시 시도하세요.", retryable=True)
         if resp.status_code >= 400:
-            raise LlmError("AI가 요청을 처리하지 못했어요.", "모델 이름과 노드 설정을 확인하세요.")
+            raise LlmError("AI가 요청을 처리하지 못했어요.", "모델 이름과 단계 설정을 확인하세요.")
         data = resp.json()
         return data if isinstance(data, dict) else {}
 

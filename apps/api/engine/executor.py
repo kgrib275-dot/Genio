@@ -1,9 +1,9 @@
 """워크플로우 실행 엔진(설계서 §5).
 
-- 입력 노드에서 시작해 선택된 분기만 따라 순차 실행한다(병렬 분기 미지원).
-- 노드마다 run_steps에 기록하고 Redis로 알린다.
-- approval 노드에서 멈추고(waiting_approval), 승인되면 다음 노드부터 다시 이어 간다.
-- http·connector는 지수 백오프로 2회 재시도, 노드 60초·실행 10분 제한.
+- 입력 단계에서 시작해 선택된 분기만 따라 순차 실행한다(병렬 분기 미지원).
+- 단계마다 run_steps에 기록하고 Redis로 알린다.
+- approval 단계에서 멈추고(waiting_approval), 승인되면 다음 단계부터 다시 이어 간다.
+- http·connector는 지수 백오프로 2회 재시도, 단계 60초·실행 10분 제한.
 - LLM 토큰 × 단가표로 비용을 계산한다.
 """
 
@@ -57,14 +57,14 @@ def now() -> datetime:
 
 
 class RunServices:
-    """노드가 쓰는 외부 자원. 노드 쪽에는 비밀값이 넘어가지 않는다."""
+    """단계가 쓰는 외부 자원. 단계 쪽에는 비밀값이 넘어가지 않는다."""
 
     def __init__(self, db: Session, workspace_id: str) -> None:
         self.db = db
         self.workspace_id = workspace_id
         self.usage: list[tuple[str, int, int]] = []
         self.depth = 0
-        # v0.4: 답 조각을 받는 곳(node_id, 글 조각)과 지금 실행 중인 노드
+        # v0.4: 답 조각을 받는 곳(node_id, 글 조각)과 지금 실행 중인 단계
         self.on_delta: Callable[[str, str], None] | None = None
         self.current_node: str = ""
 
@@ -217,7 +217,7 @@ class RunServices:
             )
         target = self.db.get(App, app_id)
         if target is None or target.workspace_id != self.workspace_id:
-            raise NodeError("실행할 앱을 찾을 수 없어요. 블록 설정에서 앱을 다시 골라 주세요.")
+            raise NodeError("실행할 앱을 찾을 수 없어요. 단계 설정에서 앱을 다시 골라 주세요.")
         version = self.db.scalar(
             select(WorkflowVersion)
             .where(WorkflowVersion.app_id == app_id)
@@ -266,7 +266,7 @@ class RunServices:
 
         table = self.db.get(DataTable, table_id)
         if table is None or table.workspace_id != self.workspace_id:
-            raise NodeError("데이터 표를 찾을 수 없어요. 블록 설정에서 표를 다시 골라 주세요.")
+            raise NodeError("데이터 표를 찾을 수 없어요. 단계 설정에서 표를 다시 골라 주세요.")
         try:
             return data_tables.run_operation(
                 self.db,
@@ -292,7 +292,7 @@ def _next(graph: Graph, node_id: str, handle: str | None) -> str | None:
 
 
 def _next_skipping(graph: Graph, node_id: str) -> str | None:
-    """끈 블록 다음: 일반 출구가 있으면 그쪽, 갈림길이면 정해진 순서의 첫 출구."""
+    """끈 단계 다음: 일반 출구가 있으면 그쪽, 갈림길이면 정해진 순서의 첫 출구."""
     from api.engine.validator import ordered_branch_handles
 
     plain = _next(graph, node_id, None)
@@ -309,7 +309,7 @@ def _next_skipping(graph: Graph, node_id: str) -> str | None:
 
 
 def _node_timeout(node_type: str, data: dict[str, Any]) -> float | None:
-    """기다리기 블록은 기다리는 시간만큼 제한을 늘린다."""
+    """기다리기 단계는 기다리는 시간만큼 제한을 늘린다."""
     if node_type != "wait":
         return None
     try:
@@ -677,7 +677,7 @@ def _execute(db: Session, run_id: str) -> None:
             return
         node = graph.node(current)
         if node is None:
-            _finish(db, run, services, "failed", f"'{current}' 노드를 찾지 못했어요.")
+            _finish(db, run, services, "failed", f"'{current}' 단계를 찾지 못했어요.")
             return
         spec = registry.get(node.type)
         step_seq += 1
@@ -695,10 +695,10 @@ def _execute(db: Session, run_id: str) -> None:
         services.current_node = node.id
 
         if node.disabled and node.type != "input":
-            # 끈 블록: 실행하지 않고 앞 단계 값을 그대로 넘긴다(분기 블록은 첫 번째 출구로)
+            # 끈 단계: 실행하지 않고 앞 단계 값을 그대로 넘긴다(분기 단계는 첫 번째 출구로)
             step.status = "skipped"
             step.output = dict(prev_output)
-            step.logs = "꺼 둔 블록이라 건너뛰었어요."
+            step.logs = "꺼 둔 단계라 건너뛰었어요."
             step.finished_at = now()
             outputs[node.id] = dict(prev_output)
             db.commit()
@@ -743,7 +743,7 @@ def _execute(db: Session, run_id: str) -> None:
         try:
             if spec is None:
                 raise NodeError(
-                    f"'{node.type}' 노드를 실행할 수 없어요. 마켓에서 설치했는지 확인하세요."
+                    f"'{node.type}' 단계를 실행할 수 없어요. 마켓에서 설치했는지 확인하세요."
                 )
             result = _run_with_limits(
                 spec.run,
@@ -776,7 +776,7 @@ def _execute(db: Session, run_id: str) -> None:
             _finish(db, run, services, "failed", f"[{_label(graph, node.id)}] {msg}")
             return
         except Exception as exc:
-            log.exception("노드 실행 오류(run=%s node=%s)", run.id, node.id)
+            log.exception("단계 실행 오류(run=%s node=%s)", run.id, node.id)
             step.status = "failed"
             step.logs = "\n".join([*ctx.logs, f"예상하지 못한 오류: {type(exc).__name__}"])
             step.finished_at = now()

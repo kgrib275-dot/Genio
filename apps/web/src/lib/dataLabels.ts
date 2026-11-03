@@ -57,7 +57,7 @@ const KEY_LABELS: Record<string, string> = {
   approved: "승인",
   reason: "이유",
   type: "종류",
-  nodes: "블록",
+  nodes: "단계",
   edges: "연결",
   key: "키",
   enabled: "켜짐",

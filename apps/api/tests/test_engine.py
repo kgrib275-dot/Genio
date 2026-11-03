@@ -1,4 +1,4 @@
-"""실행 엔진: 노드 6종(input/llm/condition/http/code/output) + 승인 재개 + 재시도 + 비용."""
+"""실행 엔진: 단계 6종(input/llm/condition/http/code/output) + 승인 재개 + 재시도 + 비용."""
 
 from typing import Any
 
@@ -301,7 +301,7 @@ def test_condition_eval_blocks_dunder() -> None:
         evaluate("{{n1.x}}.__class__", {"n1": {"x": 1}})
 
 
-# ----- 코드 노드 실행기 -----
+# ----- 코드 단계 실행기 -----
 def test_code_runner_ok_blocked_and_timeout() -> None:
     runner = RestrictedPythonRunner(timeout=3)
     assert runner.run("import math\nresult = {'v': math.floor(inputs['x'] * 2)}", {"x": 1.7}) == {

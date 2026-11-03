@@ -28,7 +28,7 @@ import type {
   WorkspaceSettings,
 } from "@/lib/api/types";
 
-// ---------------- 앱 기능·환경 변수·내보내기 ----------------
+// ---------------- 앱 기능·환경 값·내보내기 ----------------
 function useAppUpdater<V>(appId: string, fn: (v: V) => Promise<AppDetailV2>) {
   const qc = useQueryClient();
   return useMutation({

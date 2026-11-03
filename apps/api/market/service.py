@@ -96,7 +96,7 @@ def _load_node_spec(item: MarketItem) -> NodeSpec:
 
 
 def ensure_market_nodes(db: Session) -> None:
-    """설치된 마켓 노드를 이 프로세스의 노드 레지스트리에 등록한다(API·워커 공통)."""
+    """설치된 마켓 단계를 이 프로세스의 단계 레지스트리에 등록한다(API·워커 공통)."""
     items = db.scalars(
         select(MarketItem)
         .join(Installation, Installation.item_id == MarketItem.id)
@@ -109,7 +109,7 @@ def ensure_market_nodes(db: Session) -> None:
             if registry.get(spec.type) is None:
                 registry.register(spec)
         except (BundleError, AppError, OSError) as exc:
-            log.warning("마켓 노드 로딩 실패(%s): %s", item.key, exc)
+            log.warning("마켓 단계 로딩 실패(%s): %s", item.key, exc)
 
 
 def market_node_types(db: Session, workspace_id: str) -> set[str]:

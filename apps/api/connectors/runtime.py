@@ -176,7 +176,7 @@ def run_connector(
     definition, manifest = _definition(db, workspace_id, connector)
     cred = db.get(ConnectorCredential, credential_id)
     if cred is None or cred.workspace_id != workspace_id:
-        raise NodeError("연결 정보를 찾을 수 없어요. 노드 설정에서 다시 골라 주세요.")
+        raise NodeError("연결 정보를 찾을 수 없어요. 단계 설정에서 다시 골라 주세요.")
     cred_def = db.get(ConnectorDefinition, cred.definition_id)
     if cred_def is None or cred_def.key != connector:
         raise NodeError("다른 서비스의 연결 정보가 선택돼 있어요.")

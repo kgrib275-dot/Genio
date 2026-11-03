@@ -85,7 +85,7 @@ export default function DataTablesPage() {
           <p className="font-medium text-slate-700">아직 데이터 표가 없어요</p>
           <p className="max-w-md">
             문의 기록, 처리한 주문 번호, 고객 목록처럼 흐름이 기억해야 할 값을 담아 두세요. 흐름에서{" "}
-            <b>데이터 표</b> 블록으로 넣고 찾을 수 있어요.
+            <b>데이터 표</b> 단계로 넣고 찾을 수 있어요.
           </p>
           {editable && (
             <Button className="mt-2" onClick={() => setDialog({ editing: null })}>

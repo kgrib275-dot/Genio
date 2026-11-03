@@ -30,7 +30,7 @@ END_STATES = {"succeeded", "failed", "waiting_approval"}
 def _not_found() -> AppError:
     return AppError(
         404,
-        "이 웹훅 주소는 쓸 수 없어요.",
+        "이 받는 주소는 쓸 수 없어요.",
         "주소가 맞는지, 앱의 자동 실행이 켜져 있는지 확인하세요.",
     )
 
@@ -86,7 +86,7 @@ def _start(
         if _rate_limited(db, app, ip, t.id):
             raise AppError(
                 429,
-                "웹훅을 너무 자주 불렀어요.",
+                "이 주소를 너무 자주 불렀어요.",
                 "1분쯤 기다린 뒤 다시 보내거나 관리자에게 한도를 늘려 달라고 하세요.",
             )
         mode = str((t.config or {}).get("mode") or "async")

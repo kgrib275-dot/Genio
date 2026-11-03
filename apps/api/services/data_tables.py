@@ -1,4 +1,4 @@
-"""데이터 표(ADR 0008): 워크스페이스 안의 작은 표. 화면·API·흐름의 data_table 블록이 함께 쓴다."""
+"""데이터 표(ADR 0008): 워크스페이스 안의 작은 표. 화면·API·흐름의 data_table 단계가 함께 쓴다."""
 
 import csv
 import io
@@ -186,7 +186,7 @@ def upsert_row(db: Session, table: DataTable, row_key: Any, data: Any) -> tuple[
     """키로 찾아 값을 합치고, 없으면 새로 만든다. (줄, 새로 만들었는지)"""
     key = clean_key(row_key)
     if key is None:
-        raise AppError(422, "덮어쓰려면 고유 키가 필요해요.", "블록의 '고유 키' 칸을 채워 주세요.")
+        raise AppError(422, "덮어쓰려면 고유 키가 필요해요.", "단계의 '고유 키' 칸을 채워 주세요.")
     values = clean_data(table, data)
     row = find_by_key(db, table.id, key)
     if row is None:
@@ -247,7 +247,7 @@ def run_operation(
     filter: dict[str, Any] | None,
     limit: int,
 ) -> dict[str, Any]:
-    """흐름 블록용. 결과 형식은 늘 {row, rows, count, found}."""
+    """흐름 단계용. 결과 형식은 늘 {row, rows, count, found}."""
     filt = {str(k): v for k, v in (filter or {}).items()}
     if operation == "insert":
         row = insert_row(db, table, row_key, data or {})
@@ -261,7 +261,7 @@ def run_operation(
         key = clean_key(row_key)
         if key is None:
             raise AppError(
-                422, "가져오려면 고유 키가 필요해요.", "블록의 '고유 키' 칸을 채워 주세요."
+                422, "가져오려면 고유 키가 필요해요.", "단계의 '고유 키' 칸을 채워 주세요."
             )
         got = find_by_key(db, table.id, key)
         return {

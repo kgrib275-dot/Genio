@@ -17,7 +17,7 @@ from api.llm.openai_adapter import OpenAIAdapter
 TOOLS = [
     ToolDef(
         "add_node",
-        "노드 추가",
+        "단계 추가",
         {"type": "object", "properties": {"type": {"type": "string"}}, "required": ["type"]},
     )
 ]
@@ -145,7 +145,7 @@ def test_anthropic_chat_streams_text_and_tool_call() -> None:
     rec = Recorder(
         lambda r: httpx2.Response(
             200,
-            content=anthropic_stream("노드를 추가할게요.", {"type": "llm"}),
+            content=anthropic_stream("단계를 추가할게요.", {"type": "llm"}),
             headers={"content-type": "text/event-stream"},
         )
     )
@@ -157,8 +157,8 @@ def test_anthropic_chat_streams_text_and_tool_call() -> None:
         tools=TOOLS,
         on_text=deltas.append,
     )
-    assert "".join(deltas) == "노드를 추가할게요." and len(deltas) == 2
-    assert turn.text == "노드를 추가할게요."
+    assert "".join(deltas) == "단계를 추가할게요." and len(deltas) == 2
+    assert turn.text == "단계를 추가할게요."
     assert [(c.name, c.input) for c in turn.tool_calls] == [("add_node", {"type": "llm"})]
     assert turn.stop_reason == "tool_use" and turn.input_tokens == 120 and turn.output_tokens == 30
 
