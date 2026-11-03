@@ -297,7 +297,7 @@ def public_chat(
     token: str, body: ChatIn, request: Request, db: DbDep, user: OptionalUser
 ) -> StreamingResponse:
     dep, app, version = _load_public(db, token)
-    if _rate_limited(app, f"chat:{client_ip(request)}"):
+    if _rate_limited(app, f"chat:{app.id}:{client_ip(request)}"):
         raise AppError(429, "요청이 너무 많아요.", "1분 뒤에 다시 시도하세요.")
     _check_access(db, dep, app, user)
     files = _own_files(db, app, body.files)
@@ -381,7 +381,7 @@ async def public_upload(
             "이 앱은 파일 첨부를 받지 않아요.",
             "앱 관리자에게 파일 첨부를 켜 달라고 요청하세요.",
         )
-    if _rate_limited(app, f"upload:{client_ip(request)}"):
+    if _rate_limited(app, f"upload:{app.id}:{client_ip(request)}"):
         raise AppError(429, "요청이 너무 많아요.", "1분 뒤에 다시 시도하세요.")
     return await save_upload(
         db, app.workspace_id, file, app_id=app.id, user_id=user.id if user else None

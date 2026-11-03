@@ -120,6 +120,10 @@ class App(Base):
     env_vars: Mapped[list[dict[str, Any]]] = mapped_column(
         JsonType, default=list, server_default="[]"
     )
+    # v0.5: 저장해 둔 테스트 입력 [{name, input}]
+    test_inputs: Mapped[list[dict[str, Any]]] = mapped_column(
+        JsonType, default=list, server_default="[]"
+    )
 
 
 class WorkflowVersion(Base):
@@ -143,6 +147,8 @@ class Deployment(Base):
     public_token: Mapped[str] = mapped_column(String(64), unique=True, index=True)
     access: Mapped[str] = mapped_column(String(20), default="workspace")
     allowed_roles: Mapped[list[str]] = mapped_column(TextArray, default=list)
+    # v0.5: 특정 사용자에게만(역할과 함께 쓰면 둘 중 하나만 맞아도 된다)
+    allowed_users: Mapped[list[str]] = mapped_column(TextArray, default=list, server_default="{}")
     created_at: Mapped[datetime] = _created()
     # v0.4: 위젯 모양(색·위치·인사말 등)
     appearance: Mapped[dict[str, Any]] = mapped_column(JsonType, default=dict, server_default="{}")
@@ -198,6 +204,11 @@ class Conversation(Base):
     external_session_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
     # v0.2: 대화 변수({{conv.x}})
     variables: Mapped[dict[str, Any]] = mapped_column(JsonType, default=dict, server_default="{}")
+    # v0.5: 상담원 전환 bot | handoff(사람 대기·응대 중) | closed
+    status: Mapped[str] = mapped_column(String(20), default="bot", server_default="bot")
+    assigned_to: Mapped[str | None] = mapped_column(
+        ForeignKey("users.id", name="conversations_assigned_to_fkey"), nullable=True
+    )
     created_at: Mapped[datetime] = _created()
 
 
@@ -261,6 +272,8 @@ class Document(Base):
     )
     source: Mapped[str] = mapped_column(String(20), default="upload", server_default="upload")
     url: Mapped[str | None] = mapped_column(String(2000), nullable=True)
+    # v0.5: 문서 단위 켜기·끄기(끄면 검색에서 빠짐)
+    enabled: Mapped[bool] = mapped_column(default=True, server_default="true")
 
 
 class Chunk(Base):
@@ -325,6 +338,8 @@ class BuilderSession(Base):
     app_id: Mapped[str] = mapped_column(ForeignKey("apps.id", ondelete="CASCADE"), index=True)
     user_id: Mapped[str] = mapped_column(ForeignKey("users.id"))
     created_at: Mapped[datetime] = _created()
+    # v0.5: 측정 지표(첫 요청→검사 통과 시간, 수정 대화 수, 캔버스 직접 편집 수)
+    metrics: Mapped[dict[str, Any]] = mapped_column(JsonType, default=dict, server_default="{}")
 
 
 class BuilderMessage(Base):
@@ -457,6 +472,10 @@ class AppApiKey(Base):
     created_by: Mapped[str | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     created_at: Mapped[datetime] = _created()
     last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # v0.5: 권한 범위 chat(대화) · run(흐름 실행) · logs(기록 읽기)
+    scopes: Mapped[list[str]] = mapped_column(
+        TextArray, default=lambda: ["chat", "run"], server_default="{chat,run}"
+    )
 
 
 class SystemSetting(Base):
@@ -516,6 +535,11 @@ class AppTrigger(Base):
     last_run_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     last_run_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     last_status: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    # v0.5: 웹훅 서명 검증용 비밀값(암호화), 최근 받은 값 미리 보기(최대 5개, 비밀 헤더 제외)
+    secret_encrypted: Mapped[str | None] = mapped_column(Text, nullable=True)
+    last_payloads: Mapped[list[dict[str, Any]]] = mapped_column(
+        JsonType, default=list, server_default="[]"
+    )
     created_by: Mapped[str | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     created_at: Mapped[datetime] = _created()
 
@@ -558,4 +582,43 @@ class DataRow(Base):
     created_at: Mapped[datetime] = _created()
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False
+    )
+
+
+# ---------- v0.5 사람에게 맡기는 작업(질문·배정) ----------
+class HumanTask(Base):
+    """흐름이 사람에게 묻거나(question) 일을 맡긴(assignment) 것. 끝나면 흐름이 이어진다."""
+
+    __tablename__ = "human_tasks"
+    id: Mapped[str] = _id()
+    workspace_id: Mapped[str] = mapped_column(
+        ForeignKey("workspaces.id", ondelete="CASCADE"), index=True
+    )
+    app_id: Mapped[str] = mapped_column(ForeignKey("apps.id", ondelete="CASCADE"), index=True)
+    run_id: Mapped[str | None] = mapped_column(
+        ForeignKey("runs.id", ondelete="CASCADE", name="human_tasks_run_id_fkey"),
+        nullable=True,
+        index=True,
+    )
+    node_id: Mapped[str] = mapped_column(String(64), default="")
+    kind: Mapped[str] = mapped_column(String(20))  # question | assignment | approval
+    title: Mapped[str] = mapped_column(String(300))
+    detail: Mapped[str] = mapped_column(Text, default="", server_default="")
+    # 질문이면 받을 항목 [{key,label,type}]
+    fields: Mapped[list[dict[str, Any]]] = mapped_column(JsonType, default=list)
+    assignee_user_id: Mapped[str | None] = mapped_column(
+        ForeignKey("users.id", name="human_tasks_assignee_fkey"), nullable=True, index=True
+    )
+    assignee_role: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    status: Mapped[str] = mapped_column(
+        String(20), default="open", index=True
+    )  # open|done|cancelled
+    response: Mapped[dict[str, Any]] = mapped_column(JsonType, default=dict)
+    # 로그인 없이 여는 링크(이메일·슬랙으로 보냄)
+    token: Mapped[str] = mapped_column(String(64), unique=True)
+    due_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = _created()
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    completed_by: Mapped[str | None] = mapped_column(
+        ForeignKey("users.id", name="human_tasks_completed_by_fkey"), nullable=True
     )

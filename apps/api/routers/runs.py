@@ -17,6 +17,7 @@ from api.core.errors import AppError, forbidden, not_found
 from api.db import SessionLocal
 from api.deps import EDIT_APPS, VIEW_RUNS, Ctx, require_role
 from api.engine import events
+from api.engine.describe import describe_run, describe_step
 from api.engine.executor import load_graph
 from api.models import App, Run, RunStep
 from api.routers.common import sse_frame, sse_response
@@ -59,9 +60,20 @@ def run_detail(db: Session, run: Run) -> dict[str, Any]:
         graph = load_graph(db, run).dump()
     except NodeError:
         graph = {"version": 1, "nodes": [], "edges": [], "variables": {}}
+    nodes = {n["id"]: n for n in graph.get("nodes", [])}
+    steps = []
+    for s in _steps(db, run.id):
+        d = step_dict(s)
+        node = nodes.get(s.node_id)
+        label = str(((node or {}).get("data") or {}).get("label") or s.node_id)
+        # 기능 정의서 S3: 단계마다 한 문장 설명(JSON은 화면에서 펼쳐 보기)
+        d["summary"] = describe_step(node, d, label)
+        steps.append(d)
+    rd = run_dict(run)
     return {
-        **run_dict(run),
-        "steps": [step_dict(s) for s in _steps(db, run.id)],
+        **rd,
+        "steps": steps,
+        "story": describe_run(rd, steps),
         "approval": run.approval,
         "graph": graph,
     }

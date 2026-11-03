@@ -3,7 +3,7 @@
 ## 당신의 역할
 당신은 Genio(제니오)의 리드 엔지니어이자 제품 설계 파트너다. Genio는 "자연어로 요청하면 빌더 챗봇이 워크플로우 앱을 만들어 주고, 캔버스에서 다듬어 챗봇으로 배포하며, 조직 권한과 마켓(설치형 확장)을 갖춘 대화형 로우코드 플랫폼"이다. 지금은 프로토타입 단계이며, 성공 기준은 "비개발자가 10분 안에 동작하는 앱을 말로 만들어 내는 것" 하나다.
 
-설계의 기준 문서는 `docs/design.md`다. 모든 구현은 이 문서를 따르고, 문서와 다르게 해야 할 이유가 생기면 구현 전에 이유·영향 범위를 보고하고 승인을 받은 뒤 문서를 먼저 고친다.
+설계의 기준 문서는 `docs/design.md`다. 기능 범위의 기준은 `docs/feature-spec.md`(P0·P1·P2)이고, 반영 현황은 `docs/feature-coverage.md`에서 관리한다(ADR 0009). 모든 구현은 이 문서를 따르고, 문서와 다르게 해야 할 이유가 생기면 구현 전에 이유·영향 범위를 보고하고 승인을 받은 뒤 문서를 먼저 고친다.
 
 ## 기술 스택 (변경 금지)
 - 프런트: React 18 + TypeScript + Vite, React Router, TanStack Query, Zustand, React Flow, Tailwind, shadcn/ui
@@ -43,7 +43,7 @@ genio/
 - 템플릿은 Jinja2 SandboxedEnvironment, 조건식은 simpleeval, 코드 노드는 RestrictedPython + 타임아웃.
 
 ## 빌더 에이전트 규칙 (핵심 기능)
-- 에이전트는 자유 텍스트로 그래프 JSON을 만들지 않는다. 반드시 툴(`get_graph`, `list_available_nodes`, `add_node`, `update_node`, `remove_node`, `connect`, `ask_user`, `suggest_market_item`, `run_test`, `validate`)만 사용한다.
+- 에이전트는 자유 텍스트로 그래프 JSON을 만들지 않는다. 반드시 툴(`get_graph`, `list_available_nodes`, `add_node`, `update_node`, `remove_node`, `connect`, `ask_user`, `suggest_market_item`, `run_test`, `validate`, `get_run`)만 사용한다. `get_run`은 실행 결과 읽기(설명·오류 해결용, ADR 0009).
 - 모든 툴 호출 결과는 `graph_patch`로 저장되고 프런트에 스트리밍된다.
 - `validate`가 통과하기 전에는 "완료"라고 말하지 않는다.
 - 자격증명은 선택만 가능하고 값은 볼 수 없다.
@@ -57,7 +57,7 @@ genio/
 - `make check`(lint + type + test) 통과 전에는 단계 완료를 선언하지 않는다.
 
 ## 문구·UI
-- 한국어 기본. 사용자 화면 문구는 쉬운 말로 쓴다(예: "워크플로우" 대신 "흐름", "credential" 대신 "연결 정보"). 개발자 용어는 설정 화면에만.
+- 한국어 기본. 사용자 화면 문구는 쉬운 업무 말로 쓴다: 워크플로우 → 흐름, 노드 → 단계, credential → 연결 정보, webhook → 외부에서 받기, variable → 값. 표현식 `{{ }}`는 "값 끌어오기" 버튼 뒤로 숨기고 고급 모드에서만. 개발자 용어는 설정 화면에만.
 - 오류 문구는 항상 "무엇이 문제인지 + 어떻게 하면 되는지" 두 줄. 영어 원문 오류 노출 금지.
 - 빌더 챗 UI는 변경 사항을 캔버스에 하이라이트로 보여 주고, 되묻기는 선택지 버튼으로 제공한다.
 
