@@ -113,11 +113,12 @@ def test_condition_handle_rules() -> None:
     assert any("어떤 분기인지" in m for m in msgs)
 
 
-def test_parallel_branch_rejected() -> None:
+def test_parallel_branch_allowed() -> None:
+    """v0.6(ADR 0010): 한 단계에서 여러 갈래로 나가는 것은 병렬 실행으로 허용한다."""
     g = base_graph()
     g["edges"].append({"id": "e9", "source": "n1", "target": "n5"})
     msgs = messages(validate_graph(g, env()))
-    assert any("병렬 분기" in m for m in msgs)
+    assert not any("병렬" in m or "동시에" in m for m in msgs)
 
 
 def test_unknown_type_and_disallowed_type() -> None:

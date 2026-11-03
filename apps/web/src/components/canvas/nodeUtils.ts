@@ -50,3 +50,21 @@ export function defaultData(spec: NodeType | undefined): Record<string, unknown>
     ];
   return data;
 }
+
+/** 병렬 분기 표시(ADR 0010): 한 출구에서 동시에 나가는 갈래 수, 들어오는 갈래 수 */
+export function fanCounts(
+  edges: { source: string; target: string; sourceHandle?: string | null }[],
+  nodeId: string,
+): { fanOut: number; fanIn: number } {
+  const byHandle = new Map<string, number>();
+  let fanIn = 0;
+  for (const e of edges) {
+    if (e.source === nodeId) {
+      const k = e.sourceHandle ?? "";
+      byHandle.set(k, (byHandle.get(k) ?? 0) + 1);
+    }
+    if (e.target === nodeId) fanIn += 1;
+  }
+  const fanOut = Math.max(0, ...byHandle.values());
+  return { fanOut, fanIn };
+}

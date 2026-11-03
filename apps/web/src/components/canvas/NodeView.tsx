@@ -12,6 +12,10 @@ export interface GenioNodeData extends Record<string, unknown> {
   errors?: string[];
   highlighted?: boolean;
   step?: RunStep;
+  /** 한 출구에서 동시에 나가는 갈래 수(2 이상이면 병렬) */
+  fanOut?: number;
+  /** 들어오는 선 수(2 이상이면 갈래를 모으는 단계) */
+  fanIn?: number;
 }
 
 export type GenioFlowNode = Node<GenioNodeData, "genio">;
@@ -60,7 +64,7 @@ function summary(node: GraphNode): string {
 }
 
 export function NodeView({ data, selected }: NodeProps<GenioFlowNode>) {
-  const { node, spec, errors, highlighted, step } = data;
+  const { node, spec, errors, highlighted, step, fanOut = 0, fanIn = 0 } = data;
   const handles = branchHandles(node.type, node.data);
   const isBranching = handles.length > 0 || node.type === "condition";
   const fail = hasFailHandle(node.data);
@@ -102,6 +106,26 @@ export function NodeView({ data, selected }: NodeProps<GenioFlowNode>) {
           )}
           {step && <StatusBadge status={step.status} />}
         </div>
+        {(fanOut > 1 || fanIn > 1) && (
+          <div className="mt-1.5 flex flex-wrap gap-1">
+            {fanIn > 1 && (
+              <span
+                className="rounded bg-sky-50 px-1.5 py-0.5 text-[10px] font-semibold text-sky-700"
+                title="들어오는 갈래 중 실제로 간 갈래가 모두 끝나면 실행해요."
+              >
+                갈래 {fanIn}개 모음
+              </span>
+            )}
+            {fanOut > 1 && (
+              <span
+                className="rounded bg-violet-50 px-1.5 py-0.5 text-[10px] font-semibold text-violet-700"
+                title="이 단계 다음 갈래들은 동시에 실행돼요."
+              >
+                동시 {fanOut}갈래
+              </span>
+            )}
+          </div>
+        )}
         {summary(node) && (
           <p className="mt-2 truncate rounded-md bg-slate-50 px-2 py-1 font-mono text-[11px] text-slate-500">
             {summary(node)}

@@ -2,6 +2,7 @@ import {
   branchHandles,
   conditionHandles,
   defaultData,
+  fanCounts,
   hasFailHandle,
 } from "@/components/canvas/nodeUtils";
 
@@ -44,4 +45,17 @@ describe("단계 출구 핸들", () => {
     });
     expect((data.classes as unknown[]).length).toBe(2);
   });
+});
+
+test("병렬 갈래 수를 센다", () => {
+  const edges = [
+    { source: "n1", target: "a" },
+    { source: "n1", target: "b" },
+    { source: "a", target: "j" },
+    { source: "b", target: "j" },
+    { source: "c", target: "x", sourceHandle: "yes" },
+  ];
+  expect(fanCounts(edges, "n1")).toEqual({ fanOut: 2, fanIn: 0 });
+  expect(fanCounts(edges, "j")).toEqual({ fanOut: 0, fanIn: 2 });
+  expect(fanCounts(edges, "c")).toEqual({ fanOut: 1, fanIn: 0 });
 });

@@ -146,7 +146,12 @@ def complete(
     task.completed_at = now()
     task.completed_by = user.id if user else None
     run = db.get(Run, task.run_id) if task.run_id else None
-    if run is not None and run.status == "waiting_approval" and run.approval:
+    if (
+        run is not None
+        and run.status == "waiting_approval"
+        and run.approval
+        and str(run.approval.get("node_id") or "") in ("", task.node_id or "")
+    ):
         decision: dict[str, Any] = {
             "comment": comment[:1000],
             "decided_by": user.id if user else None,
@@ -176,7 +181,12 @@ def complete(
         meta={"comment": comment[:200], "via": via},
     )
     db.commit()
-    return run if run is not None and run.status == "waiting_approval" else None
+    if run is None or run.status != "waiting_approval":
+        return None
+    # 병렬 갈래에서 지금 기다리는 단계의 일이 아니면 실행을 다시 깨우지 않는다
+    return (
+        run if str((run.approval or {}).get("node_id") or "") in ("", task.node_id or "") else None
+    )
 
 
 def cancel(db: Session, task: HumanTask, user: User) -> None:

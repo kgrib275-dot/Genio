@@ -38,6 +38,8 @@ class Settings(BaseSettings):
     genio_code_node_timeout_seconds: float = 10.0
     genio_node_timeout_seconds: float = 60.0
     genio_run_timeout_seconds: float = 600.0
+    # v0.6: 한 실행 안에서 동시에 도는 갈래 수(1~16)
+    genio_run_parallelism: int = 4
     genio_public_rate_limit_per_minute: int = 30
     # API 프로세스 하나의 작업 스레드 수와 DB 연결 수(프로세스 수는 GENIO_API_WORKERS, compose)
     genio_api_threads: int = 200

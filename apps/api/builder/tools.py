@@ -49,7 +49,7 @@ TOOL_DEFS: list[ToolDef] = [
     ),
     ToolDef(
         "add_node",
-        "단계를 하나 추가한다. after를 주면 그 단계 바로 뒤에 붙이고 선을 이어 준다(after 다음에 있던 단계는 새 단계 뒤로 밀린다). after가 갈림길(condition·question_classifier)이면 handle에 분기 이름을, 실패 길이면 handle='fail'을 준다.",
+        "단계를 하나 추가한다. after를 주면 그 단계 바로 뒤에 붙이고 선을 이어 준다(after 다음에 있던 단계는 새 단계 뒤로 밀린다). after가 갈림길(condition·question_classifier)이면 handle에 분기 이름을, 실패 길이면 handle='fail'을 준다. parallel=true면 after에서 이미 나가는 선은 그대로 두고 새 갈래를 하나 더 만든다(여러 갈래는 동시에 실행된다).",
         {
             "type": "object",
             "properties": {
@@ -60,6 +60,10 @@ TOOL_DEFS: list[ToolDef] = [
                 },
                 "after": {"type": "string", "description": "이 단계 id 뒤에 붙인다"},
                 "handle": {"type": "string", "description": "after가 condition일 때 분기 이름"},
+                "parallel": {
+                    "type": "boolean",
+                    "description": "true면 기존 선을 두고 동시에 도는 새 갈래로 붙인다",
+                },
             },
             "required": ["type", "data"],
             "additionalProperties": False,
@@ -87,13 +91,14 @@ TOOL_DEFS: list[ToolDef] = [
     ),
     ToolDef(
         "connect",
-        "두 단계를 선으로 잇는다. source가 갈림길(condition·question_classifier)이면 handle(분기 이름)이, 실패 길이면 handle='fail'이 필요하다. 조건이 아닌 단계에서 이미 나가는 선이 있으면 새 선으로 바꾼다.",
+        "두 단계를 선으로 잇는다. source가 갈림길(condition·question_classifier)이면 handle(분기 이름)이, 실패 길이면 handle='fail'이 필요하다. 같은 출구에 이미 나가는 선이 있으면 새 선으로 바꾸고, parallel=true면 그대로 두고 갈래를 하나 더 만든다(동시에 실행되고, 여러 갈래가 들어오는 단계는 모두 끝날 때까지 기다린다).",
         {
             "type": "object",
             "properties": {
                 "source": {"type": "string"},
                 "target": {"type": "string"},
                 "handle": {"type": "string"},
+                "parallel": {"type": "boolean"},
             },
             "required": ["source", "target"],
             "additionalProperties": False,
@@ -323,7 +328,12 @@ class BuilderToolbox:
             )
 
     def t_add_node(
-        self, type: str, data: dict[str, Any], after: str | None = None, handle: str | None = None
+        self,
+        type: str,
+        data: dict[str, Any],
+        after: str | None = None,
+        handle: str | None = None,
+        parallel: bool = False,
     ) -> ToolOutcome:
         self._check_type(type)
         g = self.graph()
@@ -355,6 +365,14 @@ class BuilderToolbox:
                 branch_offset = (cases.index(handle) - (len(cases) - 1) / 2) * 160
             elif handle:
                 raise ToolError(f"'{prev.id}' 단계에는 '{handle}' 출구가 없어요.")
+            if parallel:
+                # 새 갈래는 이미 나가는 갈래 아래쪽에 놓는다
+                siblings = sum(
+                    1
+                    for e in g.edges
+                    if e.source == prev.id and (e.source_handle or None) == (handle or None)
+                )
+                branch_offset += 160 * siblings
             pos = Position(x=prev.position.x + 300, y=prev.position.y + branch_offset)
         else:
             max_x = max((n.position.x for n in g.nodes), default=-300)
@@ -368,6 +386,8 @@ class BuilderToolbox:
                 for e in g.edges
                 if e.source == prev.id and (e.source_handle or None) == (handle or None)
             ]
+            if parallel:
+                old = []  # 새 갈래: 기존 선은 그대로 둔다
             for e in old:
                 g.edges.remove(e)
                 ops.append({"op": "remove_edge", "id": e.id})
@@ -437,7 +457,9 @@ class BuilderToolbox:
             True, {"removed": id}, f"'{node.data.get('label') or id}' 단계 삭제", ops
         )
 
-    def t_connect(self, source: str, target: str, handle: str | None = None) -> ToolOutcome:
+    def t_connect(
+        self, source: str, target: str, handle: str | None = None, parallel: bool = False
+    ) -> ToolOutcome:
         g = self.graph()
         src, dst = g.node(source), g.node(target)
         if src is None or dst is None:
@@ -461,6 +483,10 @@ class BuilderToolbox:
         else:
             handle = None
             old = [e for e in g.edges if e.source == source and not e.source_handle]
+        if parallel:
+            if any(e.target == target for e in old):
+                return ToolOutcome(True, {}, f"{source} → {target}는 이미 이어져 있어요", [])
+            old = []  # 기존 선은 두고 동시에 도는 갈래를 하나 더 만든다
         for e in old:
             g.edges.remove(e)
             ops.append({"op": "remove_edge", "id": e.id})

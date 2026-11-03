@@ -48,13 +48,13 @@
 - 다른 단계의 값은 `{{단계id.항목}}`으로 씁니다. 예: `{{n1.message}}`, `{{n2.category}}`. 앞에 있는(선으로 이어진 앞쪽) 단계의 값만 쓸 수 있습니다.
 - `input`: `fields`는 `[{"key": "message", "label": "문의 내용", "type": "text", "required": true}]` 형식입니다.
 - `llm`: `provider`는 보통 `"default"`, `model`은 비워 둡니다(워크스페이스 기본 모델 사용). 분류처럼 정해진 값이 필요하면 `output_schema`를 줍니다. 예: `{"type":"object","properties":{"category":{"type":"string","enum":["billing","tech","other"]}},"required":["category"]}`. 그러면 `{{n2.category}}`로 쓸 수 있습니다. 출력 형식이 없으면 `{{n2.text}}`를 씁니다.
-- `condition`: `cases`는 `[{"id": "billing", "when": "{{n2.category}} == 'billing'"}]`, 나머지는 `"else": "other"`. 조건 단계에서 나가는 선은 `connect`나 `add_node`의 `handle`에 분기 이름을 줍니다. 한 분기에서는 한 곳으로만 갈 수 있습니다.
+- `condition`: `cases`는 `[{"id": "billing", "when": "{{n2.category}} == 'billing'"}]`, 나머지는 `"else": "other"`. 조건 단계에서 나가는 선은 `connect`나 `add_node`의 `handle`에 분기 이름을 줍니다. 한 분기에서 여러 곳으로 동시에 가려면 `parallel: true`를 줍니다.
 - 분기가 여러 개일 때는 각 분기 끝을 같은 `output` 단계로 모아도 됩니다(`connect`).
 - `knowledge_search`: `kb_id`는 `knowledge_bases`의 id, `query`는 보통 `{{n1.message}}`. 결과 `{{n2.context}}`를 `llm` 프롬프트에 넣어 "아래 자료로만 답하라"고 지시합니다.
 - `connector`: `connector`(서비스 key), `action`(동작 key), `credential_id`, `params`(동작 설정, 값에 `{{...}}` 사용 가능).
 - `approval`: 사람이 확인해야 하는 단계(메일 발송 전 등)에 넣습니다. `message`에 무엇을 승인하는지 씁니다.
 - `http`는 외부 공개 주소만 됩니다. `code`는 꼭 필요할 때만 씁니다(`inputs`로 값 받고 `result`에 dict).
-- 병렬 분기(한 단계에서 두 곳으로 동시에)는 지원하지 않습니다.
+- 서로 기다릴 필요 없는 일(예: 번역과 요약, 여러 곳에 알림)은 병렬 갈래로 만들 수 있습니다. `add_node`나 `connect`에 `parallel: true`를 주면 기존 선을 두고 갈래를 하나 더 만들고, 갈래들은 동시에 실행됩니다. 갈래를 다시 모으려면 각 갈래 끝을 같은 단계(`template`·`output` 등)로 `connect`(`parallel: true`)합니다. 모으는 단계는 들어오는 갈래가 모두 끝날 때까지 기다리고, 각 갈래 값을 `{{단계id.항목}}`으로 함께 쓸 수 있습니다. 순서가 중요한 일은 병렬로 만들지 않습니다.
 - `question_classifier`: 글을 여러 분류로 나눌 때 condition 대신 씁니다. `classes`는 `[{"id": "billing", "name": "결제", "description": "결제·환불"}]`, 분기마다 `handle`에 분류 id를 줍니다. 출력 `{{nX.class_id}}`.
 - `parameter_extractor`: 글에서 값(이름·날짜·금액)을 뽑을 때. `parameters`는 `[{"name": "date", "type": "string", "description": "희망 날짜", "required": true}]`. 출력 `{{nX.date}}`, 성공 여부 `{{nX.__is_success}}`.
 - `template`: 여러 값을 한 글로 엮을 때(Jinja2). 출력 `{{nX.output}}`.

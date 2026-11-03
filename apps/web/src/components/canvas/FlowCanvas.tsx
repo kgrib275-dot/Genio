@@ -26,6 +26,7 @@ import {
 } from "react";
 import { CanvasToolbar } from "@/components/canvas/CanvasToolbar";
 import { NodeView, type GenioFlowNode } from "@/components/canvas/NodeView";
+import { fanCounts } from "@/components/canvas/nodeUtils";
 import { NoteView, type NoteFlowNode } from "@/components/canvas/NoteView";
 import { DRAG_TYPE } from "@/components/canvas/NodePalette";
 import { defaultData } from "@/components/canvas/nodeUtils";
@@ -159,11 +160,13 @@ function Inner({ specs, readOnly }: { specs: NodeType[]; readOnly?: boolean }) {
           errors: nodeErrors[n.id],
           highlighted: Boolean(highlights[n.id]),
           step: steps[n.id],
+          ...fanCounts(graph.edges, n.id),
         },
       })),
     ],
     [
       graph.nodes,
+      graph.edges,
       graph.notes,
       selectedSet,
       selNotes,

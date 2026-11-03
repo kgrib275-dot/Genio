@@ -256,12 +256,22 @@ def _context_before(db: Session, old: Run, node_id: str) -> dict[str, Any]:
         raise AppError(
             422, "다시 시작할 단계를 흐름에서 찾지 못했어요.", "실행 화면에서 단계를 다시 고르세요."
         )
+    # node_id 아래쪽(다시 돌 단계)을 뺀 모든 단계의 결과를 쓴다. 병렬 갈래는 순서와 무관하다.
+    below = {node_id}
+    stack = [node_id]
+    while stack:
+        cur = stack.pop()
+        for e in graph.edges:
+            if e.source == cur and e.target not in below:
+                below.add(e.target)
+                stack.append(e.target)
     outputs: dict[str, Any] = {}
     reached = False
     for st in _steps(db, old.id):
         if st.node_id == node_id:
             reached = True
-            break
+        if st.node_id in below:
+            continue
         if st.status in ("succeeded", "skipped") and isinstance(st.output, dict):
             outputs[st.node_id] = st.output
     if not reached:

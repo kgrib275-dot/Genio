@@ -1,5 +1,5 @@
 """그래프 검증(설계서 §4): 형식, 단계 타입, 단계 설정, 순환, input 1개·output ≥1개,
-참조 값, 분기 핸들, 병렬 분기 금지, 커넥터 연결 정보·지식베이스 존재."""
+참조 값, 분기 핸들(한 출구에서 여러 갈래로 나가면 병렬 실행, ADR 0010), 커넥터 연결 정보·지식베이스 존재."""
 
 from collections import defaultdict, deque
 from dataclasses import dataclass, field
@@ -165,7 +165,6 @@ def validate_graph(raw: dict[str, Any], env: ValidationEnv) -> ValidationResult:
         branches = branch_handles(node.type, node.data)
         can_fail = node.data.get("_on_error") == "branch"
         used: set[str] = set()
-        plain = 0
         for e in edges:
             h = e.source_handle or ""
             if h == "fail":
@@ -175,10 +174,6 @@ def validate_graph(raw: dict[str, Any], env: ValidationEnv) -> ValidationResult:
                             node_id=nid,
                             message="'실패' 길을 쓰려면 이 단계의 '실패했을 때'를 '실패 길로 보내기'로 바꿔 주세요.",
                         )
-                    )
-                elif "fail" in used:
-                    errors.append(
-                        GraphError(node_id=nid, message="'실패' 길은 한 곳으로만 이을 수 있어요.")
                     )
                 used.add("fail")
                 continue
@@ -191,27 +186,12 @@ def validate_graph(raw: dict[str, Any], env: ValidationEnv) -> ValidationResult:
                     )
                 elif h not in branches:
                     errors.append(GraphError(node_id=nid, message=f"'{h}' 분기가 목록에 없어요."))
-                elif h in used:
-                    errors.append(
-                        GraphError(
-                            node_id=nid,
-                            message=f"'{h}' 분기에서 두 곳으로 갈 수 없어요(병렬 분기 미지원).",
-                        )
-                    )
                 used.add(h)
             else:
                 if h:
                     errors.append(
                         GraphError(node_id=nid, message=f"이 단계에는 '{h}' 출구가 없어요.")
                     )
-                plain += 1
-        if plain > 1:
-            errors.append(
-                GraphError(
-                    node_id=nid,
-                    message="한 단계에서 여러 곳으로 동시에 갈 수 없어요(병렬 분기는 아직 지원하지 않아요).",
-                )
-            )
 
     # 순환 검사(Kahn)
     indeg = dict(in_deg)

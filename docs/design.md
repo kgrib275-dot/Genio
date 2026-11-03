@@ -108,7 +108,7 @@
 - 유효성 검사: 그래프 저장 시 순환 없음, input 1개·output ≥1개, 모든 참조 변수 존재, 커넥터 credential 존재 여부 검사. 오류는 노드별로 반환해 캔버스에 표시.
 
 ## 5. 실행 엔진 (Worker)
-- 위상 정렬 후 순차 실행. condition은 선택된 분기만 실행. 병렬 분기는 1차에서 미지원(설계상 edges로 표현 가능하게 유지).
+- 준비된 단계부터 실행. condition은 선택된 분기만 실행. v0.6부터 한 출구에서 여러 선이 나가면 동시에 실행하고, 들어오는 선이 여러 개인 단계는 모든 선이 정해질 때까지 기다린다(고르지 않은 길은 '안 감', ADR 0010).
 - 각 노드 실행 → `run_steps` 기록 → Redis pub/sub → API가 SSE로 클라이언트 전송.
 - `approval` 노드: run을 `waiting_approval`로 두고 승인 링크 생성. 승인 시 재개.
 - 재시도: http·connector 노드는 지수 백오프 2회. LLM 노드는 output_schema가 있으면 JSON 파싱 실패 시 1회 재요청.
