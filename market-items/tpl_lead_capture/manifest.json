@@ -1,0 +1,35 @@
+{
+  "key": "tpl_lead_capture",
+  "type": "template",
+  "name": "상담 신청을 CRM에 저장하고 알리기",
+  "summary": "홈페이지 상담 신청을 HubSpot 연락처로 저장하는 동시에 영업 담당에게 텔레그램으로 알려요(병렬 갈래).",
+  "version": "1.0.0",
+  "publisher": "platform",
+  "price": 0,
+  "category": "영업·CRM",
+  "app_type": "workflow",
+  "tags": [
+    "병렬",
+    "hubspot",
+    "텔레그램",
+    "리드",
+    "영업",
+    "상담"
+  ],
+  "requires": {
+    "items": [
+      "hubspot",
+      "telegram"
+    ]
+  },
+  "blanks": [
+    {
+      "key": "chat",
+      "label": "알림 받을 텔레그램 대화방 id",
+      "node_id": "n3",
+      "field": "params.chat_id",
+      "example": "123456789"
+    }
+  ],
+  "permissions": []
+}

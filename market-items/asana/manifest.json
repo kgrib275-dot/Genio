@@ -1,0 +1,73 @@
+{
+  "key": "asana",
+  "type": "connector",
+  "name": "Asana",
+  "summary": "아사나 프로젝트에 할 일을 만들어요.",
+  "version": "1.0.0",
+  "publisher": "platform",
+  "price": 0,
+  "category": "개발·업무관리",
+  "tags": [
+    "asana",
+    "아사나",
+    "할 일",
+    "프로젝트",
+    "업무관리"
+  ],
+  "requires": {
+    "credentials": [
+      {
+        "key": "token",
+        "label": "개인 액세스 토큰",
+        "secret": true,
+        "required": true
+      }
+    ]
+  },
+  "actions": [
+    {
+      "key": "create_task",
+      "label": "할 일 만들기",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "project_id": {
+            "type": "string",
+            "title": "프로젝트 id(숫자)"
+          },
+          "name": {
+            "type": "string",
+            "title": "할 일 이름"
+          },
+          "notes": {
+            "type": "string",
+            "title": "설명"
+          },
+          "due_on": {
+            "type": "string",
+            "title": "마감일(YYYY-MM-DD, 선택)"
+          }
+        },
+        "required": [
+          "project_id",
+          "name"
+        ]
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "gid": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          }
+        },
+        "required": []
+      }
+    }
+  ],
+  "permissions": [
+    "network:app.asana.com"
+  ]
+}

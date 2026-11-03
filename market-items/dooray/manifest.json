@@ -1,0 +1,70 @@
+{
+  "key": "dooray",
+  "type": "connector",
+  "name": "두레이(Dooray!)",
+  "summary": "두레이 메신저 대화방에 메시지를 보내요(수신 웹훅).",
+  "version": "1.0.0",
+  "publisher": "platform",
+  "price": 0,
+  "category": "메신저",
+  "tags": [
+    "dooray",
+    "두레이",
+    "메신저",
+    "NHN",
+    "알림",
+    "협업"
+  ],
+  "requires": {
+    "credentials": [
+      {
+        "key": "webhook_url",
+        "label": "수신 웹훅 주소(https://hook.dooray.com/services/...)",
+        "secret": true,
+        "required": true
+      }
+    ]
+  },
+  "actions": [
+    {
+      "key": "send_message",
+      "label": "메시지 보내기",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string",
+            "title": "보낼 내용"
+          },
+          "bot_name": {
+            "type": "string",
+            "title": "보내는 이름(기본 Genio)"
+          },
+          "title": {
+            "type": "string",
+            "title": "첨부 제목(선택)"
+          },
+          "detail": {
+            "type": "string",
+            "title": "첨부 내용(선택)"
+          }
+        },
+        "required": [
+          "text"
+        ]
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "sent": {
+            "type": "boolean"
+          }
+        },
+        "required": []
+      }
+    }
+  ],
+  "permissions": [
+    "network:dooray.com"
+  ]
+}

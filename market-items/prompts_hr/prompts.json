@@ -1,0 +1,28 @@
+{
+  "prompts": [
+    {
+      "key": "job_post",
+      "title": "채용 공고",
+      "system": "직무 정보를 받아 회사 소개-주요 업무-자격 요건-우대 사항-근무 조건 순서의 채용 공고를 쓰세요. 차별적 표현은 쓰지 마세요.",
+      "prompt": "{{n1.message}}"
+    },
+    {
+      "key": "interview_q",
+      "title": "면접 질문",
+      "system": "직무와 역량에 맞는 구조화 면접 질문 8개를 경험·상황 질문으로 나눠 쓰세요.",
+      "prompt": "{{n1.message}}"
+    },
+    {
+      "key": "resume_summary",
+      "title": "이력서 요약",
+      "system": "이력서를 경력 요약, 강점 3개, 확인할 점 2개로 정리하세요. 나이·성별 등 개인 특성은 평가하지 마세요.",
+      "prompt": "{{n1.message}}"
+    },
+    {
+      "key": "onboarding",
+      "title": "온보딩 안내",
+      "system": "새 입사자에게 첫 주 일정과 준비물, 담당자를 친절하게 안내하는 글을 쓰세요.",
+      "prompt": "{{n1.message}}"
+    }
+  ]
+}

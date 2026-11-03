@@ -1,0 +1,33 @@
+{
+  "key": "tpl_chat_to_task",
+  "type": "template",
+  "name": "말로 한 요청을 할 일 카드로",
+  "summary": "\"다음 주 금요일까지 견적서 보내기\"처럼 말하면 할 일·마감일을 뽑아 Trello 카드로 만들어요.",
+  "version": "1.0.0",
+  "publisher": "platform",
+  "price": 0,
+  "category": "개발·업무관리",
+  "app_type": "workflow",
+  "tags": [
+    "trello",
+    "할 일",
+    "칸반",
+    "마감일",
+    "업무관리"
+  ],
+  "requires": {
+    "items": [
+      "trello"
+    ]
+  },
+  "blanks": [
+    {
+      "key": "list",
+      "label": "Trello 목록 id",
+      "node_id": "n3",
+      "field": "params.list_id",
+      "example": "5f1a2b3c4d5e6f7a8b9c0d1e"
+    }
+  ],
+  "permissions": []
+}

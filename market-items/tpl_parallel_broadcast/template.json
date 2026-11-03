@@ -1,0 +1,139 @@
+{
+  "version": 1,
+  "nodes": [
+    {
+      "id": "n1",
+      "type": "input",
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "data": {
+        "label": "공지",
+        "fields": [
+          {
+            "key": "message",
+            "label": "공지 내용",
+            "type": "text",
+            "required": true
+          }
+        ]
+      }
+    },
+    {
+      "id": "n2",
+      "type": "approval",
+      "position": {
+        "x": 300,
+        "y": 0
+      },
+      "data": {
+        "label": "올리기 전 확인",
+        "message": "이 공지를 세 곳에 올릴까요?\n\n{{n1.message}}"
+      }
+    },
+    {
+      "id": "n3",
+      "type": "connector",
+      "position": {
+        "x": 600,
+        "y": -160
+      },
+      "data": {
+        "label": "슬랙에 올리기",
+        "connector": "slack",
+        "credential_id": "{{credential:slack}}",
+        "action": "post_message",
+        "params": {
+          "channel": "#general",
+          "text": "{{n1.message}}"
+        }
+      }
+    },
+    {
+      "id": "n4",
+      "type": "connector",
+      "position": {
+        "x": 600,
+        "y": 0
+      },
+      "data": {
+        "label": "Teams에 올리기",
+        "connector": "teams",
+        "credential_id": "{{credential:teams}}",
+        "action": "send_message",
+        "params": {
+          "title": "공지",
+          "text": "{{n1.message}}"
+        }
+      }
+    },
+    {
+      "id": "n5",
+      "type": "connector",
+      "position": {
+        "x": 600,
+        "y": 160
+      },
+      "data": {
+        "label": "디스코드에 올리기",
+        "connector": "discord",
+        "credential_id": "{{credential:discord}}",
+        "action": "send_message",
+        "params": {
+          "content": "{{n1.message}}"
+        }
+      }
+    },
+    {
+      "id": "n6",
+      "type": "output",
+      "position": {
+        "x": 900,
+        "y": 0
+      },
+      "data": {
+        "label": "결과",
+        "template": "세 곳에 공지를 올렸어요."
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "e1",
+      "source": "n1",
+      "target": "n2"
+    },
+    {
+      "id": "e2",
+      "source": "n2",
+      "target": "n3"
+    },
+    {
+      "id": "e3",
+      "source": "n2",
+      "target": "n4"
+    },
+    {
+      "id": "e4",
+      "source": "n2",
+      "target": "n5"
+    },
+    {
+      "id": "e5",
+      "source": "n3",
+      "target": "n6"
+    },
+    {
+      "id": "e6",
+      "source": "n4",
+      "target": "n6"
+    },
+    {
+      "id": "e7",
+      "source": "n5",
+      "target": "n6"
+    }
+  ],
+  "variables": {}
+}

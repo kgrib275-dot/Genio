@@ -1,0 +1,108 @@
+{
+  "key": "airtable",
+  "type": "connector",
+  "name": "Airtable",
+  "summary": "에어테이블 표에 줄을 추가하거나 조건으로 읽어요.",
+  "version": "1.0.0",
+  "publisher": "platform",
+  "price": 0,
+  "category": "데이터",
+  "tags": [
+    "airtable",
+    "에어테이블",
+    "표",
+    "데이터베이스",
+    "스프레드시트"
+  ],
+  "requires": {
+    "credentials": [
+      {
+        "key": "token",
+        "label": "개인 액세스 토큰(data.records:read·write)",
+        "secret": true,
+        "required": true
+      }
+    ]
+  },
+  "actions": [
+    {
+      "key": "create_record",
+      "label": "줄 추가",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "base_id": {
+            "type": "string",
+            "title": "베이스 id(app...)"
+          },
+          "table": {
+            "type": "string",
+            "title": "표 이름"
+          },
+          "fields": {
+            "type": "object",
+            "title": "칸 값(예: {\"이름\": \"...\"})"
+          }
+        },
+        "required": [
+          "base_id",
+          "table",
+          "fields"
+        ]
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          }
+        },
+        "required": []
+      }
+    },
+    {
+      "key": "list_records",
+      "label": "줄 읽기",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "base_id": {
+            "type": "string",
+            "title": "베이스 id(app...)"
+          },
+          "table": {
+            "type": "string",
+            "title": "표 이름"
+          },
+          "max_records": {
+            "type": "integer",
+            "title": "최대 개수(100까지)"
+          },
+          "formula": {
+            "type": "string",
+            "title": "조건 수식(선택, 예: {상태}='신규')"
+          }
+        },
+        "required": [
+          "base_id",
+          "table"
+        ]
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "count": {
+            "type": "integer"
+          },
+          "records": {
+            "type": "array"
+          }
+        },
+        "required": []
+      }
+    }
+  ],
+  "permissions": [
+    "network:api.airtable.com"
+  ]
+}

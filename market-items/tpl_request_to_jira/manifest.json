@@ -1,0 +1,33 @@
+{
+  "key": "tpl_request_to_jira",
+  "type": "template",
+  "name": "업무 요청을 Jira 티켓으로",
+  "summary": "사내 요청을 유형(버그·작업·문의)으로 나누고 요약을 붙여 Jira 이슈로 만들어요.",
+  "version": "1.0.0",
+  "publisher": "platform",
+  "price": 0,
+  "category": "개발",
+  "app_type": "workflow",
+  "tags": [
+    "jira",
+    "티켓",
+    "요청",
+    "분류",
+    "업무관리"
+  ],
+  "requires": {
+    "items": [
+      "jira"
+    ]
+  },
+  "blanks": [
+    {
+      "key": "project",
+      "label": "Jira 프로젝트 키",
+      "node_id": "n3",
+      "field": "params.project_key",
+      "example": "OPS"
+    }
+  ],
+  "permissions": []
+}

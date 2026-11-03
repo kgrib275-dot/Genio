@@ -1,0 +1,114 @@
+{
+  "version": 1,
+  "nodes": [
+    {
+      "id": "n1",
+      "type": "input",
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "data": {
+        "label": "상담 신청",
+        "fields": [
+          {
+            "key": "name",
+            "label": "이름",
+            "type": "text",
+            "required": true
+          },
+          {
+            "key": "email",
+            "label": "이메일",
+            "type": "text",
+            "required": true
+          },
+          {
+            "key": "company",
+            "label": "회사",
+            "type": "text",
+            "required": false
+          },
+          {
+            "key": "message",
+            "label": "문의",
+            "type": "text",
+            "required": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "n2",
+      "type": "connector",
+      "position": {
+        "x": 300,
+        "y": -100
+      },
+      "data": {
+        "label": "CRM에 저장",
+        "connector": "hubspot",
+        "credential_id": "{{credential:hubspot}}",
+        "action": "create_contact",
+        "params": {
+          "email": "{{n1.email}}",
+          "firstname": "{{n1.name}}",
+          "company": "{{n1.company}}"
+        }
+      }
+    },
+    {
+      "id": "n3",
+      "type": "connector",
+      "position": {
+        "x": 300,
+        "y": 100
+      },
+      "data": {
+        "label": "영업 담당에게 알림",
+        "connector": "telegram",
+        "credential_id": "{{credential:telegram}}",
+        "action": "send_message",
+        "params": {
+          "chat_id": "",
+          "text": "새 상담 신청: {{n1.name}}({{n1.company}})\n{{n1.email}}\n{{n1.message}}"
+        }
+      }
+    },
+    {
+      "id": "n4",
+      "type": "output",
+      "position": {
+        "x": 600,
+        "y": 0
+      },
+      "data": {
+        "label": "결과",
+        "template": "{{n1.name}}님의 상담 신청을 받았어요. 곧 연락드릴게요."
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "e1",
+      "source": "n1",
+      "target": "n2"
+    },
+    {
+      "id": "e2",
+      "source": "n1",
+      "target": "n3"
+    },
+    {
+      "id": "e3",
+      "source": "n2",
+      "target": "n4"
+    },
+    {
+      "id": "e4",
+      "source": "n3",
+      "target": "n4"
+    }
+  ],
+  "variables": {}
+}

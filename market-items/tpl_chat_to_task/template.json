@@ -1,0 +1,101 @@
+{
+  "version": 1,
+  "nodes": [
+    {
+      "id": "n1",
+      "type": "input",
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "data": {
+        "label": "요청",
+        "fields": [
+          {
+            "key": "message",
+            "label": "할 일을 말로 적어 주세요",
+            "type": "text",
+            "required": true
+          }
+        ]
+      }
+    },
+    {
+      "id": "n2",
+      "type": "parameter_extractor",
+      "position": {
+        "x": 300,
+        "y": 0
+      },
+      "data": {
+        "label": "할 일·마감 뽑기",
+        "provider": "default",
+        "query": "{{n1.message}}",
+        "parameters": [
+          {
+            "name": "task",
+            "type": "string",
+            "description": "할 일 제목",
+            "required": true
+          },
+          {
+            "name": "due",
+            "type": "string",
+            "description": "마감일(YYYY-MM-DD, 없으면 빈 값)",
+            "required": false
+          }
+        ]
+      }
+    },
+    {
+      "id": "n3",
+      "type": "connector",
+      "position": {
+        "x": 600,
+        "y": 0
+      },
+      "data": {
+        "label": "카드 만들기",
+        "connector": "trello",
+        "credential_id": "{{credential:trello}}",
+        "action": "create_card",
+        "params": {
+          "list_id": "",
+          "name": "{{n2.task}}",
+          "desc": "{{n1.message}}",
+          "due": "{{n2.due}}"
+        }
+      }
+    },
+    {
+      "id": "n4",
+      "type": "output",
+      "position": {
+        "x": 900,
+        "y": 0
+      },
+      "data": {
+        "label": "결과",
+        "template": "카드를 만들었어요: {{n3.url}}"
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "e1",
+      "source": "n1",
+      "target": "n2"
+    },
+    {
+      "id": "e2",
+      "source": "n2",
+      "target": "n3"
+    },
+    {
+      "id": "e3",
+      "source": "n3",
+      "target": "n4"
+    }
+  ],
+  "variables": {}
+}

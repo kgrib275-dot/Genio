@@ -441,3 +441,18 @@ Project = {id, workspace_id, name, description, color: indigo|sky|emerald|amber|
 - 작업본 저장 `PUT /apps/{id}/draft`에 `source`(canvas|builder|import, 기본 canvas) — 빌더 지표용.
 - 실행 상세에 `story[]`(실행 이야기)와 단계별 `summary`(한 문장). 빌더 툴 `get_run`.
 - Run.trigger 값 추가: `form`(공유 입력 폼).
+
+## v0.6 마켓 확대
+
+기본 마켓 아이템이 21개에서 52개로 늘었다(커넥터 21 · 템플릿 21 · 프롬프트 팩 9 · 단계 1). API 형식은 그대로다. `GET /market/items`의 `category`·`q`·`type`으로 거른다.
+
+| 종류 | 새 아이템 |
+|---|---|
+| 커넥터(13) | `notion`(페이지 만들기·DB 조회), `jira`(이슈 만들기·JQL 찾기), `teams`(워크플로 웹후크 카드), `discord`(웹훅), `telegram`(봇 메시지), `github`(이슈 만들기·목록), `trello`(카드), `asana`(할 일), `airtable`(줄 추가·읽기), `hubspot`(연락처), `linear`(이슈·팀 목록), `dooray`(수신 웹훅), `kakaowork`(사람·대화방 메시지) |
+| 템플릿(11) | 병렬 갈래 5개: `tpl_parallel_translate_summary`, `tpl_parallel_order_check`, `tpl_parallel_broadcast`, `tpl_lead_capture`, `tpl_daily_digest_kr`. 그 밖: `tpl_bug_to_github`, `tpl_request_to_jira`, `tpl_meeting_to_notion`, `tpl_survey_to_airtable`, `tpl_feedback_to_linear`, `tpl_chat_to_task` |
+| 프롬프트 팩(7) | `prompts_writing`, `prompts_meeting`, `prompts_tone`, `prompts_translate`, `prompts_summary`, `prompts_hr`, `prompts_marketing` |
+
+- 모든 커넥터는 `net.http`(safe_http: 사설 IP 차단, 타임아웃·응답 크기 제한)로만 호출하고, manifest `permissions`에 선언한 도메인만 접속한다.
+- 비밀값은 헤더로만 보낸다. Trello는 OAuth 헤더를 쓰고, 텔레그램만 주소에 토큰이 들어간다. 오류 문장에는 주소를 넣지 않고, 런타임이 비밀값을 지운다.
+- Google Calendar는 OAuth가 필요해 넣지 않았다. LINE Notify는 서비스가 종료돼 넣지 않았다.
+- 화면: 마켓 종류 칩에 개수를 보이고, 분류 칩(개수 포함, 누르면 거르기)과 정렬(많이 설치한 순·이름순·새로 나온 순)을 넣었다.

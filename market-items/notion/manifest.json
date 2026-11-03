@@ -1,0 +1,116 @@
+{
+  "key": "notion",
+  "type": "connector",
+  "name": "Notion",
+  "summary": "노션 데이터베이스에 페이지를 만들거나 데이터베이스를 조회해요.",
+  "version": "1.0.0",
+  "publisher": "platform",
+  "price": 0,
+  "category": "문서·지식",
+  "tags": [
+    "notion",
+    "노션",
+    "문서",
+    "위키",
+    "데이터베이스",
+    "회의록"
+  ],
+  "requires": {
+    "credentials": [
+      {
+        "key": "token",
+        "label": "내부 통합 토큰(secret_... 또는 ntn_...)",
+        "secret": true,
+        "required": true
+      }
+    ]
+  },
+  "actions": [
+    {
+      "key": "create_page",
+      "label": "페이지 만들기",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "database_id": {
+            "type": "string",
+            "title": "데이터베이스 id(주소 끝 32자리)"
+          },
+          "parent_page_id": {
+            "type": "string",
+            "title": "또는 상위 페이지 id"
+          },
+          "title": {
+            "type": "string",
+            "title": "제목"
+          },
+          "title_property": {
+            "type": "string",
+            "title": "제목 칸 이름(기본 Name)"
+          },
+          "content": {
+            "type": "string",
+            "title": "본문(빈 줄로 문단 구분)"
+          }
+        },
+        "required": [
+          "title"
+        ]
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "page_id": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          }
+        },
+        "required": []
+      }
+    },
+    {
+      "key": "query_database",
+      "label": "데이터베이스 조회",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "database_id": {
+            "type": "string",
+            "title": "데이터베이스 id"
+          },
+          "filter": {
+            "type": "object",
+            "title": "조건(노션 filter 형식, 선택)"
+          },
+          "page_size": {
+            "type": "integer",
+            "title": "가져올 개수(최대 100)"
+          }
+        },
+        "required": [
+          "database_id"
+        ]
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "count": {
+            "type": "integer"
+          },
+          "text": {
+            "type": "string"
+          },
+          "results": {
+            "type": "array"
+          }
+        },
+        "required": []
+      }
+    }
+  ],
+  "permissions": [
+    "network:api.notion.com"
+  ]
+}

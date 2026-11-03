@@ -1,0 +1,128 @@
+{
+  "key": "jira",
+  "type": "connector",
+  "name": "Jira",
+  "summary": "Jira Cloud에 이슈를 만들거나 JQL로 이슈를 찾아요.",
+  "version": "1.0.0",
+  "publisher": "platform",
+  "price": 0,
+  "category": "개발·업무관리",
+  "tags": [
+    "jira",
+    "지라",
+    "이슈",
+    "티켓",
+    "atlassian",
+    "업무관리"
+  ],
+  "requires": {
+    "credentials": [
+      {
+        "key": "site",
+        "label": "사이트 주소(회사이름.atlassian.net)",
+        "secret": false,
+        "required": true
+      },
+      {
+        "key": "email",
+        "label": "로그인 이메일",
+        "secret": false,
+        "required": true
+      },
+      {
+        "key": "api_token",
+        "label": "API 토큰",
+        "secret": true,
+        "required": true
+      }
+    ]
+  },
+  "actions": [
+    {
+      "key": "create_issue",
+      "label": "이슈 만들기",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "project_key": {
+            "type": "string",
+            "title": "프로젝트 키(예: OPS)"
+          },
+          "summary": {
+            "type": "string",
+            "title": "요약"
+          },
+          "description": {
+            "type": "string",
+            "title": "설명"
+          },
+          "issue_type": {
+            "type": "string",
+            "title": "이슈 유형(기본 Task)"
+          },
+          "labels": {
+            "type": "string",
+            "title": "레이블(쉼표로 구분)"
+          }
+        },
+        "required": [
+          "project_key",
+          "summary"
+        ]
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          }
+        },
+        "required": []
+      }
+    },
+    {
+      "key": "search_issues",
+      "label": "이슈 찾기(JQL)",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "jql": {
+            "type": "string",
+            "title": "JQL(예: project = OPS AND status = \"To Do\")"
+          },
+          "max_results": {
+            "type": "integer",
+            "title": "최대 개수(50까지)"
+          }
+        },
+        "required": [
+          "jql"
+        ]
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "count": {
+            "type": "integer"
+          },
+          "text": {
+            "type": "string"
+          },
+          "issues": {
+            "type": "array"
+          }
+        },
+        "required": []
+      }
+    }
+  ],
+  "permissions": [
+    "network:atlassian.net"
+  ]
+}

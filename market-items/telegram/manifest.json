@@ -1,0 +1,69 @@
+{
+  "key": "telegram",
+  "type": "connector",
+  "name": "Telegram",
+  "summary": "텔레그램 봇으로 대화방에 메시지를 보내요.",
+  "version": "1.0.0",
+  "publisher": "platform",
+  "price": 0,
+  "category": "메신저",
+  "tags": [
+    "telegram",
+    "텔레그램",
+    "봇",
+    "메신저",
+    "알림"
+  ],
+  "requires": {
+    "credentials": [
+      {
+        "key": "bot_token",
+        "label": "봇 토큰(@BotFather)",
+        "secret": true,
+        "required": true
+      }
+    ]
+  },
+  "actions": [
+    {
+      "key": "send_message",
+      "label": "메시지 보내기",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "chat_id": {
+            "type": "string",
+            "title": "대화방 id(숫자 또는 @채널이름)"
+          },
+          "text": {
+            "type": "string",
+            "title": "보낼 내용"
+          },
+          "parse_mode": {
+            "type": "string",
+            "title": "서식(HTML 또는 MarkdownV2, 선택)"
+          }
+        },
+        "required": [
+          "chat_id",
+          "text"
+        ]
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "sent": {
+            "type": "boolean"
+          },
+          "message_id": {
+            "type": "integer"
+          }
+        },
+        "required": []
+      }
+    }
+  ],
+  "permissions": [
+    "network:api.telegram.org"
+  ]
+}

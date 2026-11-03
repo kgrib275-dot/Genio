@@ -1,0 +1,33 @@
+{
+  "key": "tpl_bug_to_github",
+  "type": "template",
+  "name": "버그 신고를 GitHub 이슈로",
+  "summary": "사용자가 말로 신고한 버그를 재현 절차·기대 결과로 정리해 GitHub 이슈로 올려요.",
+  "version": "1.0.0",
+  "publisher": "platform",
+  "price": 0,
+  "category": "개발",
+  "app_type": "workflow",
+  "tags": [
+    "github",
+    "버그",
+    "이슈",
+    "개발",
+    "QA"
+  ],
+  "requires": {
+    "items": [
+      "github"
+    ]
+  },
+  "blanks": [
+    {
+      "key": "repo",
+      "label": "저장소(소유자/이름)",
+      "node_id": "n3",
+      "field": "params.repo",
+      "example": "my-org/my-repo"
+    }
+  ],
+  "permissions": []
+}

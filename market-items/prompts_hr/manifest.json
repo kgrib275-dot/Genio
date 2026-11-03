@@ -1,0 +1,19 @@
+{
+  "key": "prompts_hr",
+  "type": "prompt_pack",
+  "name": "인사·채용 프롬프트 팩",
+  "summary": "채용 공고, 면접 질문, 이력서 요약, 온보딩 안내를 돕는 프롬프트 모음.",
+  "version": "1.0.0",
+  "publisher": "platform",
+  "price": 0,
+  "category": "프롬프트",
+  "tags": [
+    "인사",
+    "채용",
+    "면접",
+    "온보딩",
+    "HR",
+    "프롬프트"
+  ],
+  "permissions": []
+}

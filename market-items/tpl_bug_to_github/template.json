@@ -1,0 +1,104 @@
+{
+  "version": 1,
+  "nodes": [
+    {
+      "id": "n1",
+      "type": "input",
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "data": {
+        "label": "버그 신고",
+        "fields": [
+          {
+            "key": "message",
+            "label": "무엇이 이상한가요?",
+            "type": "text",
+            "required": true
+          }
+        ]
+      }
+    },
+    {
+      "id": "n2",
+      "type": "llm",
+      "position": {
+        "x": 300,
+        "y": 0
+      },
+      "data": {
+        "label": "이슈로 정리",
+        "provider": "default",
+        "temperature": 0.3,
+        "system": "버그 신고를 개발자가 읽기 좋은 이슈로 정리하세요. body는 마크다운으로 '## 현상', '## 재현 절차', '## 기대 결과' 순서.",
+        "prompt": "{{n1.message}}",
+        "output_schema": {
+          "type": "object",
+          "properties": {
+            "title": {
+              "type": "string"
+            },
+            "body": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "title",
+            "body"
+          ]
+        }
+      }
+    },
+    {
+      "id": "n3",
+      "type": "connector",
+      "position": {
+        "x": 600,
+        "y": 0
+      },
+      "data": {
+        "label": "이슈 만들기",
+        "connector": "github",
+        "credential_id": "{{credential:github}}",
+        "action": "create_issue",
+        "params": {
+          "repo": "my-org/my-repo",
+          "title": "{{n2.title}}",
+          "body": "{{n2.body}}",
+          "labels": "bug"
+        }
+      }
+    },
+    {
+      "id": "n4",
+      "type": "output",
+      "position": {
+        "x": 900,
+        "y": 0
+      },
+      "data": {
+        "label": "결과",
+        "template": "이슈 #{{n3.number}}를 만들었어요: {{n3.url}}"
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "e1",
+      "source": "n1",
+      "target": "n2"
+    },
+    {
+      "id": "e2",
+      "source": "n2",
+      "target": "n3"
+    },
+    {
+      "id": "e3",
+      "source": "n3",
+      "target": "n4"
+    }
+  ],
+  "variables": {}
+}

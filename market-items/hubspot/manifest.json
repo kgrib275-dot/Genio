@@ -1,0 +1,77 @@
+{
+  "key": "hubspot",
+  "type": "connector",
+  "name": "HubSpot",
+  "summary": "허브스팟 CRM에 연락처(리드)를 만들어요.",
+  "version": "1.0.0",
+  "publisher": "platform",
+  "price": 0,
+  "category": "영업·CRM",
+  "tags": [
+    "hubspot",
+    "허브스팟",
+    "crm",
+    "리드",
+    "영업",
+    "연락처"
+  ],
+  "requires": {
+    "credentials": [
+      {
+        "key": "token",
+        "label": "비공개 앱 액세스 토큰",
+        "secret": true,
+        "required": true
+      }
+    ]
+  },
+  "actions": [
+    {
+      "key": "create_contact",
+      "label": "연락처 만들기",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string",
+            "title": "이메일"
+          },
+          "firstname": {
+            "type": "string",
+            "title": "이름"
+          },
+          "lastname": {
+            "type": "string",
+            "title": "성"
+          },
+          "phone": {
+            "type": "string",
+            "title": "전화"
+          },
+          "company": {
+            "type": "string",
+            "title": "회사"
+          }
+        },
+        "required": [
+          "email"
+        ]
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string"
+          }
+        },
+        "required": []
+      }
+    }
+  ],
+  "permissions": [
+    "network:api.hubapi.com"
+  ]
+}

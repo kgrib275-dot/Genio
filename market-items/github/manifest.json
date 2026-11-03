@@ -1,0 +1,112 @@
+{
+  "key": "github",
+  "type": "connector",
+  "name": "GitHub",
+  "summary": "GitHub 저장소에 이슈를 만들거나 이슈 목록을 읽어요.",
+  "version": "1.0.0",
+  "publisher": "platform",
+  "price": 0,
+  "category": "개발·업무관리",
+  "tags": [
+    "github",
+    "깃허브",
+    "이슈",
+    "개발",
+    "버그"
+  ],
+  "requires": {
+    "credentials": [
+      {
+        "key": "token",
+        "label": "개인 액세스 토큰(Issues 읽기·쓰기)",
+        "secret": true,
+        "required": true
+      }
+    ]
+  },
+  "actions": [
+    {
+      "key": "create_issue",
+      "label": "이슈 만들기",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "repo": {
+            "type": "string",
+            "title": "저장소(소유자/이름)"
+          },
+          "title": {
+            "type": "string",
+            "title": "제목"
+          },
+          "body": {
+            "type": "string",
+            "title": "내용"
+          },
+          "labels": {
+            "type": "string",
+            "title": "레이블(쉼표로 구분)"
+          }
+        },
+        "required": [
+          "repo",
+          "title"
+        ]
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "number": {
+            "type": "integer"
+          },
+          "url": {
+            "type": "string"
+          }
+        },
+        "required": []
+      }
+    },
+    {
+      "key": "list_issues",
+      "label": "이슈 목록",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "repo": {
+            "type": "string",
+            "title": "저장소(소유자/이름)"
+          },
+          "state": {
+            "type": "string",
+            "title": "상태(open·closed·all)"
+          },
+          "limit": {
+            "type": "integer",
+            "title": "개수(50까지)"
+          }
+        },
+        "required": [
+          "repo"
+        ]
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "count": {
+            "type": "integer"
+          },
+          "text": {
+            "type": "string"
+          },
+          "issues": {
+            "type": "array"
+          }
+        },
+        "required": []
+      }
+    }
+  ],
+  "permissions": [
+    "network:api.github.com"
+  ]
+}

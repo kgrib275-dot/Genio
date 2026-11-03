@@ -1,0 +1,19 @@
+{
+  "key": "tpl_parallel_translate_summary",
+  "type": "template",
+  "name": "외국어 문의: 번역과 요약을 동시에",
+  "summary": "외국어 문의가 오면 한국어 번역과 세 줄 요약을 동시에 만들어 한 번에 보여 줘요(병렬 갈래).",
+  "version": "1.0.0",
+  "publisher": "platform",
+  "price": 0,
+  "category": "고객지원",
+  "app_type": "workflow",
+  "tags": [
+    "병렬",
+    "번역",
+    "요약",
+    "문의",
+    "고객지원"
+  ],
+  "permissions": []
+}
