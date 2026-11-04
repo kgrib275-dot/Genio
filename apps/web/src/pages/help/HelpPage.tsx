@@ -1,5 +1,5 @@
 import { ArrowUp, BookMarked, GraduationCap } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { PageContainer } from "@/app/Layout";
 import { ListToolbar, NoMatch } from "@/components/ListControls";
@@ -24,6 +24,13 @@ export default function HelpPage() {
   const c = useListControls(HELP_SECTIONS, { key: "help", defaultSize: 100, search: sectionText });
   const shown = c.filtered;
   const [current, setCurrent] = useState<string>(HELP_SECTIONS[0]?.id ?? "");
+  const topRef = useRef<HTMLDivElement>(null);
+  // 목차를 눌러 옮긴 직후에는 스크롤 감지가 강조를 바꾸지 않게 잠깐 멈춘다
+  const pinnedUntil = useRef(0);
+  const pick = (id: string) => {
+    setCurrent(id);
+    pinnedUntil.current = Date.now() + 1200;
+  };
 
   useEffect(() => {
     if (!hash) return;
@@ -40,7 +47,7 @@ export default function HelpPage() {
         const top = entries
           .filter((e) => e.isIntersecting)
           .sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top)[0];
-        if (top) setCurrent(top.target.id);
+        if (top && Date.now() > pinnedUntil.current) setCurrent(top.target.id);
       },
       { rootMargin: "-80px 0px -60% 0px" },
     );
@@ -53,7 +60,7 @@ export default function HelpPage() {
 
   return (
     <PageContainer>
-      <div className="mb-6 space-y-4">
+      <div ref={topRef} className="mb-6 scroll-mt-24 space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-2">
             <BookMarked className="h-6 w-6 text-indigo-500" />
@@ -74,7 +81,7 @@ export default function HelpPage() {
             aria-label="목차"
             value={current}
             onChange={(e) => {
-              setCurrent(e.target.value);
+              pick(e.target.value);
               navigate(`#${e.target.value}`);
             }}
             className="h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-800"
@@ -95,6 +102,7 @@ export default function HelpPage() {
               <li key={s.id}>
                 <a
                   href={`#${s.id}`}
+                  onClick={() => pick(s.id)}
                   className={cn(
                     "flex items-center gap-2 rounded-lg px-3 py-1.5 transition-colors",
                     current === s.id
@@ -132,7 +140,12 @@ export default function HelpPage() {
           <div className="flex justify-end">
             <button
               type="button"
-              onClick={() => window.scrollTo?.({ top: 0, behavior: "smooth" })}
+              onClick={() => {
+                // 화면은 창이 아니라 안쪽 영역이 스크롤되므로, 맨 위 요소를 보이게 한다
+                topRef.current?.scrollIntoView?.({ behavior: "smooth", block: "start" });
+                pick(HELP_SECTIONS[0]?.id ?? "");
+                if (window.location.hash) navigate(".", { replace: true });
+              }}
               className="inline-flex items-center gap-1 rounded-lg px-3 py-1.5 text-sm text-slate-500 hover:bg-slate-100"
             >
               <ArrowUp className="h-4 w-4" /> 맨 위로
