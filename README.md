@@ -2,7 +2,7 @@
 
 **Dify(AI 앱·지식베이스) + n8n(자동화·연결·트리거) + 챗봇**을 하나로 합친 노코드 챗봇 기반 흐름(워크플로우) 도구의 프로토타입이다. 말로 요청하면 빌더가 흐름을 만들고, 캔버스에서 다듬어 챗봇·입력 폼·외부에서 받기·예약으로 운영한다. 목표는 "기획자(비개발자)가 10분 안에 동작하는 앱을 말로 만들어 내는 것".
 
-- **처음이라면**: 화면 왼쪽 아래 **배우기**에서 샘플 11가지를 열어 강좌 9개를 따라 하세요(Dify·n8n 이름 대응표 포함).
+- **처음이라면**: 첫 로그인 때 나오는 **화면 투어**와 대시보드의 **시작 체크리스트**를 따라 하고, 왼쪽 아래 **배우기**에서 샘플 11가지·강좌 9개를 해 보세요(Dify·n8n 이름 대응표 포함). 막히면 오른쪽 아래 **도움**에서 설명서를 찾거나 문의를 보내요.
 
 - 실행: `start_genio.bat` 더블클릭 (끄기: `stop_genio.bat`, 화면 코드를 고쳤으면 `start_genio.bat -Rebuild`)
 - 공유 주소: https://genio.tail6bd481.ts.net (Tailscale Funnel, 인터넷 공개)
@@ -18,11 +18,12 @@
 | 사람 개입 | 작업함(승인·질문·배정), 로그인 없이 링크로 결정, 이메일·슬랙 알림 |
 | 데이터 | 지식베이스(PDF·DOCX·PPTX·XLSX·HTML·URL, 조각 설정, 혼합 검색, 재정렬, 문서 켜기·끄기, 지식베이스별 임베딩 모델, **질문·답 형식(표 가져오기·AI 생성)**, **문서 처리 순서·미리 보기**), 데이터 표(CSV 가져오기·내보내기) |
 | 연결 | Slack·이메일·Google Sheets·DB(PostgreSQL·MySQL)·HTTP 인증 정보·잔디·네이버웍스·카카오 알림톡·카카오워크·두레이·Notion·Jira·Teams·Discord·Telegram·GitHub·Trello·Asana·Airtable·HubSpot·Linear, 연결 테스트 |
-| AI | 공급자 23곳(OpenAI·Anthropic·Google·Azure·OpenAI 호환 + DeepSeek·Mistral·Groq·OpenRouter·xAI·Upstage·HyperCLOVA X 등 키만 넣으면 되는 18곳), 이미지 입력(비전), 모델 목록·기본 모델, 실행·앱·사용자별 비용, 모델 교체 예상 비용, 월 한도·알림 |
-| 운영·관리 | 로그·모니터링·사용량·활동 기록, 모든 목록 검색·필터·개수, 프로젝트 현황판, 소유자·관리자 콘솔(계정 만들기·비밀번호 재설정), 역할 5개·배포 대상 사용자·API 키 권한 범위, 보관 기간, 개인 설정(다크 모드) |
+| AI | **연결 테스트**(키로 실제 모델 목록 불러오기), 공급자 23곳(OpenAI·Anthropic·Google·Azure·OpenAI 호환 + DeepSeek·Mistral·Groq·OpenRouter·xAI·Upstage·HyperCLOVA X 등 키만 넣으면 되는 18곳), 이미지 입력(비전), 모델 목록·기본 모델, 실행·앱·사용자별 비용, 모델 교체 예상 비용, 월 한도·알림 |
+| 계정 | 비밀번호 찾기(메일), 이메일 인증(선택), 2단계 인증(인증 앱·복구 코드), 로그인 기기 관리·모든 기기 로그아웃, 내 데이터 내려받기, 탈퇴, 이용약관·개인정보처리방침 동의 |
+| 운영·관리 | 로그·모니터링·사용량·활동 기록(CSV 내보내기), 모든 목록 검색·필터·개수(계정별 유지, 기본 10개), 프로젝트 현황판, 소유자·관리자 콘솔(계정 만들기·비밀번호·2단계 인증 초기화, 시스템 메일), **시스템 상태**(DB·Redis·워커·백업·디스크)·**서버 오류 기록**(요청 번호), **매일 자동 백업**(7일 보관), 역할 5개·배포 대상 사용자·API 키 권한 범위, 보관 기간, 개인 설정(다크 모드) |
 | 마켓 | 52개: 커넥터 21·템플릿 21(병렬 갈래 5개 포함)·프롬프트 팩 9·단계, 분류·정렬, 설치·업데이트 |
 | 외부 연동 | **MCP로 게시**(흐름 앱을 Claude 등 AI 도구에서 호출), **외부 추적**(Langfuse·LangSmith) |
-| 배우기 | 샘플 11가지(8개는 AI 키 없이 동작), 따라 하기 강좌 9개, Dify·n8n 이름 대응표 |
+| 배우기·도움 | 화면 투어(역할별), 시작 체크리스트, 빈 화면 안내, 샘플 11가지(8개는 AI 키 없이 동작), 따라 하기 강좌 9개, Dify·n8n 이름 대응표, 사용설명서, 도움·문의 창 |
 
 기능 정의서와 반영 현황: [docs/feature-spec.md](docs/feature-spec.md) · [docs/feature-coverage.md](docs/feature-coverage.md)
 다른 서비스와 비교(Dify·n8n·Zapier·Make·Flowise): [docs/dify-gap.md](docs/dify-gap.md)
@@ -31,18 +32,25 @@
 - 1,000명이 각자 가입~앱 만들기~배포~챗~실행~데이터 표~웹훅까지 사용: 요청 25,000개 실패 0.
 - 동시 100명: 고치기 전에는 서버가 멈췄으나, API를 운영 설정(프로세스 4개)으로 바꾸고 응답 스트리밍 중 DB 연결을 붙잡지 않게 고친 뒤 **1,000명 모두 성공, 실패 0**. 지금 한계는 PC의 CPU다.
 - 데이터: 컨테이너를 지우고 다시 만들어도, 백업(pg_dump)을 새 DB에 복구해도 모든 수치가 같았다.
-- 보안: 사용자 간 접근 4,000번 시도 모두 차단, 위조 토큰·내부망 호출·SQL 주입·XSS 차단, 비밀값 마스킹. 남은 과제(로그인 시도 제한 등)는 보고서 참고.
+- 보안: 사용자 간 접근 4,000번 시도 모두 차단, 위조 토큰·내부망 호출·SQL 주입·XSS 차단, 비밀값 마스킹. 이후 로그인 시도 제한·비밀번호 규칙·보안 헤더(HSTS·CSP)·2단계 인증을 더했다(2026-11-04 운영 주소에서 재확인).
+- v0.6 병렬 갈래: 같은 단계를 순서대로 4.2초 → 병렬 1.8초(가상 사용자 5명 시험, 가짜 AI). 1,000명 병렬 시험은 PC 메모리 부족으로 끝내지 못했다.
 - 자세히: [docs/loadtest-2026-11-03.md](docs/loadtest-2026-11-03.md)
+
+## 오픈 전 남은 일
+- **꼭**: 데모 계정 비밀번호 바꾸기(공개 주소), 필요 없으면 회원가입 끄기(관리 > 시스템 설정), 실제 AI 키로 빌더·샘플 ⑧~⑩ 확인, 시스템 메일(SMTP) 설정, 약관·개인정보처리방침 법률 검토.
+- **판매형 전환 때 결정 필요**(작업 규칙상 범위 밖, [ADR 0011](docs/decisions/0011-오픈-준비.md)): 결제·요금제, 사용량 과금, 기본 제공 AI·체험 크레딧, SSO, 고객사별 데이터 격리, 클라우드 서버 이전.
+- 실제 계정으로 확인하지 못한 것: 새 커넥터 13개, AI 공급자 18곳, MCP 클라이언트, Langfuse·LangSmith, 메일 발송.
 
 ## 빠른 시작
 ```bash
 cp .env.example .env          # 키 채우기(GENIO_SECRET_KEY, GENIO_FERNET_KEY 등)
-docker compose up --build -d  # postgres, redis, api(프로세스 4), worker(+예약), web(nginx), tailscale
+docker compose up --build -d  # postgres, redis, api(프로세스 4), worker(+예약), web(nginx), backup(매일 3시), tailscale
 open http://127.0.0.1:5190
 ```
 - API 코드를 고친 뒤: `docker compose restart api worker` (운영 설정이라 자동 재시작 없음)
 - 개발 중 자동 재시작: `docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d api`
 - requirements를 바꾼 뒤: `docker compose up -d --build api worker`
+- 백업 복구: `scripts/restore_backup.sh <파일>`(지금 DB를 먼저 백업한 뒤 복구, [runbook](docs/runbook.md))
 - 검사: `make check` (Windows는 `PYTHONUTF8=1 bash scripts/check.sh`) — ruff·mypy·pytest·eslint·tsc·vitest
 
 ## 구성
@@ -52,7 +60,7 @@ apps/worker     Celery(흐름 실행, 문서 임베딩, 1분마다 예약 실행
 apps/web        React · Vite · React Flow · TanStack Query · Zustand · Tailwind
 packages/nodes  NodeSpec 단계 레지스트리(26종)
 market-items    기본 제공 마켓 아이템
-docs            설계서, 기능 정의서·반영 현황, API 계약, 운영 안내, 결정 기록(ADR 0001~0010), 점검 보고서
+docs            설계서, 기능 정의서·반영 현황, API 계약, 운영 안내, 결정 기록(ADR 0001~0011), 점검 보고서
 ```
 
 ## 문서
