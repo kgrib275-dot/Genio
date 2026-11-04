@@ -1,7 +1,6 @@
 import { HelpButton } from "@/help/HelpButton";
-import { CheckCircle2, PlugZap, XCircle } from "lucide-react";
+import { CheckCircle2, KeyRound, Plug, PlugZap, XCircle } from "lucide-react";
 import { useState, type FormEvent } from "react";
-import { Link } from "react-router-dom";
 import { PageContainer } from "@/app/Layout";
 import { ErrorBox, Loading } from "@/components/ErrorBox";
 import { ListPager, ListToolbar, NoMatch } from "@/components/ListControls";
@@ -26,6 +25,7 @@ import {
 } from "@/lib/api/v5b";
 import { optionsFrom, useListControls } from "@/lib/useListControls";
 import { canEdit, canManage, useSession } from "@/store/session";
+import { EmptyState } from "@/components/EmptyState";
 
 function NewCredentialForm({ ws }: { ws: string }) {
   const defs = useConnectorDefinitions(ws);
@@ -38,13 +38,12 @@ function NewCredentialForm({ ws }: { ws: string }) {
 
   if (defs.data && defs.data.length === 0) {
     return (
-      <Empty>
-        설치된 서비스가 없어요.{" "}
-        <Link className="text-indigo-600" to="/market?type=connector">
-          마켓
-        </Link>
-        에서 슬랙·메일 같은 서비스를 먼저 설치하세요.
-      </Empty>
+      <EmptyState
+        icon={<Plug className="h-5 w-5" />}
+        title="설치된 서비스가 없어요"
+        description="슬랙·메일·노션 같은 서비스를 마켓에서 먼저 설치하면, 여기서 연결 정보(키·토큰)를 등록할 수 있어요."
+        action={{ label: "마켓에서 서비스 찾기", to: "/market?type=connector" }}
+      />
     );
   }
 
@@ -224,7 +223,12 @@ export default function ConnectorsPage() {
             {creds.isLoading && <Loading />}
             <ErrorBox error={creds.error} />
             {creds.data?.length === 0 && (
-              <p className="px-5 py-6 text-sm text-slate-500">아직 등록된 연결 정보가 없어요.</p>
+              <EmptyState
+                compact
+                icon={<KeyRound className="h-5 w-5" />}
+                title="아직 등록된 연결 정보가 없어요"
+                description="오른쪽에서 서비스를 고르고 키·토큰을 넣으면 흐름의 연결 단계에서 고를 수 있어요. 값은 암호화돼 다시 보이지 않아요."
+              />
             )}
             {(creds.data ?? []).length > 0 && (
               <ListToolbar

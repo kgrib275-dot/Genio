@@ -26,7 +26,12 @@ import { useEffect, useState } from "react";
 import { Link, NavLink, Outlet, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { Avatar } from "@/components/AppIcon";
 import { ErrorBox, Loading } from "@/components/ErrorBox";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { HelpWidget } from "@/components/help/HelpWidget";
 import { ProjectDialog, ProjectDot } from "@/components/projects/ProjectDialog";
+import { GuidedTour } from "@/components/tour/GuidedTour";
+import { stepsFor } from "@/components/tour/tourSteps";
+import { useSaveOnboarding } from "@/lib/api/onboarding";
 import { ko } from "@/i18n/ko";
 import { useMe } from "@/lib/api/auth";
 import { signOut } from "@/lib/api/client";
@@ -44,6 +49,8 @@ interface NavItem {
   icon: LucideIcon;
   end?: boolean;
   show?: (role: Role | null) => boolean;
+  /** 화면 투어가 짚는 표시(data-tour) */
+  tour?: string;
 }
 
 const NAV: NavItem[] = [
@@ -54,12 +61,12 @@ const NAV: NavItem[] = [
   { to: "/connectors", label: ko.nav.connectors, icon: Plug },
   { to: "/market", label: ko.nav.market, icon: Store },
   { to: "/workspace", label: ko.nav.workspace, icon: Users },
-  { to: "/admin", label: "관리", icon: Shield, show: canManage },
+  { to: "/admin", label: "관리", icon: Shield, show: canManage, tour: "nav-admin" },
 ];
 
 const BOTTOM_NAV: NavItem[] = [
-  { to: "/learn", label: "배우기", icon: GraduationCap },
-  { to: "/help", label: "사용설명서", icon: BookMarked },
+  { to: "/learn", label: "배우기", icon: GraduationCap, tour: "nav-learn" },
+  { to: "/help", label: "사용설명서", icon: BookMarked, tour: "nav-help" },
 ];
 
 export function Logo({ compact = false }: { compact?: boolean }) {
@@ -101,6 +108,7 @@ function NavItems({
             key={n.to}
             to={n.to}
             end={n.end}
+            data-tour={n.tour}
             title={compact ? n.label : undefined}
             onClick={onNavigate}
             className={({ isActive }) =>
@@ -177,7 +185,10 @@ function SidebarBody({
         </div>
       )}
 
-      <nav className={cn("flex-1 space-y-0.5 overflow-y-auto", compact ? "px-2" : "px-3")}>
+      <nav
+        data-tour="nav"
+        className={cn("flex-1 space-y-0.5 overflow-y-auto", compact ? "px-2" : "px-3")}
+      >
         <NavItems
           items={NAV}
           compact={compact}
@@ -368,7 +379,7 @@ function ProjectsSection({ myUserId, onNavigate }: { myUserId?: string; onNaviga
 
 export function Layout() {
   const me = useMe();
-  const { workspaceId, setWorkspace } = useSession();
+  const { workspaceId, setWorkspace, role } = useSession();
   const navigate = useNavigate();
   const { pathname } = useLocation();
   // 앱 화면(빌더 등)에서는 캔버스를 넓게 쓰도록 메뉴를 아이콘만 보이게 접는다.
@@ -425,6 +436,24 @@ export function Layout() {
 
   // 화면을 옮기면 모바일 메뉴를 닫는다
   useEffect(() => setDrawerOpen(false), [pathname]);
+
+  // v0.6 첫 로그인 화면 투어: 대시보드에서 한 번 보여 주고, '화면 안내 다시 보기'로 다시 연다
+  const saveOnboarding = useSaveOnboarding();
+  const [touring, setTouring] = useState(false);
+  const tourDone = me.data?.preferences?.onboarding?.tour_done;
+  useEffect(() => {
+    if (tourDone !== false || pathname !== "/" || !workspaceId) return;
+    const t = window.setTimeout(() => setTouring(true), 700);
+    return () => window.clearTimeout(t);
+  }, [tourDone, pathname, workspaceId]);
+  useEffect(() => {
+    const onStart = () => {
+      navigate("/");
+      window.setTimeout(() => setTouring(true), 500);
+    };
+    window.addEventListener("genio:start-tour", onStart);
+    return () => window.removeEventListener("genio:start-tour", onStart);
+  }, [navigate]);
 
   if (me.isLoading) return <Loading />;
   if (me.error)
@@ -498,13 +527,25 @@ export function Layout() {
 
       <main className="min-h-0 min-w-0 flex-1 overflow-y-auto">
         {workspaceId ? (
-          <Outlet />
+          <ErrorBoundary resetKey={pathname}>
+            <Outlet />
+          </ErrorBoundary>
         ) : (
           <div className="p-8">
             <Loading label="워크스페이스를 고르는 중…" />
           </div>
         )}
       </main>
+      <HelpWidget hideButton={inApp} />
+      {touring && (
+        <GuidedTour
+          steps={stepsFor(role)}
+          onClose={() => {
+            setTouring(false);
+            saveOnboarding.mutate({ tour_done: true });
+          }}
+        />
+      )}
     </div>
   );
 }

@@ -3,6 +3,7 @@ import { Navigate, Route, Routes } from "react-router-dom";
 import { Layout } from "@/app/Layout";
 import { RequireAuth } from "@/app/RequireAuth";
 import { Loading } from "@/components/ErrorBox";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { Toaster } from "@/components/ui/toast";
 import LoginPage from "@/pages/auth/LoginPage";
 import SignupPage from "@/pages/auth/SignupPage";
@@ -32,52 +33,63 @@ const AdminPage = lazy(() => import("@/pages/admin/AdminPage"));
 const HelpPage = lazy(() => import("@/pages/help/HelpPage"));
 const SettingsPage = lazy(() => import("@/pages/settings/SettingsPage"));
 const ProjectsBoardPage = lazy(() => import("@/pages/projects/ProjectsBoardPage"));
+const NotFoundPage = lazy(() => import("@/pages/NotFoundPage"));
+const TermsPage = lazy(() =>
+  import("@/pages/legal/LegalPage").then((m) => ({ default: m.TermsPage })),
+);
+const PrivacyPage = lazy(() =>
+  import("@/pages/legal/LegalPage").then((m) => ({ default: m.PrivacyPage })),
+);
 
 export default function App() {
   return (
     <>
-      <Suspense fallback={<Loading />}>
-        <Routes>
-          <Route path="/login" element={<LoginPage />} />
-          <Route path="/signup" element={<SignupPage />} />
-          <Route path="/invite/:token" element={<InviteAcceptPage />} />
-          <Route path="/share/:token" element={<SharePage />} />
-          <Route path="/t/:token" element={<TaskLinkPage />} />
-          <Route
-            element={
-              <RequireAuth>
-                <Layout />
-              </RequireAuth>
-            }
-          >
-            <Route index element={<DashboardPage />} />
-            <Route path="apps/:id" element={<Navigate to="builder" replace />} />
-            <Route path="apps/:id/builder" element={<BuilderPage />} />
-            <Route path="apps/:id/settings" element={<AppSettingsPage />} />
-            <Route path="apps/:id/runs" element={<AppRunsPage />} />
-            <Route path="apps/:id/features" element={<AppFeaturesPage />} />
-            <Route path="apps/:id/logs" element={<AppLogsPage />} />
-            <Route path="apps/:id/monitor" element={<AppMonitorPage />} />
-            <Route path="apps/:id/api" element={<AppApiPage />} />
-            <Route path="apps/:id/triggers" element={<AppTriggersPage />} />
-            <Route path="runs/:id" element={<RunDetailPage />} />
-            <Route path="knowledge" element={<KnowledgePage />} />
-            <Route path="data" element={<DataTablesPage />} />
-            <Route path="data/:tableId" element={<DataTablesPage />} />
-            <Route path="connectors" element={<ConnectorsPage />} />
-            <Route path="market" element={<MarketPage />} />
-            <Route path="market/:key" element={<MarketDetailPage />} />
-            <Route path="workspace" element={<WorkspacePage />} />
-            <Route path="admin" element={<AdminPage />} />
-            <Route path="help" element={<HelpPage />} />
-            <Route path="settings" element={<SettingsPage />} />
-            <Route path="tasks" element={<TasksPage />} />
-            <Route path="learn" element={<LearnPage />} />
-            <Route path="projects" element={<ProjectsBoardPage />} />
-          </Route>
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
-      </Suspense>
+      <ErrorBoundary>
+        <Suspense fallback={<Loading />}>
+          <Routes>
+            <Route path="/login" element={<LoginPage />} />
+            <Route path="/signup" element={<SignupPage />} />
+            <Route path="/invite/:token" element={<InviteAcceptPage />} />
+            <Route path="/share/:token" element={<SharePage />} />
+            <Route path="/t/:token" element={<TaskLinkPage />} />
+            <Route path="/terms" element={<TermsPage />} />
+            <Route path="/privacy" element={<PrivacyPage />} />
+            <Route
+              element={
+                <RequireAuth>
+                  <Layout />
+                </RequireAuth>
+              }
+            >
+              <Route index element={<DashboardPage />} />
+              <Route path="apps/:id" element={<Navigate to="builder" replace />} />
+              <Route path="apps/:id/builder" element={<BuilderPage />} />
+              <Route path="apps/:id/settings" element={<AppSettingsPage />} />
+              <Route path="apps/:id/runs" element={<AppRunsPage />} />
+              <Route path="apps/:id/features" element={<AppFeaturesPage />} />
+              <Route path="apps/:id/logs" element={<AppLogsPage />} />
+              <Route path="apps/:id/monitor" element={<AppMonitorPage />} />
+              <Route path="apps/:id/api" element={<AppApiPage />} />
+              <Route path="apps/:id/triggers" element={<AppTriggersPage />} />
+              <Route path="runs/:id" element={<RunDetailPage />} />
+              <Route path="knowledge" element={<KnowledgePage />} />
+              <Route path="data" element={<DataTablesPage />} />
+              <Route path="data/:tableId" element={<DataTablesPage />} />
+              <Route path="connectors" element={<ConnectorsPage />} />
+              <Route path="market" element={<MarketPage />} />
+              <Route path="market/:key" element={<MarketDetailPage />} />
+              <Route path="workspace" element={<WorkspacePage />} />
+              <Route path="admin" element={<AdminPage />} />
+              <Route path="help" element={<HelpPage />} />
+              <Route path="settings" element={<SettingsPage />} />
+              <Route path="tasks" element={<TasksPage />} />
+              <Route path="learn" element={<LearnPage />} />
+              <Route path="projects" element={<ProjectsBoardPage />} />
+              <Route path="*" element={<NotFoundPage />} />
+            </Route>
+          </Routes>
+        </Suspense>
+      </ErrorBoundary>
       <Toaster />
     </>
   );

@@ -1,5 +1,7 @@
 import {
   ArrowLeft,
+  BookCheck,
+  MessagesSquare,
   CheckCircle2,
   Headset,
   Send,
@@ -43,6 +45,7 @@ import { PAGE_SIZES, useListControls, usePageSize, type FilterDef } from "@/lib/
 import { AppNav } from "@/pages/apps/AppNav";
 import { canEdit, useSession } from "@/store/session";
 import { useAgentReply, useCloseHandoff, useHandoffConversations } from "@/lib/api/v5a";
+import { EmptyState } from "@/components/EmptyState";
 
 function ratingOf(m: ConversationMessage): Rating | null {
   const f = m.feedback;
@@ -432,7 +435,12 @@ function Conversations({ appId, editable }: { appId: string; editable: boolean }
       {convs.isLoading && <Loading />}
       <ErrorBox error={convs.error} />
       {convs.data && raw.length === 0 && page === 1 && !searching && (
-        <Empty>아직 대화가 없어요. 배포한 링크나 위젯으로 대화가 오가면 여기에 쌓여요.</Empty>
+        <EmptyState
+          icon={<MessagesSquare className="h-5 w-5" />}
+          title="아직 대화가 없어요"
+          description="배포한 공유 링크나 위젯으로 대화가 오가면 여기에 쌓여요. 좋아요·싫어요 피드백도 함께 보여요."
+          action={{ label: "배포·설정으로 가기", to: `/apps/${appId}/settings` }}
+        />
       )}
       {convs.data && list.length === 0 && (searching || page > 1) && (
         <Card className="px-4 py-8 text-center text-sm text-slate-500">
@@ -557,7 +565,13 @@ function Annotations({ appId, editable }: { appId: string; editable: boolean }) 
       </div>
       {list.isLoading && <Loading />}
       <ErrorBox error={list.error} />
-      {list.data?.length === 0 && <Empty>아직 모범 답변이 없어요.</Empty>}
+      {list.data?.length === 0 && (
+        <EmptyState
+          icon={<BookCheck className="h-5 w-5" />}
+          title="아직 모범 답변이 없어요"
+          description="자주 오는 질문과 정해 둔 답을 넣으면, 비슷한 질문에는 AI 대신 이 답을 바로 보여 줘요. 대화 기록에서 좋은 답을 골라 넣을 수도 있어요."
+        />
+      )}
       {(list.data?.length ?? 0) > 0 && <ListToolbar c={c} placeholder="질문·답으로 찾기" />}
       <NoMatch c={c} />
       <div className="grid gap-3 md:grid-cols-2">

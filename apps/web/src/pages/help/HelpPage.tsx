@@ -1,4 +1,5 @@
-import { ArrowUp, BookMarked, GraduationCap } from "lucide-react";
+import { ArrowUp, BookMarked, GraduationCap, Sparkles } from "lucide-react";
+import { startTour } from "@/lib/helpEvents";
 import { useEffect, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { PageContainer } from "@/app/Layout";
@@ -72,6 +73,13 @@ export default function HelpPage() {
           >
             <GraduationCap className="h-4 w-4" /> 처음이면 배우기부터
           </Link>
+          <button
+            type="button"
+            onClick={startTour}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-100"
+          >
+            <Sparkles className="h-4 w-4" /> 화면 안내 다시 보기
+          </button>
         </div>
         <ListToolbar c={c} placeholder="궁금한 것 찾기 (예: 병렬, 배포, 비밀번호)" />
         {/* 휴대폰: 목차를 고르는 칸 */}

@@ -25,8 +25,14 @@ export function useLogin() {
 
 export function useSignup() {
   return useTokenMutation(
-    (v: { email: string; password: string; name: string; workspace_name?: string }) =>
-      api.post<Tokens>("/auth/signup", v),
+    (v: {
+      email: string;
+      password: string;
+      name: string;
+      workspace_name?: string;
+      agree_terms: boolean;
+      agree_privacy: boolean;
+    }) => api.post<Tokens>("/auth/signup", v),
   );
 }
 
@@ -39,7 +45,8 @@ export function useInvitationInfo(token: string) {
 }
 
 export function useAcceptInvitation(token: string) {
-  return useTokenMutation((v: { name: string; password: string }) =>
-    api.post<Tokens>(`/auth/invitations/${token}/accept`, v),
+  return useTokenMutation(
+    (v: { name: string; password: string; agree_terms?: boolean; agree_privacy?: boolean }) =>
+      api.post<Tokens>(`/auth/invitations/${token}/accept`, v),
   );
 }

@@ -346,7 +346,13 @@ def test_kb_upload_search_and_failure(
 def test_signup_login_refresh_me(client: TestClient) -> None:
     res = client.post(
         "/api/v1/auth/signup",
-        json={"email": "New@Example.com", "password": "Spring2026walk", "name": "새 사람"},
+        json={
+            "email": "New@Example.com",
+            "password": "Spring2026walk",
+            "name": "새 사람",
+            "agree_terms": True,
+            "agree_privacy": True,
+        },
     )
     assert res.status_code == 200
     tokens = res.json()
@@ -357,7 +363,13 @@ def test_signup_login_refresh_me(client: TestClient) -> None:
     assert (
         client.post(
             "/api/v1/auth/signup",
-            json={"email": "new@example.com", "password": "Spring2026walk", "name": "x"},
+            json={
+                "email": "new@example.com",
+                "password": "Spring2026walk",
+                "name": "x",
+                "agree_terms": True,
+                "agree_privacy": True,
+            },
         ).status_code
         == 409
     )
@@ -382,7 +394,14 @@ def test_signup_login_refresh_me(client: TestClient) -> None:
 
 def test_short_password_rejected_in_korean(client: TestClient) -> None:
     res = client.post(
-        "/api/v1/auth/signup", json={"email": "a@b.co", "password": "123", "name": "x"}
+        "/api/v1/auth/signup",
+        json={
+            "email": "a@b.co",
+            "password": "123",
+            "name": "x",
+            "agree_terms": True,
+            "agree_privacy": True,
+        },
     )
     assert res.status_code == 422
     assert res.json()["detail"]["message"] == "입력값이 올바르지 않아요: 비밀번호"
@@ -399,7 +418,7 @@ def test_invitation_flow(client: TestClient, team: Team) -> None:
     assert info["role"] == "operator" and not info["expired"]
     tokens = client.post(
         f"/api/v1/auth/invitations/{inv['token']}/accept",
-        json={"name": "손님", "password": "guestpass1"},
+        json={"name": "손님", "password": "guestpass1", "agree_terms": True, "agree_privacy": True},
     ).json()
     me = client.get(
         "/api/v1/me", headers={"Authorization": f"Bearer {tokens['access_token']}"}
@@ -407,7 +426,7 @@ def test_invitation_flow(client: TestClient, team: Team) -> None:
     assert me["workspaces"][0]["role"] == "operator"
     again = client.post(
         f"/api/v1/auth/invitations/{inv['token']}/accept",
-        json={"name": "손님", "password": "guestpass1"},
+        json={"name": "손님", "password": "guestpass1", "agree_terms": True, "agree_privacy": True},
     )
     assert again.status_code == 409
 

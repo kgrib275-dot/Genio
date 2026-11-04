@@ -13,6 +13,7 @@ import { useLogin } from "@/lib/api/auth";
 import { cn } from "@/lib/cn";
 import { safeNext } from "@/lib/nav";
 import { AuthShell } from "@/pages/auth/AuthShell";
+import { LegalLinks } from "@/pages/legal/AgreementChecks";
 
 // 한/영 키가 한글일 때 들어가는 글자(자모·완성형)
 const HANGUL = /[ᄀ-ᇿ㄰-㆏가-힣]/;
@@ -215,6 +216,7 @@ export default function LoginPage() {
       <p className="mt-2 text-center text-xs text-slate-400">
         계정이 없거나 비밀번호를 잊었다면 워크스페이스 관리자에게 요청하세요.
       </p>
+      <LegalLinks />
     </AuthShell>
   );
 }

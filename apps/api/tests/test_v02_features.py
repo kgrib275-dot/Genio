@@ -572,7 +572,13 @@ def test_admin_console(client: TestClient, team: Team) -> None:
     assert (
         client.post(
             "/api/v1/auth/signup",
-            json={"email": "n@example.com", "password": "abcd1234", "name": "n"},
+            json={
+                "email": "n@example.com",
+                "password": "abcd1234",
+                "name": "n",
+                "agree_terms": True,
+                "agree_privacy": True,
+            },
         ).status_code
         == 403
     )

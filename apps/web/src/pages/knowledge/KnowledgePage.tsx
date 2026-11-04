@@ -1,4 +1,5 @@
 import {
+  BookOpen,
   Eye,
   EyeOff,
   FileText,
@@ -19,7 +20,7 @@ import { ErrorBox, Loading } from "@/components/ErrorBox";
 import { ListPager, ListToolbar, NoMatch } from "@/components/ListControls";
 import { Badge, StatusBadge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardBody, CardHeader, Empty, PageHeader } from "@/components/ui/card";
+import { Card, CardBody, CardHeader, PageHeader } from "@/components/ui/card";
 import { Field, Input, Select } from "@/components/ui/input";
 import { toast } from "@/components/ui/toast-store";
 import { HelpButton } from "@/help/HelpButton";
@@ -51,6 +52,7 @@ import { ProjectDot } from "@/components/projects/ProjectDialog";
 import { useProjects } from "@/lib/api/v3";
 import { useCreateKnowledgeBaseV5, useEmbeddingModels, useToggleDocument } from "@/lib/api/v5b";
 import { canEdit, useSession } from "@/store/session";
+import { EmptyState } from "@/components/EmptyState";
 
 const METHOD_LABEL: Record<RetrievalMethod, string> = {
   vector: "의미",
@@ -631,11 +633,26 @@ export default function KnowledgePage() {
             <KbDetail key={kb.id} ws={ws} kb={kb} editable={editable} />
           ) : (
             kbs.data && (
-              <Empty>
-                {projectFilter
-                  ? "여기에는 아직 지식베이스가 없어요."
-                  : "지식베이스를 만들고 문서를 올려 보세요."}
-              </Empty>
+              <EmptyState
+                icon={<BookOpen className="h-5 w-5" />}
+                title={
+                  kbs.data.length
+                    ? "왼쪽에서 지식베이스를 고르세요"
+                    : projectFilter
+                      ? "이 프로젝트에는 아직 지식베이스가 없어요"
+                      : "아직 지식베이스가 없어요"
+                }
+                description="사내 규정·FAQ·매뉴얼 같은 문서를 올리면 챗봇이 그 내용으로 답해요. PDF·DOCX·PPTX·XLSX·웹 주소를 넣을 수 있어요."
+                action={
+                  editable && !kbs.data.length
+                    ? {
+                        label: "새 지식베이스 이름 넣기",
+                        onClick: () => document.getElementById("kb-name")?.focus(),
+                      }
+                    : null
+                }
+                secondary={{ label: "샘플로 배우기", to: "/learn" }}
+              />
             )
           )}
         </div>

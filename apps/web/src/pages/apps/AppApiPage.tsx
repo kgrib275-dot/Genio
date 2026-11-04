@@ -21,6 +21,7 @@ import { copyText, formatDate } from "@/lib/cn";
 import { useListControls } from "@/lib/useListControls";
 import { AppNav } from "@/pages/apps/AppNav";
 import { McpSection } from "@/pages/apps/McpSection";
+import { EmptyState } from "@/components/EmptyState";
 
 function CodeBlock({ code }: { code: string }) {
   return (
@@ -133,7 +134,12 @@ export default function AppApiPage() {
             {keys.isLoading && <Loading />}
             <ErrorBox error={keys.error} />
             {keys.data?.length === 0 && (
-              <p className="text-sm text-slate-500">아직 만든 키가 없어요.</p>
+              <EmptyState
+                compact
+                icon={<KeyRound className="h-5 w-5" />}
+                title="아직 만든 키가 없어요"
+                description="위에서 이름과 권한 범위를 고르고 '키 만들기'를 누르면, 다른 시스템에서 이 앱을 부를 수 있어요."
+              />
             )}
             {(keys.data?.length ?? 0) > 0 && <ListToolbar c={kc} placeholder="키 이름으로 찾기" />}
             <NoMatch c={kc} />

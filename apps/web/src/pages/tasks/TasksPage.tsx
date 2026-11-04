@@ -8,7 +8,7 @@ import { ErrorBox, Loading } from "@/components/ErrorBox";
 import { ListPager, ListToolbar, NoMatch } from "@/components/ListControls";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, Empty, PageHeader } from "@/components/ui/card";
+import { Card, PageHeader } from "@/components/ui/card";
 import { Dialog } from "@/components/ui/dialog";
 import { Tabs } from "@/components/ui/tabs";
 import { toast } from "@/components/ui/toast-store";
@@ -26,6 +26,7 @@ import {
 } from "@/lib/api/v5a";
 import { canEdit, canViewRuns, useSession } from "@/store/session";
 import { TaskForm } from "@/pages/tasks/TaskForm";
+import { EmptyState } from "@/components/EmptyState";
 
 type View = "mine" | "all" | "done";
 
@@ -103,11 +104,12 @@ export default function TasksPage() {
       {list.isLoading && <Loading />}
       <ErrorBox error={list.error} />
       {!list.isLoading && items.length === 0 ? (
-        <Empty icon={<ClipboardList className="h-6 w-6" />}>
-          {view === "done"
-            ? "아직 끝난 일이 없어요."
-            : "지금 처리할 일이 없어요. 흐름에 '사람 승인'·'사람에게 묻기'·'할 일 맡기기' 단계를 넣으면 여기로 와요."}
-        </Empty>
+        <EmptyState
+          icon={<ClipboardList className="h-5 w-5" />}
+          title={view === "done" ? "아직 끝난 일이 없어요" : "지금 처리할 일이 없어요"}
+          description="흐름에 '승인'·'사람에게 묻기'·'담당자 배정' 단계를 넣으면, 사람이 처리할 일이 여기로 와요."
+          secondary={{ label: "승인 흐름 샘플 보기", to: "/learn" }}
+        />
       ) : (
         <div className="space-y-3">
           <ListToolbar c={lc} placeholder="제목·내용·앱 검색" />

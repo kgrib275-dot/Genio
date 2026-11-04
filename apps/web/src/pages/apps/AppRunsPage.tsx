@@ -9,10 +9,19 @@ import { formatCost, formatDate } from "@/lib/cn";
 import { RUN_FILTERS, runSearchText, TRIGGER } from "@/lib/runLabels";
 import { useListControls } from "@/lib/useListControls";
 import { AppNav } from "@/pages/apps/AppNav";
+import { EmptyState } from "@/components/EmptyState";
+import { PlayCircle } from "lucide-react";
 
 export function RunTable({ runs, showApp }: { runs: Run[]; showApp?: boolean }) {
   if (runs.length === 0)
-    return <p className="px-5 py-6 text-sm text-slate-500">아직 실행 기록이 없어요.</p>;
+    return (
+      <EmptyState
+        compact
+        icon={<PlayCircle className="h-5 w-5" />}
+        title="아직 실행 기록이 없어요"
+        description="만들기 화면의 '테스트 실행'이나 배포한 링크·자동 실행으로 앱이 돌면 결과가 여기에 쌓여요."
+      />
+    );
   return (
     <>
       {/* 좁은 화면: 표 대신 쌓인 카드 */}

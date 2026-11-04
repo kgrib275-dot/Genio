@@ -21,11 +21,13 @@ import { ErrorBox, Loading } from "@/components/ErrorBox";
 import { ListPager, ListToolbar, NoMatch } from "@/components/ListControls";
 import { Badge, StatusBadge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, Empty } from "@/components/ui/card";
+import { Card } from "@/components/ui/card";
 import { Dialog } from "@/components/ui/dialog";
 import { Field, Input, Select, Textarea } from "@/components/ui/input";
 import { ko } from "@/i18n/ko";
 import { useApps, useCreateApp, useUpdateApp } from "@/lib/api/apps";
+import { EmptyState } from "@/components/EmptyState";
+import { StartChecklist } from "@/components/onboarding/StartChecklist";
 import { useMe } from "@/lib/api/auth";
 import { useTemplates } from "@/lib/api/resources";
 import { ApiError, api } from "@/lib/api/client";
@@ -82,7 +84,10 @@ function PromptHero({ projectId }: { projectId?: string }) {
   };
 
   return (
-    <section className="relative overflow-hidden rounded-2xl border border-indigo-100 bg-gradient-to-br from-indigo-50 via-white to-violet-50 px-5 py-6 sm:px-8 sm:py-8">
+    <section
+      data-tour="composer"
+      className="relative overflow-hidden rounded-2xl border border-indigo-100 bg-gradient-to-br from-indigo-50 via-white to-violet-50 px-5 py-6 sm:px-8 sm:py-8"
+    >
       <div className="flex items-center gap-2 text-sm font-semibold text-indigo-600">
         <Sparkles className="h-4 w-4" /> 말로 앱 만들기
       </div>
@@ -634,11 +639,12 @@ export default function DashboardPage() {
 
   return (
     <PageContainer>
+      <StartChecklist firstAppId={appList[0]?.id} />
       <LearnBanner />
       {editable && <PromptHero projectId={projectId} />}
       {editable && <TemplateRow projectId={projectId} />}
 
-      <section className="mt-10">
+      <section className="mt-10" data-tour="apps">
         {(projectList.length > 0 || filter) && (
           <ProjectChips
             projects={projectList}
@@ -668,15 +674,34 @@ export default function DashboardPage() {
         {apps.isLoading && <Loading />}
         <ErrorBox error={apps.error} />
         {apps.data && appList.length === 0 && (
-          <Empty>
-            {filter
-              ? editable
-                ? "여기에는 아직 앱이 없어요. 위에 만들고 싶은 것을 적으면 이곳에 만들어져요."
-                : "여기에는 아직 앱이 없어요."
-              : editable
-                ? "아직 앱이 없어요. 위에 만들고 싶은 것을 적어 보세요."
-                : "아직 사용할 수 있는 앱이 없어요. 관리자가 앱을 배포하면 여기에 보여요."}
-          </Empty>
+          <EmptyState
+            icon={<Sparkles className="h-5 w-5" />}
+            title={
+              filter
+                ? "이 프로젝트에는 아직 앱이 없어요"
+                : editable
+                  ? "아직 앱이 없어요"
+                  : "아직 쓸 수 있는 앱이 없어요"
+            }
+            description={
+              editable
+                ? "위 '말로 앱 만들기'에 만들고 싶은 것을 적으면 빌더가 만들어 줘요. 처음이라면 샘플부터 열어 보세요."
+                : "관리자가 앱을 배포하면 여기에 보여요. 필요한 앱이 있으면 '도움' 버튼으로 요청하세요."
+            }
+            action={
+              editable
+                ? {
+                    label: "만들고 싶은 것 적기",
+                    onClick: () => {
+                      const box = document.querySelector<HTMLElement>('[data-tour="composer"]');
+                      box?.scrollIntoView?.({ behavior: "smooth", block: "center" });
+                      box?.querySelector("textarea")?.focus();
+                    },
+                  }
+                : null
+            }
+            secondary={editable ? { label: "샘플로 배우기", to: "/learn" } : null}
+          />
         )}
         {appList.length > 0 && (
           <ListToolbar c={c} placeholder="앱 이름·설명으로 찾기" className="mb-3" />

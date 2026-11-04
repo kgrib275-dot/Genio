@@ -110,7 +110,7 @@ describe("대시보드 프로젝트", () => {
     fireEvent.change(screen.getByLabelText("만들고 싶은 앱 설명"), {
       target: { value: "회의 메모를 정리해 줘" },
     });
-    fireEvent.click(screen.getByRole("button", { name: /만들기/ }));
+    fireEvent.click(screen.getByRole("button", { name: /^만들기$/ }));
     await waitFor(() =>
       expect(calls.find((c) => c.method === "POST")?.body).toMatchObject({
         project_id: "p1",
