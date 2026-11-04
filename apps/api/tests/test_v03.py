@@ -14,6 +14,7 @@ def test_personal_settings(client: TestClient, team: Team) -> None:
         "font_size": "normal",
         "default_workspace_id": None,
         "enter_to_send": True,
+        "lists": {},
     }
     upd = client.patch(
         "/api/v1/me",

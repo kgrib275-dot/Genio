@@ -72,7 +72,9 @@ export function HelpSectionView({
       {heading && (
         <h2 className="text-lg font-bold tracking-tight text-slate-900">{section.title}</h2>
       )}
-      <p className="text-slate-500">{section.summary}</p>
+      <p className="border-l-2 border-indigo-200 pl-3 text-[0.95rem] text-slate-600">
+        {section.summary}
+      </p>
       {section.blocks.map((b, i) => (
         <Block key={i} block={b} />
       ))}

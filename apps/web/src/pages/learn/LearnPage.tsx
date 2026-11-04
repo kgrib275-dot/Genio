@@ -1,10 +1,11 @@
-// 배우기: 샘플을 열어 따라 하며 익히는 강좌 8개 + Dify·n8n 대응표
+// 배우기: 샘플을 열어 따라 하며 익히는 강좌 9개 + Dify·n8n 대응표 + 사용설명서 바로 가기
 import {
   CheckCircle2,
   ChevronDown,
   ChevronRight,
   Circle,
   Clock,
+  BookMarked,
   ExternalLink,
   GraduationCap,
   KeyRound,
@@ -18,6 +19,7 @@ import { Button } from "@/components/ui/button";
 import { Card, PageHeader } from "@/components/ui/card";
 import { toast } from "@/components/ui/toast-store";
 import { HelpButton } from "@/help/HelpButton";
+import { HELP_SECTIONS } from "@/help/content";
 import { LESSONS, TERMS, type Lesson } from "@/help/learn";
 import {
   readDone,
@@ -214,9 +216,24 @@ export default function LearnPage() {
                 ? "왼쪽 메뉴 프로젝트 > '샘플 체험'에 있어요. 마음껏 고쳐 보고, 망가지면 새 워크스페이스에 다시 넣으면 돼요."
                 : "앱 11개(8개는 AI 키 없이 동작), 데이터 표 3개, 사내 규정 지식베이스가 '샘플 체험' 프로젝트로 들어가요. 이미 넣었다면 새 샘플만 더해요."}
             </p>
-            <p className="mt-1 text-xs text-slate-400">
-              진도 {done.length}/{LESSONS.length}
-            </p>
+            <div className="mt-2 flex items-center gap-2">
+              <div
+                className="h-2 flex-1 overflow-hidden rounded-full bg-slate-100"
+                role="progressbar"
+                aria-label="강좌 진도"
+                aria-valuemin={0}
+                aria-valuemax={LESSONS.length}
+                aria-valuenow={done.length}
+              >
+                <div
+                  className="h-full rounded-full bg-emerald-500 transition-all"
+                  style={{ width: `${(done.length / LESSONS.length) * 100}%` }}
+                />
+              </div>
+              <span className="shrink-0 text-xs text-slate-500">
+                진도 {done.length}/{LESSONS.length}
+              </span>
+            </div>
           </div>
           {!installed && canEdit(role) && (
             <Button
@@ -273,6 +290,26 @@ export default function LearnPage() {
               </tbody>
             </table>
           </Card>
+        </Section>
+
+        <Section title="사용설명서 바로 가기">
+          <p className="-mt-1 text-sm text-slate-500">
+            강좌를 마친 뒤 자세한 설명이 필요하면 주제별 사용설명서를 열어 보세요.
+          </p>
+          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+            {HELP_SECTIONS.filter((h) => h.id !== "learn").map((h) => (
+              <Link
+                key={h.id}
+                to={`/help#${h.id}`}
+                className="group rounded-xl border border-slate-200 bg-white px-4 py-3 transition-colors hover:border-indigo-300 hover:bg-indigo-50/40"
+              >
+                <p className="flex items-center gap-1.5 text-sm font-semibold text-slate-800 group-hover:text-indigo-700">
+                  <BookMarked className="h-3.5 w-3.5 text-indigo-400" /> {h.title}
+                </p>
+                <p className="mt-0.5 line-clamp-2 text-xs text-slate-500">{h.summary}</p>
+              </Link>
+            ))}
+          </div>
         </Section>
       </div>
     </PageContainer>
