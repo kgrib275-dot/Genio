@@ -9,7 +9,8 @@ import { Card, CardBody, CardHeader, PageHeader } from "@/components/ui/card";
 import { Tabs } from "@/components/ui/tabs";
 import { HelpButton } from "@/help/HelpButton";
 import type { AdminOverview } from "@/lib/api/types";
-import { useAdminOverview } from "@/lib/api/v2";
+import { useAdminOverview, useSystemSettings } from "@/lib/api/v2";
+import { StatusSection } from "@/pages/admin/StatusSection";
 import { useBuilderMetrics } from "@/lib/api/v5c";
 import { formatCost } from "@/lib/cn";
 import {
@@ -23,7 +24,8 @@ import {
 import { TracingSection } from "@/pages/admin/TracingSection";
 import { canManage, useSession } from "@/store/session";
 
-type Tab = "overview" | "members" | "llm" | "usage" | "audit" | "keys" | "tracing" | "system";
+type Tab =
+  "overview" | "members" | "llm" | "usage" | "audit" | "keys" | "tracing" | "system" | "status";
 
 const TABS: { value: Tab; label: string }[] = [
   { value: "overview", label: "개요" },
@@ -34,6 +36,8 @@ const TABS: { value: Tab; label: string }[] = [
   { value: "keys", label: "API 키" },
   { value: "tracing", label: "외부 추적" },
   { value: "system", label: "시스템 설정" },
+  // 인스턴스 관리자(가장 먼저 만든 워크스페이스의 소유자)에게만 보인다
+  { value: "status", label: "시스템 상태" },
 ];
 
 function Overview({ ws }: { ws: string }) {
@@ -212,6 +216,8 @@ export default function AdminPage() {
   const [tab, setTabState] = useState<Tab>(
     TABS.some((t) => t.value === initial) ? initial : "overview",
   );
+  const sys = useSystemSettings();
+  const tabs = TABS.filter((t) => t.value !== "status" || sys.data?.is_instance_admin);
   const setTab = (t: Tab) => {
     setTabState(t);
     setParams(t === "overview" ? {} : { tab: t }, { replace: true });
@@ -231,7 +237,7 @@ export default function AdminPage() {
         help={<HelpButton page="admin" />}
       />
       <div className="-mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0">
-        <Tabs value={tab} onChange={setTab} items={TABS} />
+        <Tabs value={tab} onChange={setTab} items={tabs} />
       </div>
       {tab === "overview" && <Overview ws={ws} />}
       {tab === "members" && <MembersSection ws={ws} manage />}
@@ -241,6 +247,7 @@ export default function AdminPage() {
       {tab === "keys" && <AdminApiKeysSection ws={ws} />}
       {tab === "tracing" && <TracingSection ws={ws} />}
       {tab === "system" && <SystemSection ws={ws} />}
+      {tab === "status" && <StatusSection />}
     </PageContainer>
   );
 }

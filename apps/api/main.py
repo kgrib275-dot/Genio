@@ -28,6 +28,7 @@ from api.routers import (
     knowledge,
     market,
     mcp,
+    ops,
     projects,
     runs,
     samples,
@@ -98,6 +99,18 @@ app.add_middleware(
 
 
 @app.middleware("http")
+async def _request_id(request: Request, call_next: Any) -> Any:
+    """요청마다 번호(X-Request-ID)를 붙인다. 오류 화면·서버 오류 기록에서 같은 번호로 찾는다."""
+    from api.services.error_log import clean_request_id
+
+    rid = clean_request_id(request.headers.get("x-request-id"))
+    request.state.request_id = rid
+    response = await call_next(request)
+    response.headers["X-Request-ID"] = rid
+    return response
+
+
+@app.middleware("http")
 async def _reject_nul(request: Request, call_next: Any) -> Any:
     """주소의 검색어 등에 NUL 문자(%00)가 있으면 DB 오류(500) 대신 400으로 막는다."""
     if "%00" in request.url.query or "%00" in request.url.path:
@@ -131,6 +144,7 @@ for r in (
     samples,
     service,
     mcp,
+    ops,
     tasks,
     tracing,
     triggers,

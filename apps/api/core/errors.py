@@ -92,14 +92,47 @@ def install_error_handlers(app: FastAPI) -> None:
         return JSONResponse(status_code=exc.status_code, content=_body(msg, hint))
 
     @app.exception_handler(Exception)
-    async def _unknown(_: Request, exc: Exception) -> JSONResponse:
+    async def _unknown(request: Request, exc: Exception) -> JSONResponse:
         import logging
 
-        logging.getLogger("genio").exception("처리되지 않은 오류: %s", type(exc).__name__)
+        from anyio import to_thread
+
+        from api.services.error_log import clean_request_id, record
+
+        rid = getattr(request.state, "request_id", None) or clean_request_id(None)
+        logging.getLogger("genio").exception(
+            "처리되지 않은 오류(request=%s): %s", rid, type(exc).__name__
+        )
+        route = request.scope.get("route")
+        path = getattr(route, "path", None) or request.url.path
+        await to_thread.run_sync(
+            lambda: record(
+                source="api",
+                where=f"{request.method} {path}",
+                exc=exc,
+                request_id=rid,
+                user_id=_user_of(request),
+                workspace_id=str(request.path_params.get("ws") or "") or None,
+            )
+        )
         return JSONResponse(
             status_code=500,
             content=_body(
                 "서버에서 문제가 생겼어요.",
-                "잠시 후 다시 시도하고, 계속되면 관리자에게 알려 주세요.",
+                f"잠시 후 다시 시도하고, 계속되면 관리자에게 알려 주세요. 문의할 때 이 번호를 알려 주세요: {rid}",
             ),
+            headers={"X-Request-ID": rid},
         )
+
+
+def _user_of(request: Request) -> str | None:
+    """로그인한 사람 id(토큰이 맞을 때만). 오류 기록용이라 실패해도 None."""
+    try:
+        from api.core.security import decode_token
+
+        auth = request.headers.get("authorization") or ""
+        if not auth.lower().startswith("bearer "):
+            return None
+        return decode_token(auth[7:].strip(), "access")
+    except Exception:
+        return None

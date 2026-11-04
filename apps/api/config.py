@@ -38,6 +38,9 @@ class Settings(BaseSettings):
     genio_code_node_timeout_seconds: float = 10.0
     genio_node_timeout_seconds: float = 60.0
     genio_run_timeout_seconds: float = 600.0
+    # 운영 준비: 화면에 보일 버전(빌드할 때 커밋 짧은 해시를 넣음), 백업 폴더(status.json을 읽음)
+    genio_version: str = "dev"
+    genio_backup_dir: str = "/backups"
     # v0.6: 한 실행 안에서 동시에 도는 갈래 수(1~16)
     genio_run_parallelism: int = 4
     genio_public_rate_limit_per_minute: int = 30

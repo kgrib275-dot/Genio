@@ -192,7 +192,7 @@ def check_alerts(db: Session, now: datetime | None = None) -> int:
 def apply_retention(db: Session, now: datetime | None = None) -> dict[str, int]:
     """보관 기간이 지난 실행 기록(끝난 것만)·대화 메시지·받은 값을 지운다."""
     n = now or now_utc()
-    removed = {"runs": 0, "messages": 0, "conversations": 0}
+    removed = {"runs": 0, "messages": 0, "conversations": 0, "errors": 0}
     for ws in db.scalars(select(Workspace)):
         days = get_limits(ws).get("retention_days")
         if not days:
@@ -235,5 +235,9 @@ def apply_retention(db: Session, now: datetime | None = None) -> dict[str, int]:
             ]
             if len(keep) != len(t.last_payloads or []):
                 t.last_payloads = keep
+    # 서버 오류 기록은 워크스페이스와 무관하게 30일 보관
+    from api.services.error_log import purge_old
+
+    removed["errors"] = purge_old(db, n)
     db.commit()
     return removed

@@ -530,3 +530,13 @@ Project = {id, workspace_id, name, description, color: indigo|sky|emerald|amber|
 - 비밀값은 헤더로만 보낸다. Trello는 OAuth 헤더를 쓰고, 텔레그램만 주소에 토큰이 들어간다. 오류 문장에는 주소를 넣지 않고, 런타임이 비밀값을 지운다.
 - Google Calendar는 OAuth가 필요해 넣지 않았다. LINE Notify는 서비스가 종료돼 넣지 않았다.
 - 화면: 마켓 종류 칩에 개수를 보이고, 분류 칩(개수 포함, 누르면 거르기)과 정렬(많이 설치한 순·이름순·새로 나온 순)을 넣었다.
+
+## 운영 준비(시스템 상태·서버 오류 기록·활동 기록 내보내기)
+| 메서드 | 경로 | 권한 | 설명 |
+|---|---|---|---|
+| GET | `/admin/status` | 인스턴스 관리자 | `{checked_at, overall, version, env, items[{status: ok\|warn\|error\|unknown, label, detail}], counts{users, workspaces, runs_24h, failed_runs_24h, server_errors_24h}}` |
+| GET | `/admin/errors?limit=500` | 인스턴스 관리자 | 최근 서버 오류 `[{id, created_at, source: api\|engine, where, error_type, message, request_id, user_id, workspace_id}]`(30일 보관, 비밀값 가림) |
+| GET | `/workspaces/{ws}/audit-logs/export?area=&action=&user=&days=&q=` | 소유자·관리자 | 활동 기록 CSV(UTF-8 BOM, 최대 5만 줄). `user=(시스템)`은 사람 없이 남은 기록 |
+
+- 모든 응답 헤더에 `X-Request-ID`가 붙는다. 요청에 안전한 형식(영숫자·`._-`, 6~64자)의 `X-Request-ID`를 보내면 그 값을 그대로 쓴다.
+- 처리하지 못한 오류(500)는 `detail.hint`에 문의 번호가 들어간다.

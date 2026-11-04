@@ -4,29 +4,17 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <!-- 글꼴은 화면 그리기를 막지 않게 늦게 적용한다(그 전엔 시스템 글꼴) -->
+    <!-- 글꼴은 화면 그리기를 막지 않게 늦게 적용한다(그 전엔 시스템 글꼴). 적용은 /boot.js -->
     <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
     <link
+      id="font-css"
       rel="stylesheet"
       href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css"
       media="print"
-      onload="this.media = 'all'"
     />
     <title>Genio</title>
-    <script>
-      // 테마·글자 크기를 화면이 그려지기 전에 적용(깜빡임 방지). 값은 store/theme.ts와 같다.
-      (function () {
-        try {
-          var t = localStorage.getItem("genio.theme") || "system";
-          var dark =
-            t === "dark" ||
-            (t === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches);
-          if (dark) document.documentElement.classList.add("dark");
-          if (localStorage.getItem("genio.fontSize") === "large")
-            document.documentElement.classList.add("font-large");
-        } catch (e) {}
-      })();
-    </script>
+    <!-- 테마·글자 크기를 먼저 적용(인라인 스크립트는 보안 정책으로 막으므로 파일로) -->
+    <script src="/boot.js"></script>
   </head>
   <body>
     <div id="root"></div>

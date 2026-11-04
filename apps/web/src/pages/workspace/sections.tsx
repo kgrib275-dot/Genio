@@ -3,6 +3,7 @@ import {
   CheckCircle2,
   Copy,
   Crown,
+  Download,
   KeyRound,
   PlugZap,
   RotateCcw,
@@ -58,6 +59,7 @@ import {
   type NewLlmProvider,
 } from "@/lib/api/workspace";
 import { LlmModelPicker } from "@/pages/workspace/LlmModelPicker";
+import { downloadAuditCsv } from "@/lib/api/ops";
 import { copyText, formatCost, formatDate } from "@/lib/cn";
 import { optionsFrom, useListControls } from "@/lib/useListControls";
 import type { AuditLog } from "@/lib/api/types";
@@ -1210,6 +1212,7 @@ function withinDays(iso: string, days: number): boolean {
 
 export function AuditSection({ ws }: { ws: string }) {
   const logs = useAuditLogs(ws);
+  const [exporting, setExporting] = useState(false);
   const members = useMembers(ws);
   // 기록 안의 사용자 id를 이름으로
   const people = new Map((members.data ?? []).map((m) => [m.user_id, `${m.name} (${m.email})`]));
@@ -1253,7 +1256,33 @@ export function AuditSection({ ws }: { ws: string }) {
   if (!logs.data?.length) return <Empty>아직 기록이 없어요.</Empty>;
   return (
     <div className="space-y-3">
-      <ListToolbar c={lc} placeholder="한 일·사람·내용 검색" />
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-start">
+        <ListToolbar c={lc} placeholder="한 일·사람·내용 검색" className="flex-1" />
+        <Button
+          variant="outline"
+          className="shrink-0"
+          disabled={exporting}
+          onClick={async () => {
+            setExporting(true);
+            try {
+              await downloadAuditCsv(ws, {
+                area: lc.filterValues.area,
+                action: lc.filterValues.action,
+                user: lc.filterValues.user,
+                days: lc.filterValues.period,
+                q: lc.query,
+              });
+              toast.success("지금 고른 조건의 활동 기록을 CSV로 받았어요(최대 5만 줄).");
+            } catch (err) {
+              toast.error(err);
+            } finally {
+              setExporting(false);
+            }
+          }}
+        >
+          <Download className="h-4 w-4" /> {exporting ? "만드는 중…" : "CSV로 받기"}
+        </Button>
+      </div>
       <Card className="overflow-hidden">
         <div className="hidden grid-cols-[9.5rem_11rem_10rem_minmax(0,1fr)] gap-3 bg-slate-50 px-4 py-2 text-xs font-medium text-slate-500 lg:grid">
           <span>때</span>
