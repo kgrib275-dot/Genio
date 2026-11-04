@@ -125,7 +125,14 @@ def test_email_verification_required(
     assert r.status_code == 200 and r.json()["require_email_verification"] is True
     email = "newbie@example.com"
     r = client.post(
-        "/api/v1/auth/signup", json={"email": email, "password": NEW_PW, "name": "새내기"}
+        "/api/v1/auth/signup",
+        json={
+            "email": email,
+            "password": NEW_PW,
+            "name": "새내기",
+            "agree_terms": True,
+            "agree_privacy": True,
+        },
     )
     assert r.status_code == 200 and r.json() == {"verify_required": True, "email": email}
     assert "access_token" not in r.json()
