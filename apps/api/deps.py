@@ -9,7 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from api.core.errors import AppError, forbidden, not_found
-from api.core.security import decode_token
+from api.core.security import decode_payload
 from api.db import get_db
 from api.models import (
     Annotation,
@@ -59,10 +59,18 @@ def get_optional_user(request: Request, db: DbDep) -> User | None:
     token = _bearer(request)
     if not token:
         return None
-    user_id = decode_token(token, "access")
-    if not user_id:
+    payload = decode_payload(token, "access")
+    if not payload:
         return None
-    return db.get(User, user_id)
+    user = db.get(User, str(payload["sub"]))
+    if user is None:
+        return None
+    from api.services.accounts import token_still_valid
+
+    if not token_still_valid(db, user, payload):
+        return None
+    request.state.session_id = payload.get("sid")
+    return user
 
 
 def get_current_user(request: Request, db: DbDep) -> User:

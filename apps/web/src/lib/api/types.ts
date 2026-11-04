@@ -118,6 +118,9 @@ export interface Me {
   name: string;
   workspaces: WorkspaceRef[];
   preferences?: Partial<Preferences>;
+  /** v0.7: 이메일 확인 여부, 2단계 인증 사용 여부 */
+  email_verified?: boolean;
+  two_factor?: boolean;
 }
 
 export type ProjectColor = "indigo" | "sky" | "emerald" | "amber" | "rose" | "violet" | "slate";
@@ -146,6 +149,8 @@ export interface Member {
   role: Role;
   /** 이 워크스페이스에만 속한 계정(관리자가 비밀번호를 재설정할 수 있음) */
   only_here?: boolean;
+  /** v0.7: 2단계 인증을 켰는지 */
+  two_factor?: boolean;
 }
 
 export interface CreatedAccount {
@@ -821,6 +826,8 @@ export interface WorkspaceInfo {
 export interface SystemSettings {
   is_instance_admin: boolean;
   allow_signup: boolean;
+  /** v0.7: 가입할 때 이메일 확인을 받아야 로그인할 수 있음 */
+  require_email_verification?: boolean;
 }
 
 /** 프로젝트 현황판: 프로젝트(또는 '프로젝트 없음') 하나의 기간 통계 */

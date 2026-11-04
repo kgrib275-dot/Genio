@@ -67,6 +67,8 @@ def _member(m: Membership, u: User, only_here: bool | None = None) -> dict[str, 
         "email": u.email,
         "name": u.name,
         "role": m.role,
+        # v0.7: 2단계 인증을 켰는지(관리자가 휴대폰 분실 시 끌 수 있게)
+        "two_factor": bool(u.totp_enabled),
     }
     if only_here is not None:
         out["only_here"] = only_here

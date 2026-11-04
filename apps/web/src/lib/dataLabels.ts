@@ -63,6 +63,7 @@ const KEY_LABELS: Record<string, string> = {
   enabled: "켜짐",
   visibility: "공개 범위",
   allow_signup: "회원가입 허용",
+  require_email_verification: "가입 시 이메일 확인 필수",
   prefix: "키 앞자리",
   template: "템플릿",
   template_key: "템플릿",

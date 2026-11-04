@@ -6,6 +6,7 @@ import {
   KeyRound,
   PlugZap,
   RotateCcw,
+  ShieldOff,
   Trash2,
   UserMinus,
   UserPlus,
@@ -58,6 +59,8 @@ import {
   type NewLlmProvider,
 } from "@/lib/api/workspace";
 import { LlmModelPicker } from "@/pages/workspace/LlmModelPicker";
+import { SystemMailCard } from "@/pages/workspace/SystemMailCard";
+import { useResetMember2fa } from "@/lib/api/account";
 import { copyText, formatCost, formatDate } from "@/lib/cn";
 import { optionsFrom, useListControls } from "@/lib/useListControls";
 import type { AuditLog } from "@/lib/api/types";
@@ -270,6 +273,7 @@ export function MembersSection({ ws, manage }: { ws: string; manage: boolean }) 
   const isOwner = myRole === "owner";
   const me = useMe();
   const reset = useResetPassword(ws);
+  const reset2fa = useResetMember2fa(ws);
   const [creating, setCreating] = useState(false);
   const [issued, setIssued] = useState<{ name: string; email: string; password: string } | null>(
     null,
@@ -402,6 +406,29 @@ export function MembersSection({ ws, manage }: { ws: string; manage: boolean }) 
                     }}
                   >
                     <RotateCcw className="h-3.5 w-3.5" />
+                  </Button>
+                )}
+                {manage && m.two_factor && m.user_id !== me.data?.id && (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    aria-label={`${m.name} 2단계 인증 끄기`}
+                    title="2단계 인증 끄기(휴대폰 분실)"
+                    disabled={reset2fa.isPending}
+                    onClick={() => {
+                      if (
+                        window.confirm(
+                          `${m.name}님의 2단계 인증을 끌까요? 휴대폰을 잃어버렸을 때만 쓰세요. 다음 로그인부터 비밀번호만 확인해요.`,
+                        )
+                      )
+                        reset2fa.mutate(m.id, {
+                          onSuccess: () =>
+                            toast.success("2단계 인증을 껐어요. 본인에게 다시 켜도록 안내하세요."),
+                          onError: (err) => toast.error(err),
+                        });
+                    }}
+                  >
+                    <ShieldOff className="h-3.5 w-3.5" />
                   </Button>
                 )}
                 {manage && m.role !== "owner" && (
@@ -1496,10 +1523,26 @@ export function SystemSection({ ws }: { ws: string }) {
                   onChange={(v) => updateSys.mutate({ allow_signup: v })}
                 />
               </div>
+              <div className="flex items-start gap-3">
+                <div className="flex-1">
+                  <p className="text-sm font-medium">가입 시 이메일 확인 필수</p>
+                  <p className="text-xs text-slate-500">
+                    켜면 새로 가입한 사람은 메일의 링크를 열어야 로그인할 수 있어요. 아래 시스템
+                    메일을 먼저 설정해야 해요. 이미 있는 계정은 그대로 로그인돼요.
+                  </p>
+                </div>
+                <Switch
+                  label="가입 시 이메일 확인 필수"
+                  checked={Boolean(sys.data.require_email_verification)}
+                  disabled={!canSys || updateSys.isPending}
+                  onChange={(v) => updateSys.mutate({ require_email_verification: v })}
+                />
+              </div>
             </>
           )}
         </CardBody>
       </Card>
+      <SystemMailCard canEdit={canSys} />
     </div>
   );
 }

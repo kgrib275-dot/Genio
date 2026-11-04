@@ -350,7 +350,7 @@ export function useSystemSettings() {
 export function useUpdateSystemSettings() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (v: Partial<Pick<SystemSettings, "allow_signup">>) =>
+    mutationFn: (v: Partial<Pick<SystemSettings, "allow_signup" | "require_email_verification">>) =>
       api.patch<SystemSettings>("/admin/system", v),
     onSuccess: (data) => {
       qc.setQueryData(["system-settings"], data);

@@ -298,6 +298,7 @@ def get_system(user: CurrentUser, db: DbDep) -> dict[str, Any]:
 
 class SystemPatch(BaseModel):
     allow_signup: bool | None = None
+    require_email_verification: bool | None = None
 
 
 @router.patch("/admin/system")
@@ -308,6 +309,15 @@ def patch_system(body: SystemPatch, user: CurrentUser, db: DbDep) -> dict[str, A
             "시스템 설정은 인스턴스 관리자만 바꿀 수 있어요.",
             "가장 먼저 만든 워크스페이스의 소유자에게 요청하세요.",
         )
+    if body.require_email_verification:
+        from api.services import mailer
+
+        if not mailer.configured(db):
+            raise AppError(
+                422,
+                "시스템 메일 설정이 없어 이메일 인증을 켤 수 없어요.",
+                "아래 '시스템 메일'을 먼저 설정하고 시험 메일을 보내 보세요.",
+            )
     out = system.set_system(db, body.model_dump(exclude_none=True))
     audit(
         db,
@@ -385,6 +395,7 @@ def create_account(ws: str, body: AccountIn, ctx: Managers) -> dict[str, Any]:
         name=body.name.strip(),
         password_hash=hash_password(password),
         preferences={"default_workspace_id": ws},
+        email_verified_at=datetime.now(UTC),
     )
     ctx.db.add(u)
     ctx.db.flush()
@@ -445,3 +456,33 @@ def reset_password(ws: str, member_id: str, ctx: Managers) -> dict[str, Any]:
     )
     ctx.db.commit()
     return {"temporary_password": password}
+
+
+@router.post("/workspaces/{ws}/members/{member_id}/reset-2fa")
+def reset_member_2fa(ws: str, member_id: str, ctx: Managers) -> dict[str, Any]:
+    """휴대폰을 잃어버린 멤버의 2단계 인증을 끈다(다음 로그인부터 비밀번호만). 기록에 남는다."""
+    m = ctx.db.get(Membership, member_id)
+    if m is None or m.workspace_id != ws:
+        raise not_found("멤버")
+    if m.user_id == ctx.user.id:
+        raise AppError(
+            409, "내 2단계 인증은 여기서 끄지 않아요.", "내 설정 > 보안에서 끄거나 바꾸세요."
+        )
+    _guard_target_role(ctx, m.role, "2단계 인증을 끌")
+    u = ctx.db.get(User, m.user_id)
+    if u is None:
+        raise not_found("멤버")
+    u.totp_enabled = False
+    u.totp_secret_encrypted = None
+    u.recovery_codes = []
+    audit(
+        ctx.db,
+        workspace_id=ws,
+        user_id=ctx.user.id,
+        action="member.2fa_reset",
+        target_type="membership",
+        target_id=m.id,
+        meta={"email": u.email},
+    )
+    ctx.db.commit()
+    return {"ok": True}
