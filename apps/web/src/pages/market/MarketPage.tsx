@@ -167,7 +167,6 @@ export default function MarketPage() {
   const sorted = useMemo(() => sortItems(items.data, sort), [items.data, sort]);
   const c = useListControls(sorted, {
     key: "market-items",
-    defaultSize: 20,
     search: (it) => `${it.name} ${it.summary} ${it.publisher} ${it.tags.join(" ")}`,
     filters: [
       {
@@ -237,7 +236,7 @@ export default function MarketPage() {
                 className={cn(
                   "rounded-full border px-3.5 py-1.5 text-[13px] font-medium transition-colors",
                   type === c.key
-                    ? "border-slate-900 bg-slate-900 text-white"
+                    ? "border-indigo-600 bg-indigo-600 text-white"
                     : "border-slate-200 bg-white text-slate-600 hover:border-slate-300",
                 )}
               >

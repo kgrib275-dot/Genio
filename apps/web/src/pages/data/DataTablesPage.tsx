@@ -36,7 +36,6 @@ export default function DataTablesPage() {
 
   const c = useListControls(tables.data, {
     key: "data-tables",
-    defaultSize: 20,
     search: (t) => `${t.name} ${t.description} ${t.columns.map((x) => x.label).join(" ")}`,
     filters: [
       {

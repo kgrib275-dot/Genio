@@ -320,7 +320,6 @@ function StepsCard({
   const rerun = useRerunFromNode(appId);
   const sc = useListControls(steps, {
     key: "run-steps",
-    defaultSize: 50,
     search: (s) => `${labelOf(s.node_id)} ${s.node_id} ${s.summary ?? ""}`,
     filters: [
       {

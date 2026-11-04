@@ -321,7 +321,7 @@ export function ValueInput({
             title={advanced ? "읽기 쉬운 모양으로 보기" : "{{ }} 표현식을 직접 쓰기(고급)"}
             className={cn(
               "ml-auto inline-flex items-center gap-0.5 rounded px-1 py-0.5 text-[10px]",
-              advanced ? "bg-slate-800 text-white" : "text-slate-400 hover:bg-slate-100",
+              advanced ? "bg-indigo-600 text-white" : "text-slate-400 hover:bg-slate-100",
             )}
           >
             <Braces className="h-3 w-3" /> 고급

@@ -224,7 +224,10 @@ PREF_DEFAULTS: dict[str, Any] = {
     "font_size": "normal",  # normal | large
     "default_workspace_id": None,
     "enter_to_send": True,
+    # v0.6: 화면 목록마다 고른 한 번에 보기 개수·필터(계정별로 유지). {목록 이름: {size, filters}}
+    "lists": {},
 }
+MAX_LIST_PREFS = 200
 
 
 def preferences_of(user: User) -> dict[str, Any]:
@@ -239,6 +242,15 @@ class PreferencesIn(BaseModel):
     font_size: Literal["normal", "large"] | None = None
     default_workspace_id: str | None = None
     enter_to_send: bool | None = None
+    lists: dict[str, "ListPref"] | None = None
+
+
+class ListPref(BaseModel):
+    size: Literal[10, 20, 50, 100] | None = None
+    filters: dict[str, str] | None = Field(default=None, max_length=20)
+
+
+PreferencesIn.model_rebuild()
 
 
 class MePatch(BaseModel):
@@ -265,7 +277,21 @@ def update_me(body: MePatch, user: CurrentUser, db: DbDep) -> dict[str, Any]:
             raise AppError(
                 404, "그 워크스페이스의 멤버가 아니에요.", "목록에 있는 워크스페이스를 고르세요."
             )
-        user.preferences = {**preferences_of(user), **patch}
+        current = preferences_of(user)
+        if "lists" in patch:
+            # 목록별로 합친다(한 화면을 저장해도 다른 화면 설정은 그대로)
+            merged = dict(current.get("lists") or {})
+            for key, pref in (patch.pop("lists") or {}).items():
+                clean = {k: v for k, v in (pref or {}).items() if v is not None}
+                if clean.get("filters"):
+                    clean["filters"] = {
+                        str(fk)[:40]: str(fv)[:200] for fk, fv in clean["filters"].items() if fv
+                    }
+                merged[str(key)[:80]] = {**(merged.get(str(key)[:80]) or {}), **clean}
+            if len(merged) > MAX_LIST_PREFS:
+                merged = dict(list(merged.items())[-MAX_LIST_PREFS:])
+            current["lists"] = merged
+        user.preferences = {**current, **patch}
     db.commit()
     return me(user, db)
 

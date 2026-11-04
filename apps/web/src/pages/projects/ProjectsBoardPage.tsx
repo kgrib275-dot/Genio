@@ -231,7 +231,6 @@ export default function ProjectsBoardPage() {
 
   const c = useListControls(rows, {
     key: "projects-board",
-    defaultSize: 20,
     search: (r) =>
       `${r.project.name} ${r.project.description} ${r.project.created_by_name} ${r.project.members
         .map((m) => m.name)

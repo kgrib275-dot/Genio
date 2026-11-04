@@ -1,5 +1,17 @@
 // 워크스페이스·관리 화면이 함께 쓰는 단락들. 권한에 따라 읽기 전용으로도 보여 준다.
-import { Copy, Crown, KeyRound, RotateCcw, Trash2, UserMinus, UserPlus, X } from "lucide-react";
+import {
+  CheckCircle2,
+  Copy,
+  Crown,
+  KeyRound,
+  PlugZap,
+  RotateCcw,
+  Trash2,
+  UserMinus,
+  UserPlus,
+  X,
+  XCircle,
+} from "lucide-react";
 import { useEffect, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { Avatar } from "@/components/AppIcon";
@@ -38,10 +50,14 @@ import {
   useInvite,
   useLlmProviders,
   useMembers,
+  useTestNewLlm,
+  useTestSavedLlm,
   useUpdateMemberRole,
   useUsage,
+  type LlmProbe,
   type NewLlmProvider,
 } from "@/lib/api/workspace";
+import { LlmModelPicker } from "@/pages/workspace/LlmModelPicker";
 import { copyText, formatCost, formatDate } from "@/lib/cn";
 import { optionsFrom, useListControls } from "@/lib/useListControls";
 import type { AuditLog } from "@/lib/api/types";
@@ -608,6 +624,17 @@ function DefaultModels({ ws }: { ws: string }) {
   );
 }
 
+function ProbeLine({ r }: { r: LlmProbe }) {
+  return (
+    <span
+      className={r.ok ? "basis-full text-xs text-emerald-700" : "basis-full text-xs text-red-600"}
+    >
+      {r.ok ? "✓ " : "✕ "}
+      {r.message} {r.hint}
+    </span>
+  );
+}
+
 export function LlmSection({
   ws,
   manage,
@@ -643,6 +670,32 @@ export function LlmSection({
     is_default: true,
   });
   const chosen = presets.find((p) => p.key === form.provider);
+  const testNew = useTestNewLlm(ws);
+  const testSaved = useTestSavedLlm(ws);
+  const [probe, setProbe] = useState<LlmProbe | null>(null);
+  const [rowProbe, setRowProbe] = useState<Record<string, LlmProbe>>({});
+  const runTest = () =>
+    testNew.mutate(
+      {
+        provider: form.provider,
+        api_key: form.api_key,
+        base_url: baseUrlToSend(chosen, form.base_url ?? ""),
+      },
+      {
+        onSuccess: (r) => {
+          setProbe(r);
+          // 지금 고른 모델이 목록에 없으면 첫 모델로 맞춘다
+          if (r.ok && r.models.length && !r.models.some((m) => m.model === form.default_model)) {
+            const preferred = r.models.find((m) =>
+              (chosen?.models ?? []).some((p) => p.model === m.model),
+            );
+            const pick = preferred ?? r.models[0];
+            if (pick) setForm((f) => ({ ...f, default_model: pick.model }));
+          }
+        },
+        onError: (err) => toast.error(err),
+      },
+    );
 
   const submit = (e: FormEvent) => {
     e.preventDefault();
@@ -686,11 +739,29 @@ export function LlmSection({
                     {p.default_model} · 키 {p.api_key_masked}
                     {p.base_url && ` · ${p.base_url}`}
                   </span>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="ml-auto"
+                    disabled={testSaved.isPending && testSaved.variables === p.id}
+                    onClick={() =>
+                      testSaved.mutate(p.id, {
+                        onSuccess: (r) => setRowProbe((m) => ({ ...m, [p.id]: r })),
+                        onError: (err) => toast.error(err),
+                      })
+                    }
+                  >
+                    <PlugZap className="h-3.5 w-3.5" />
+                    {testSaved.isPending && testSaved.variables === p.id
+                      ? "확인 중…"
+                      : "연결 테스트"}
+                  </Button>
+                  {rowProbe[p.id] && <ProbeLine r={rowProbe[p.id] as LlmProbe} />}
                   {manage && (
                     <Button
                       size="sm"
                       variant="ghost"
-                      className="ml-auto text-red-600"
+                      className="text-red-600"
                       aria-label={`${p.label} 연결 삭제`}
                       onClick={() => {
                         if (window.confirm(`'${p.label}' 연결을 지울까요?`)) del.mutate(p.id);
@@ -730,6 +801,7 @@ export function LlmSection({
                         label: p?.name.split(" (")[0] ?? form.label,
                         base_url: "",
                       });
+                      setProbe(null);
                     }}
                   >
                     {groupPresets(presets).map((g) => (
@@ -759,7 +831,10 @@ export function LlmSection({
                     autoComplete="off"
                     required
                     value={form.api_key}
-                    onChange={(e) => setForm({ ...form, api_key: e.target.value })}
+                    onChange={(e) => {
+                      setForm({ ...form, api_key: e.target.value });
+                      setProbe(null);
+                    }}
                   />
                 </Field>
                 <Field
@@ -767,25 +842,17 @@ export function LlmSection({
                   htmlFor="llm-model"
                   hint={
                     chosen?.models.length
-                      ? "목록에서 고르거나 다른 모델 이름을 직접 적어도 돼요."
-                      : undefined
+                      ? "대표 모델이에요. '연결 테스트'를 누르면 이 키로 쓸 수 있는 모델을 모두 불러와요."
+                      : "'연결 테스트'로 모델 목록을 불러오거나 이름을 직접 적어요."
                   }
                 >
-                  <Input
+                  <LlmModelPicker
                     id="llm-model"
-                    required
-                    list="llm-model-options"
                     value={form.default_model}
-                    onChange={(e) => setForm({ ...form, default_model: e.target.value })}
+                    onChange={(v) => setForm({ ...form, default_model: v })}
+                    presetModels={chosen?.models ?? []}
+                    fetched={probe?.ok ? probe.models : null}
                   />
-                  <datalist id="llm-model-options">
-                    {(chosen?.models ?? []).map((m) => (
-                      <option key={m.model} value={m.model}>
-                        {m.label}
-                        {m.vision ? " · 이미지" : ""}
-                      </option>
-                    ))}
-                  </datalist>
                 </Field>
                 {chosen?.needs_base_url ? (
                   <Field
@@ -836,10 +903,41 @@ export function LlmSection({
                   />
                   기본 연결로 쓰기
                 </label>
+                {probe && (
+                  <div
+                    role="status"
+                    className={
+                      probe.ok
+                        ? "flex gap-2 rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-800"
+                        : "flex gap-2 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700"
+                    }
+                  >
+                    {probe.ok ? (
+                      <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
+                    ) : (
+                      <XCircle className="mt-0.5 h-4 w-4 shrink-0" />
+                    )}
+                    <span>
+                      {probe.message}
+                      {probe.hint && <span className="block text-xs opacity-80">{probe.hint}</span>}
+                    </span>
+                  </div>
+                )}
                 <ErrorBox error={create.error} />
-                <Button type="submit" disabled={create.isPending}>
-                  저장
-                </Button>
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={!form.api_key.trim() || testNew.isPending}
+                    onClick={runTest}
+                  >
+                    <PlugZap className="h-4 w-4" />
+                    {testNew.isPending ? "확인 중…" : "연결 테스트"}
+                  </Button>
+                  <Button type="submit" disabled={create.isPending}>
+                    저장
+                  </Button>
+                </div>
               </form>
             </CardBody>
           </Card>

@@ -4,7 +4,8 @@
 나머지는 OpenAI 호환 API를 내놓는 공급자를 미리 설정해 둔 것(preset)이다. 사용자는 키만 넣으면 되고,
 주소(base_url)는 미리 채워진다(필요하면 바꿀 수 있다). 모두 OpenAIAdapter로 부른다.
 
-주소·모델 이름은 2026-11 기준 공급자 문서의 공개 값이다. 모델은 자주 바뀌므로 화면에서 직접 고쳐 쓸 수 있다.
+주소·모델 이름은 2026-11 기준 공개 값(대표 모델)이다. 모델은 자주 바뀌므로 화면의 '연결 테스트'로
+키에 맞는 실제 모델 목록을 공급자에서 불러와 고를 수 있다(llm/probe.py).
 단가는 engine/pricing.py에 아는 것만 적고, 모르는 모델은 0(비용 미집계)으로 둔다.
 """
 
@@ -67,10 +68,18 @@ _LIST: tuple[Preset, ...] = (
         "기본",
         None,
         (
-            M("gpt-4o-mini", "GPT-4o mini (빠르고 저렴)", vision=True),
-            M("gpt-4o", "GPT-4o", vision=True),
+            M("gpt-5.4-mini", "GPT-5.4 mini (기본 추천·빠르고 저렴)", vision=True),
+            M("gpt-5.5", "GPT-5.5 (최상위)", vision=True),
+            M("gpt-5.4", "GPT-5.4", vision=True),
+            M("gpt-5", "GPT-5", vision=True),
+            M("gpt-5-mini", "GPT-5 mini", vision=True),
+            M("gpt-5-nano", "GPT-5 nano (가장 저렴)", vision=True),
+            M("o4-mini", "o4-mini (추론)", vision=True),
+            M("o3", "o3 (추론)", vision=True),
             M("gpt-4.1", "GPT-4.1", vision=True),
             M("gpt-4.1-mini", "GPT-4.1 mini", vision=True),
+            M("gpt-4o", "GPT-4o", vision=True),
+            M("gpt-4o-mini", "GPT-4o mini", vision=True),
         ),
         native=True,
         embedding=True,
@@ -93,7 +102,15 @@ _LIST: tuple[Preset, ...] = (
         "Google (Gemini)",
         "기본",
         None,
-        (M("gemini-2.0-flash", "Gemini 2.0 Flash", vision=True),),
+        (
+            M("gemini-2.5-flash", "Gemini 2.5 Flash (기본 추천·빠르고 저렴)", vision=True),
+            M("gemini-3.1-pro-preview", "Gemini 3.1 Pro (미리 보기)", vision=True),
+            M("gemini-3-flash-preview", "Gemini 3 Flash (미리 보기)", vision=True),
+            M("gemini-3.1-flash-lite", "Gemini 3.1 Flash-Lite", vision=True),
+            M("gemini-2.5-pro", "Gemini 2.5 Pro", vision=True),
+            M("gemini-2.5-flash-lite", "Gemini 2.5 Flash-Lite", vision=True),
+            M("gemini-2.0-flash", "Gemini 2.0 Flash", vision=True),
+        ),
         native=True,
     ),
     Preset(

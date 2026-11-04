@@ -1,6 +1,11 @@
 // 모든 목록이 함께 쓰는 검색·필터·개수(페이지 크기)·페이지 상태.
-// 페이지 크기는 목록마다 브라우저에 기억한다(기억 못 해도 기본값으로 동작).
-import { useEffect, useMemo, useState } from "react";
+// 개수·필터는 목록마다 계정별로 기억한다(개인 설정 lists, 서버 저장). 브라우저에도 개수를 남겨
+// 로그인 정보가 아직 없을 때 쓴다. 기본 개수는 10개.
+import { QueryClientContext } from "@tanstack/react-query";
+import { useContext, useEffect, useMemo, useState } from "react";
+import { readListPref, saveListPref } from "@/lib/api/listPrefs";
+
+export const DEFAULT_PAGE_SIZE = 10;
 
 export const PAGE_SIZES = [10, 20, 50, 100] as const;
 
@@ -72,10 +77,18 @@ export function useListControls<T>(
   },
 ): ListControls<T> {
   const filters = opts.filters ?? [];
+  const qc = useContext(QueryClientContext);
   const [query, setQueryState] = useState("");
-  const [filterValues, setFilterValues] = useState<Record<string, string>>({});
+  const [filterValues, setFilterValues] = useState<Record<string, string>>(
+    () => readListPref(qc, opts.key)?.filters ?? {},
+  );
   const [page, setPage] = useState(1);
-  const [size, setSizeState] = useState(() => readSize(opts.key, opts.defaultSize ?? 20));
+  const [size, setSizeState] = useState(() => {
+    const saved = readListPref(qc, opts.key)?.size;
+    return saved && (PAGE_SIZES as readonly number[]).includes(saved)
+      ? saved
+      : readSize(opts.key, opts.defaultSize ?? DEFAULT_PAGE_SIZE);
+  });
 
   const filtered = useMemo(() => {
     const list = items ?? [];
@@ -109,11 +122,14 @@ export function useListControls<T>(
     filters,
     filterValues,
     setFilter: (id, value) => {
-      setFilterValues((fv) => ({ ...fv, [id]: value }));
+      const next = { ...filterValues, [id]: value };
+      setFilterValues(next);
+      saveListPref(qc, opts.key, { filters: next });
       setPage(1);
     },
     resetFilters: () => {
       setFilterValues({});
+      saveListPref(qc, opts.key, { filters: {} });
       setQueryState("");
       setPage(1);
     },
@@ -123,6 +139,7 @@ export function useListControls<T>(
     setSize: (n) => {
       setSizeState(n);
       writeSize(opts.key, n);
+      saveListPref(qc, opts.key, { size: n });
       setPage(1);
     },
     total: filtered.length,
@@ -147,4 +164,23 @@ export function optionsFrom<T>(
   return [...set]
     .sort((a, b) => a.localeCompare(b, "ko"))
     .map((v) => ({ value: v, label: label ? label(v) : v }));
+}
+
+/** 서버에서 쪽 단위로 가져오는 목록(로그·데이터 행)의 한 번에 보기 개수: 계정별로 기억, 기본 10개 */
+export function usePageSize(key: string): [number, (n: number) => void] {
+  const qc = useContext(QueryClientContext);
+  const [size, setSizeState] = useState(() => {
+    const saved = readListPref(qc, key)?.size;
+    return saved && (PAGE_SIZES as readonly number[]).includes(saved)
+      ? saved
+      : readSize(key, DEFAULT_PAGE_SIZE);
+  });
+  return [
+    size,
+    (n: number) => {
+      setSizeState(n);
+      writeSize(key, n);
+      saveListPref(qc, key, { size: n });
+    },
+  ];
 }

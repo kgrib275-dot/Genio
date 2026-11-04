@@ -96,6 +96,13 @@ export interface Preferences {
   font_size: "normal" | "large";
   default_workspace_id: string | null;
   enter_to_send: boolean;
+  /** v0.6: 목록마다 고른 한 번에 보기 개수·필터(계정별) */
+  lists?: Record<string, ListPref>;
+}
+
+export interface ListPref {
+  size?: number;
+  filters?: Record<string, string>;
 }
 
 export const DEFAULT_PREFERENCES: Preferences = {

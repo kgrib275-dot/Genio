@@ -917,7 +917,7 @@ export function ChatView({
                     type="submit"
                     aria-label="멈추기"
                     title="답 멈추기"
-                    className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-slate-900 text-white hover:bg-slate-700"
+                    className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-indigo-600 text-white hover:bg-indigo-500"
                   >
                     <Square className="h-3.5 w-3.5 fill-current" />
                   </button>

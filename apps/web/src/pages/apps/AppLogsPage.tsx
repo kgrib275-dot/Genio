@@ -39,7 +39,7 @@ import {
   useUpdateAnnotation,
 } from "@/lib/api/v2";
 import { cn, formatDate, timeAgo } from "@/lib/cn";
-import { PAGE_SIZES, useListControls, type FilterDef } from "@/lib/useListControls";
+import { PAGE_SIZES, useListControls, usePageSize, type FilterDef } from "@/lib/useListControls";
 import { AppNav } from "@/pages/apps/AppNav";
 import { canEdit, useSession } from "@/store/session";
 import { useAgentReply, useCloseHandoff, useHandoffConversations } from "@/lib/api/v5a";
@@ -331,22 +331,11 @@ function Handoffs({ appId, editable }: { appId: string; editable: boolean }) {
   );
 }
 
-const LOGS_SIZE_KEY = "genio.list.app-logs.size";
-
-function readLogsSize(): number {
-  try {
-    const n = Number(window.localStorage.getItem(LOGS_SIZE_KEY));
-    return (PAGE_SIZES as readonly number[]).includes(n) ? n : 20;
-  } catch {
-    return 20;
-  }
-}
-
 type FeedbackFilter = "" | "like" | "dislike" | "none";
 
 function Conversations({ appId, editable }: { appId: string; editable: boolean }) {
   const [page, setPage] = useState(1);
-  const [size, setSizeState] = useState(readLogsSize);
+  const [size, setSizeState] = usePageSize("app-logs");
   const [input, setInput] = useState("");
   const [q, setQ] = useState("");
   const [feedback, setFeedback] = useState<FeedbackFilter>("");
@@ -363,12 +352,8 @@ function Conversations({ appId, editable }: { appId: string; editable: boolean }
   const setSize = (n: number) => {
     setSizeState(n);
     setPage(1);
-    try {
-      window.localStorage.setItem(LOGS_SIZE_KEY, String(n));
-    } catch {
-      // 기억하지 못해도 동작에는 문제없다
-    }
   };
+
   if (open)
     return (
       <ConversationView

@@ -603,7 +603,6 @@ export default function DashboardPage() {
   const byId = new Map(projectList.map((p) => [p.id, p]));
   const c = useListControls(apps.data, {
     key: "dashboard-apps",
-    defaultSize: 20,
     search: (a) => `${a.name} ${a.description}`,
     filters: [
       {

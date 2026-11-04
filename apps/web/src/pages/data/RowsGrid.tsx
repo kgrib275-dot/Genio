@@ -25,18 +25,9 @@ import {
 } from "@/lib/api/v4";
 import { cn, formatDate } from "@/lib/cn";
 import { display, fromText, toText } from "@/pages/data/values";
+import { usePageSize } from "@/lib/useListControls";
 
 const SIZES = [10, 20, 50, 100];
-const SIZE_KEY = "genio.list.data-rows.size";
-
-function readSize(): number {
-  try {
-    const n = Number(window.localStorage.getItem(SIZE_KEY));
-    return SIZES.includes(n) ? n : 20;
-  } catch {
-    return 20;
-  }
-}
 
 interface Draft {
   /** 새 줄이면 null */
@@ -117,7 +108,7 @@ export function RowsGrid({
   const [qInput, setQInput] = useState("");
   const [q, setQ] = useState("");
   const [page, setPage] = useState(1);
-  const [size, setSize] = useState(readSize);
+  const [size, setSize] = usePageSize("data-rows");
   const [draft, setDraft] = useState<Draft | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const fileRef = useRef<HTMLInputElement>(null);
@@ -391,11 +382,6 @@ export function RowsGrid({
               const n = Number(e.target.value);
               setSize(n);
               setPage(1);
-              try {
-                window.localStorage.setItem(SIZE_KEY, String(n));
-              } catch {
-                // 기억하지 못해도 동작에는 문제없다
-              }
             }}
             className="h-8 rounded-md border border-slate-300 bg-white px-1.5 text-xs text-slate-700"
           >

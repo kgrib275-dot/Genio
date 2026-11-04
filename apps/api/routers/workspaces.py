@@ -275,6 +275,47 @@ def add_provider(ws: str, body: ProviderIn, ctx: SecretManagers) -> dict[str, An
     return _provider(row)
 
 
+class ProviderTestIn(BaseModel):
+    provider: str = Field(min_length=2, max_length=30)
+    api_key: str = Field(min_length=4, max_length=500)
+    base_url: str | None = Field(default=None, max_length=500)
+
+
+def _probe(provider: str, api_key: str, base_url: str | None) -> dict[str, Any]:
+    from api.llm.probe import list_models
+
+    if provider not in PROVIDERS:
+        raise AppError(422, "지원하지 않는 AI 공급자예요.", "목록에서 공급자를 고르세요.")
+    started = time.perf_counter()
+    try:
+        models = list_models(provider, api_key, base_url or None)
+    except LlmError as exc:
+        return {"ok": False, "message": exc.message, "hint": exc.hint, "models": []}
+    return {
+        "ok": True,
+        "message": f"연결됐어요. 쓸 수 있는 모델 {len(models)}개를 불러왔어요.",
+        "hint": "",
+        "models": models,
+        "ms": round((time.perf_counter() - started) * 1000),
+    }
+
+
+@router.post("/workspaces/{ws}/llm-providers/test")
+def test_new_provider(ws: str, body: ProviderTestIn, ctx: SecretManagers) -> dict[str, Any]:
+    """저장하기 전에 키로 연결해 보고, 그 키로 쓸 수 있는 모델 목록을 돌려준다."""
+    del ws, ctx
+    return _probe(body.provider, body.api_key.strip(), body.base_url)
+
+
+@router.post("/workspaces/{ws}/llm-providers/{provider_id}/test")
+def test_saved_provider(ws: str, provider_id: str, ctx: Builders) -> dict[str, Any]:
+    """저장된 연결을 시험한다(키는 서버에서만 풀어 쓴다)."""
+    row = ctx.db.get(LlmProvider, provider_id)
+    if row is None or row.workspace_id != ws:
+        raise not_found("AI 연결")
+    return _probe(row.provider, decrypt_str(row.api_key_encrypted), row.base_url)
+
+
 @router.delete("/workspaces/{ws}/llm-providers/{provider_id}", status_code=204)
 def delete_provider(ws: str, provider_id: str, ctx: SecretManagers) -> Response:
     row = ctx.db.get(LlmProvider, provider_id)

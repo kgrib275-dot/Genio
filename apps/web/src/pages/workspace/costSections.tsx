@@ -37,7 +37,6 @@ export function ModelCatalogCard() {
   const cat = useLlmCatalog();
   const c = useListControls(cat.data, {
     key: "llm-catalog",
-    defaultSize: 20,
     search: (m) => `${m.model} ${m.label} ${m.provider}`,
     filters: [
       {

@@ -125,3 +125,25 @@ export function useAuditLogs(ws: string, enabled = true) {
     enabled: Boolean(ws) && enabled,
   });
 }
+
+// v0.6: AI 연결 테스트(키로 공급자 모델 목록 불러오기)
+export interface LlmProbe {
+  ok: boolean;
+  message: string;
+  hint: string;
+  models: { model: string; label: string }[];
+  ms?: number;
+}
+
+export function useTestNewLlm(ws: string) {
+  return useMutation({
+    mutationFn: (v: { provider: string; api_key: string; base_url?: string | null }) =>
+      api.post<LlmProbe>(`/workspaces/${ws}/llm-providers/test`, v),
+  });
+}
+
+export function useTestSavedLlm(ws: string) {
+  return useMutation({
+    mutationFn: (id: string) => api.post<LlmProbe>(`/workspaces/${ws}/llm-providers/${id}/test`),
+  });
+}

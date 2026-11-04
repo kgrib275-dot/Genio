@@ -33,7 +33,7 @@ export const Select = forwardRef<HTMLSelectElement, SelectHTMLAttributes<HTMLSel
         ref={ref}
         className={cn(
           base,
-          "h-10 appearance-none bg-[length:16px] bg-[right_10px_center] bg-no-repeat pr-9",
+          "h-10 appearance-none bg-[length:16px] bg-[position:right_10px_center] bg-no-repeat pr-9",
           className,
         )}
         style={{ backgroundImage: CHEVRON, ...style }}
