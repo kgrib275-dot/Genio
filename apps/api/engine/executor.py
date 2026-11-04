@@ -424,9 +424,12 @@ def execute_run(run_id: str, *, db: Session | None = None) -> None:
     session = db or SessionLocal()
     try:
         _execute(session, run_id)
-    except Exception:
+    except Exception as exc:
         log.exception("실행 엔진 내부 오류(run=%s)", run_id)
         session.rollback()
+        from api.services.error_log import record
+
+        record(source="engine", where=f"실행 {run_id}", exc=exc)
         run = session.get(Run, run_id)
         if run is not None and run.status not in TERMINAL:
             run.status = "failed"
@@ -806,6 +809,13 @@ def _invoke(spec: Any, node: Any, ctx: NodeContext) -> tuple[str, Any]:
         return "error", exc.message if isinstance(exc, NodeError) else str(exc)
     except Exception as exc:
         log.exception("단계 실행 오류(run=%s node=%s)", ctx.run_id, node.id)
+        from api.services.error_log import record
+
+        record(
+            source="engine",
+            where=f"실행 {ctx.run_id} · 단계 {node.id}({node.type})",
+            exc=exc,
+        )
         return "crash", type(exc).__name__
 
 

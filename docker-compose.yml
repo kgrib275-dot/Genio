@@ -10,6 +10,9 @@ x-backend-env: &backend-env
   MARKET_ITEMS_DIR: /app/market-items
   # Docker Desktop(Windows) 바인드 마운트는 변경 알림이 없어서 자동 재시작을 폴링으로 감시
   WATCHFILES_FORCE_POLLING: "true"
+  # 관리 > 시스템 상태에 보일 버전. 올릴 때: GENIO_VERSION=<커밋 짧은 해시> docker compose up -d
+  GENIO_VERSION: ${GENIO_VERSION:-dev}
+  GENIO_BACKUP_DIR: /backups
 
 x-backend-common: &backend-common
   build:
@@ -24,6 +27,8 @@ x-backend-common: &backend-common
     - ./apps/worker:/app/apps/worker
     - ./packages:/app/packages
     - ./market-items:/app/market-items
+    # 자동 백업 결과(status.json)를 읽기만 한다
+    - ./backups:/backups:ro
   depends_on:
     postgres:
       condition: service_healthy
@@ -81,6 +86,27 @@ services:
     depends_on:
       api:
         condition: service_healthy
+
+  # DB 자동 백업: 매일 GENIO_BACKUP_HOUR시(기본 3시, 서울 시간) pg_dump → ./backups, 7일 보관.
+  # 포트를 열지 않는다. 복구: bash scripts/restore_backup.sh backups/<파일> (docs/runbook.md)
+  backup:
+    image: pgvector/pgvector:pg16
+    entrypoint: ["bash", "/scripts/backup_loop.sh"]
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-genio}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-genio}
+      POSTGRES_DB: ${POSTGRES_DB:-genio}
+      PGHOST: postgres
+      TZ: ${GENIO_BACKUP_TZ:-Asia/Seoul}
+      GENIO_BACKUP_HOUR: ${GENIO_BACKUP_HOUR:-3}
+      GENIO_BACKUP_KEEP_DAYS: ${GENIO_BACKUP_KEEP_DAYS:-7}
+    volumes:
+      - ./backups:/backups
+      - ./scripts/backup_loop.sh:/scripts/backup_loop.sh:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
 
   web:
     # 배포용 빌드를 nginx로 서빙(빠른 첫 화면). 개발 중 바로 반영하려면 apps/web에서 npm run dev(5190, API 8190 프록시).

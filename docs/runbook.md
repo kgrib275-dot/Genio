@@ -118,3 +118,39 @@ alembic -c apps/api/alembic.ini check      # 모델과 DB가 같은지
 - `GENIO_RUN_PARALLELISM`(기본 4, 1~16): 실행 하나 안에서 동시에 도는 갈래 수. 동시에 도는 갈래는 갈래마다 DB 연결을 하나씩 더 쓴다.
 - DB 연결 어림: API 프로세스 수 × (풀 10 + 넘침 10) + 워커 동시성 × (1 + 병렬 수). 기본값(API 4, 워커 4, 병렬 4) = 80 + 20 = 100 < `max_connections=200`.
 - 워커 동시성(`--concurrency`)이 한 번에 처리하는 실행 수다. AI 응답을 기다리는 흐름이 많으면 워커 동시성을 늘리는 것이 가장 효과가 크다(부하 시험 보고서 2026-11-04 참고).
+
+## 운영 준비: 자동 백업·복구
+- `docker compose up -d` 하면 `backup` 서비스가 함께 뜬다. 포트를 열지 않는다.
+  - 매일 **3시(서울 시간)** `pg_dump -Fc`로 `./backups/genio-YYYYmmdd-HHMM.dump`를 만든다. 처음 켰을 때 최근 하루 안의 백업이 없으면 바로 한 번 만든다.
+  - **7일**보다 오래된 백업은 지운다.
+  - 바꾸기(.env): `GENIO_BACKUP_HOUR=3`, `GENIO_BACKUP_KEEP_DAYS=7`, `GENIO_BACKUP_TZ=Asia/Seoul`.
+  - 결과는 `./backups/status.json`에 남고 **관리 > 시스템 상태**에 보인다. 30시간 넘게 새 백업이 없으면 '주의'로 바뀐다.
+  - `./backups`는 깃에 올라가지 않는다. 이 PC가 망가지면 백업도 함께 사라지므로, 주기적으로 다른 곳(외장 디스크·클라우드)에 복사해 둔다.
+- 복구: `bash scripts/restore_backup.sh backups/genio-20261104-0300.dump`
+  - `yes`를 입력하면 api·worker를 멈추고, 지금 DB를 `backups/before-restore-*.dump`로 먼저 백업한 뒤 복구하고, 다시 시작한다.
+  - 되돌리고 싶으면 그 `before-restore-*.dump`로 같은 명령을 다시 쓴다.
+
+## 운영 준비: 시스템 상태·서버 오류 기록
+- **관리 > 시스템 상태**(인스턴스 관리자 = 가장 먼저 만든 워크스페이스의 소유자만 보임). 30초마다 새로 확인한다.
+  - 볼 수 있는 것: DB(응답 시간), Redis, 실행 워커(ping), 대기 중인 작업 수, 자동 백업, 디스크 남은 공간, 버전.
+  - 숫자: 사용자·워크스페이스 수, 24시간 실행·실패·서버 오류 수.
+- 버전 표시: 올릴 때 `GENIO_VERSION=<커밋 짧은 해시> docker compose up -d api worker`(비우면 '개발').
+- 모든 API 응답에 `X-Request-ID`(문의 번호)가 붙는다. 처리하지 못한 오류(500) 화면에는 "문의할 때 이 번호를 알려 주세요: …"가 나온다.
+- 그 오류와 실행 엔진 내부 오류는 `error_events` 표에 남고 **시스템 상태 > 서버 오류 기록**에서 문의 번호로 찾는다.
+  - 남기는 것: 시각, 경로 틀, 오류 종류, 짧은 메시지(토큰·키·비밀번호·연결 문자열은 가림), 사용자·워크스페이스 id.
+  - 남기지 않는 것: 요청 본문·헤더.
+  - 30일 뒤 보관 기간 정리(매일)에서 지운다.
+
+## 운영 준비: 콘텐츠 보안 정책(CSP)
+- `apps/web/nginx.conf`가 화면 응답에 CSP를 붙인다.
+  - 스크립트는 우리 서버 파일만 실행한다. 인라인 스크립트는 막으므로 테마 적용은 `/boot.js`로 옮겼다.
+  - 스타일은 우리 서버, 인라인 style, jsdelivr(Pretendard 글꼴)만 허용한다.
+  - 이미지는 `https:`·`data:`·`blob:`(답변 속 그림, 사진 미리 보기)을 허용한다.
+  - API·SSE는 같은 주소만 부른다. `object-src 'none'`, `base-uri 'self'`.
+- 액자(iframe): 공유 챗 `/share/…`만 모든 사이트에 넣을 수 있다(`frame-ancestors *`, X-Frame-Options 없음). 나머지는 같은 주소만(`'self'`, `SAMEORIGIN`).
+  - nginx는 `$request_uri`로 판단한다. 예전 `$uri`는 SPA로 넘긴 뒤 `/index.html`이 되어 공유 챗도 막고 있었다.
+- 새 외부 자원(다른 CDN·분석 스크립트)을 붙이면 CSP에 그 주소를 더해야 한다. 막히면 브라우저 콘솔에 "Refused to …"가 보인다.
+
+## 운영 준비: 활동 기록 내보내기
+- **관리 > 활동 기록 > CSV로 받기**(소유자·관리자): 화면에서 고른 종류·한 일·사람·기간·검색어 그대로 최대 5만 줄을 받는다.
+- 엑셀에서 한글이 깨지지 않게 BOM을 붙인다. 부가 정보 중 key·token·secret·password·credential이 들어간 항목은 `****`로 바꾼다.

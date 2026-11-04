@@ -630,6 +630,25 @@ class HumanTask(Base):
     )
 
 
+class ErrorEvent(Base):
+    """서버 오류 기록(운영 준비). 요청 본문·헤더·비밀값은 남기지 않는다. 30일 보관."""
+
+    __tablename__ = "error_events"
+    id: Mapped[str] = _id()
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False, index=True
+    )
+    # api(처리되지 않은 API 오류) | engine(실행 엔진 내부 오류) | worker
+    source: Mapped[str] = mapped_column(String(20), default="api")
+    # 어디서: 'POST /api/v1/apps/{app_id}/runs' 같은 경로 틀, 또는 엔진의 실행 id
+    where: Mapped[str] = mapped_column(String(300), default="")
+    error_type: Mapped[str] = mapped_column(String(120), default="")
+    message: Mapped[str] = mapped_column(Text, default="")
+    request_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    user_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    workspace_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+
+
 # 대화 메시지는 저장 시각 순서가 곧 대화 순서다. 같은 순간(시계 해상도 안)에 저장되면 순서가
 # 뒤바뀔 수 있어, 같은 대화의 직전 메시지보다 늘 뒤가 되게 맞춘다(대화 기억 순서 보장).
 @event.listens_for(Message, "before_insert")
