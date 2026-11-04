@@ -5,6 +5,7 @@
 """
 
 import logging
+from datetime import UTC, datetime
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -36,7 +37,7 @@ def seed_demo(db: Session) -> bool:
     pw = hash_password(DEMO_PASSWORD)
     owner_id = ""
     for email, name, role in DEMO_USERS:
-        u = User(email=email, name=name, password_hash=pw)
+        u = User(email=email, name=name, password_hash=pw, email_verified_at=datetime.now(UTC))
         db.add(u)
         db.flush()
         db.add(Membership(user_id=u.id, workspace_id=ws.id, role=role))

@@ -6,6 +6,7 @@ from api.models.entities import (
     AppApiKey,
     AppTrigger,
     AuditLog,
+    AuthToken,
     BuilderMessage,
     BuilderSession,
     Chunk,
@@ -34,6 +35,7 @@ from api.models.entities import (
     StoredFile,
     SystemSetting,
     User,
+    UserSession,
     WorkflowVersion,
     Workspace,
 )
@@ -44,6 +46,7 @@ __all__ = [
     "AppApiKey",
     "AppTrigger",
     "AuditLog",
+    "AuthToken",
     "BuilderMessage",
     "BuilderSession",
     "Chunk",
@@ -72,6 +75,7 @@ __all__ = [
     "StoredFile",
     "SystemSetting",
     "User",
+    "UserSession",
     "WorkflowVersion",
     "Workspace",
 ]

@@ -17,6 +17,12 @@ import { preferencesOf, useChangePassword, useUpdateMe } from "@/lib/api/v3";
 import { cn } from "@/lib/cn";
 import { rememberEnterToSend } from "@/lib/composer";
 import { applyFontSize, applyTheme, type ThemePref } from "@/store/theme";
+import {
+  EmailVerifyCard,
+  MyDataCard,
+  SessionsCard,
+  TwoFactorCard,
+} from "@/pages/settings/SecurityCards";
 
 const THEMES: { value: ThemePref; label: string; hint: string; icon: LucideIcon }[] = [
   { value: "light", label: "밝게", hint: "언제나 밝은 화면", icon: Sun },
@@ -165,6 +171,10 @@ export default function SettingsPage() {
           </Card>
 
           <PasswordCard />
+          <EmailVerifyCard me={me.data} />
+          <TwoFactorCard me={me.data} />
+          <SessionsCard />
+          <MyDataCard />
         </div>
       </div>
     </PageContainer>

@@ -36,7 +36,7 @@ def verify_password(password: str, password_hash: str) -> bool:
         return False
 
 
-def _encode(sub: str, kind: str, delta: timedelta) -> str:
+def _encode(sub: str, kind: str, delta: timedelta, sid: str | None = None) -> str:
     now = datetime.now(UTC)
     payload: dict[str, Any] = {
         "sub": sub,
@@ -45,28 +45,40 @@ def _encode(sub: str, kind: str, delta: timedelta) -> str:
         "exp": int((now + delta).timestamp()),
         "jti": secrets.token_hex(8),
     }
+    if sid:
+        # v0.7: 로그인한 기기(user_sessions.id). 그 기기를 끊으면 토큰이 통하지 않는다
+        payload["sid"] = sid
     return jwt.encode(payload, get_settings().genio_secret_key, algorithm=ALGORITHM)
 
 
-def create_tokens(user_id: str) -> dict[str, str]:
+def create_tokens(user_id: str, sid: str | None = None) -> dict[str, str]:
     s = get_settings()
     return {
-        "access_token": _encode(user_id, "access", timedelta(minutes=s.access_token_minutes)),
-        "refresh_token": _encode(user_id, "refresh", timedelta(days=s.refresh_token_days)),
+        "access_token": _encode(user_id, "access", timedelta(minutes=s.access_token_minutes), sid),
+        "refresh_token": _encode(user_id, "refresh", timedelta(days=s.refresh_token_days), sid),
         "token_type": "bearer",
     }
 
 
-def decode_token(token: str, kind: str) -> str | None:
-    """유효하면 user_id, 아니면 None."""
+def create_short_token(user_id: str, kind: str, minutes: int = 5) -> str:
+    """2단계 인증 대기 등 잠깐 쓰는 토큰."""
+    return _encode(user_id, kind, timedelta(minutes=minutes))
+
+
+def decode_payload(token: str, kind: str) -> dict[str, Any] | None:
     try:
         payload = jwt.decode(token, get_settings().genio_secret_key, algorithms=[ALGORITHM])
     except jwt.PyJWTError:
         return None
-    if payload.get("type") != kind:
+    if payload.get("type") != kind or not isinstance(payload.get("sub"), str):
         return None
-    sub = payload.get("sub")
-    return sub if isinstance(sub, str) else None
+    return dict(payload)
+
+
+def decode_token(token: str, kind: str) -> str | None:
+    """유효하면 user_id, 아니면 None."""
+    payload = decode_payload(token, kind)
+    return str(payload["sub"]) if payload else None
 
 
 def random_token(nbytes: int = 24) -> str:

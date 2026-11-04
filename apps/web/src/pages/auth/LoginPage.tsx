@@ -12,6 +12,7 @@ import { ErrorBox } from "@/components/ErrorBox";
 import { useLogin } from "@/lib/api/auth";
 import { cn } from "@/lib/cn";
 import { safeNext } from "@/lib/nav";
+import { MfaStep, VerifyStep } from "@/pages/auth/AccountSteps";
 import { AuthShell } from "@/pages/auth/AuthShell";
 import { LegalLinks } from "@/pages/legal/AgreementChecks";
 
@@ -72,6 +73,9 @@ export default function LoginPage() {
   const [capsLock, setCapsLock] = useState(false);
   const [shake, setShake] = useState(0);
   const [success, setSuccess] = useState(false);
+  // v0.7: 비밀번호 다음 단계(2단계 인증 코드 / 이메일 확인)
+  const [mfaToken, setMfaToken] = useState<string | null>(null);
+  const [verifyEmail, setVerifyEmail] = useState<string | null>(null);
   const login = useLogin();
   const navigate = useNavigate();
   const [params] = useSearchParams();
@@ -86,16 +90,28 @@ export default function LoginPage() {
     setCapsLock(e.getModifierState?.("CapsLock") ?? false);
   };
 
+  function finish() {
+    setSuccess(true);
+    // 성공 표시를 잠깐 보여 준 뒤 이동
+    window.setTimeout(() => navigate(safeNext(params.get("next")), { replace: true }), 350);
+  }
+
   const submit = (e: FormEvent) => {
     e.preventDefault();
     login.mutate(
       { email, password },
       {
-        onSuccess: () => {
+        onSuccess: (result) => {
           saveRemembered(remember ? email.trim() : null);
-          setSuccess(true);
-          // 성공 표시를 잠깐 보여 준 뒤 이동
-          window.setTimeout(() => navigate(safeNext(params.get("next")), { replace: true }), 350);
+          if ("mfa_required" in result) {
+            setMfaToken(result.mfa_token);
+            return;
+          }
+          if ("verify_required" in result) {
+            setVerifyEmail(result.email);
+            return;
+          }
+          finish();
         },
         onError: () => {
           setShake((v) => v + 1);
@@ -108,6 +124,23 @@ export default function LoginPage() {
   };
 
   const busy = login.isPending || success;
+  const back = () => {
+    setMfaToken(null);
+    setVerifyEmail(null);
+    setPassword("");
+  };
+  if (mfaToken)
+    return (
+      <AuthShell title="2단계 인증" subtitle="한 번 더 확인할게요.">
+        <MfaStep mfaToken={mfaToken} onDone={finish} onBack={back} />
+      </AuthShell>
+    );
+  if (verifyEmail)
+    return (
+      <AuthShell title="메일을 확인해 주세요" subtitle="가입한 이메일 주소가 맞는지 확인해요.">
+        <VerifyStep email={verifyEmail} onBack={back} />
+      </AuthShell>
+    );
   return (
     <AuthShell title="다시 오신 걸 환영해요" subtitle="이메일과 비밀번호로 로그인하세요.">
       <form key={shake} onSubmit={submit} className={cn("space-y-4", shake > 0 && "genio-shake")}>
@@ -166,15 +199,23 @@ export default function LoginPage() {
             </p>
           )}
         </div>
-        <label className="flex cursor-pointer select-none items-center gap-2 text-sm text-slate-600">
-          <input
-            type="checkbox"
-            checked={remember}
-            onChange={(e) => setRemember(e.target.checked)}
-            className="h-4 w-4 rounded border-slate-300 accent-indigo-600"
-          />
-          이메일 기억하기
-        </label>
+        <div className="flex items-center justify-between gap-2">
+          <label className="flex cursor-pointer select-none items-center gap-2 text-sm text-slate-600">
+            <input
+              type="checkbox"
+              checked={remember}
+              onChange={(e) => setRemember(e.target.checked)}
+              className="h-4 w-4 rounded border-slate-300 accent-indigo-600"
+            />
+            이메일 기억하기
+          </label>
+          <Link
+            to={`/forgot-password${email ? `?email=${encodeURIComponent(email.trim())}` : ""}`}
+            className="text-sm font-medium text-indigo-600 hover:text-indigo-700"
+          >
+            비밀번호를 잊으셨나요?
+          </Link>
+        </div>
         <ErrorBox error={login.error} />
         <button
           type="submit"
@@ -214,7 +255,7 @@ export default function LoginPage() {
         </Link>
       </p>
       <p className="mt-2 text-center text-xs text-slate-400">
-        계정이 없거나 비밀번호를 잊었다면 워크스페이스 관리자에게 요청하세요.
+        메일을 받을 수 없다면 워크스페이스 관리자에게 비밀번호 재설정을 요청하세요.
       </p>
       <LegalLinks />
     </AuthShell>

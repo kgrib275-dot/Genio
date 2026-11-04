@@ -5,6 +5,7 @@ import { ErrorBox } from "@/components/ErrorBox";
 import { Button } from "@/components/ui/button";
 import { Field, Input } from "@/components/ui/input";
 import { useSignup } from "@/lib/api/auth";
+import { VerifyStep } from "@/pages/auth/AccountSteps";
 import { AuthShell } from "@/pages/auth/AuthShell";
 import { safeNext } from "@/lib/nav";
 import { AgreementChecks, LegalLinks } from "@/pages/legal/AgreementChecks";
@@ -15,6 +16,8 @@ export default function SignupPage() {
   const [agree, setAgree] = useState({ terms: false, privacy: false });
   const navigate = useNavigate();
   const [params] = useSearchParams();
+  // v0.7: 이메일 인증이 필요하면 가입 뒤 메일 확인 안내를 보여 준다
+  const [verifyEmail, setVerifyEmail] = useState<string | null>(null);
 
   const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement>) =>
     setForm((f) => ({ ...f, [k]: e.target.value }));
@@ -28,9 +31,21 @@ export default function SignupPage() {
         agree_terms: agree.terms,
         agree_privacy: agree.privacy,
       },
-      { onSuccess: () => navigate(safeNext(params.get("next")), { replace: true }) },
+      {
+        onSuccess: (r) => {
+          if ("verify_required" in r) setVerifyEmail(r.email);
+          else navigate(safeNext(params.get("next")), { replace: true });
+        },
+      },
     );
   };
+
+  if (verifyEmail)
+    return (
+      <AuthShell title="거의 다 됐어요" subtitle="메일함에서 확인 링크를 열어 주세요.">
+        <VerifyStep email={verifyEmail} onBack={() => navigate("/login")} />
+      </AuthShell>
+    );
 
   return (
     <AuthShell title="가입하기" subtitle="몇 가지만 적으면 바로 시작할 수 있어요.">

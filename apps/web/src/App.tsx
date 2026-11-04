@@ -6,6 +6,7 @@ import { Loading } from "@/components/ErrorBox";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { Toaster } from "@/components/ui/toast";
 import LoginPage from "@/pages/auth/LoginPage";
+import { ForgotPasswordPage, ResetPasswordPage, VerifyEmailPage } from "@/pages/auth/RecoveryPages";
 import SignupPage from "@/pages/auth/SignupPage";
 
 const InviteAcceptPage = lazy(() => import("@/pages/auth/InviteAcceptPage"));
@@ -49,6 +50,9 @@ export default function App() {
           <Routes>
             <Route path="/login" element={<LoginPage />} />
             <Route path="/signup" element={<SignupPage />} />
+            <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+            <Route path="/reset-password" element={<ResetPasswordPage />} />
+            <Route path="/verify-email" element={<VerifyEmailPage />} />
             <Route path="/invite/:token" element={<InviteAcceptPage />} />
             <Route path="/share/:token" element={<SharePage />} />
             <Route path="/t/:token" element={<TaskLinkPage />} />

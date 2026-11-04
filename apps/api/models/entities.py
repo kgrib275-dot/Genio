@@ -71,6 +71,43 @@ class User(Base):
     created_at: Mapped[datetime] = _created()
     # v0.3: 개인 설정(테마·글자 크기·기본 워크스페이스)
     preferences: Mapped[dict[str, Any]] = mapped_column(JsonType, default=dict, server_default="{}")
+    # v0.7 계정 스스로 관리: 이메일 인증 시각, 2단계 인증(TOTP 비밀값은 암호화), 복구 코드(해시),
+    # 이 시각 이전에 발급한 토큰은 모두 무효(비밀번호 재설정·모든 기기에서 로그아웃)
+    email_verified_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    totp_secret_encrypted: Mapped[str | None] = mapped_column(Text, nullable=True)
+    totp_enabled: Mapped[bool] = mapped_column(default=False, server_default="false")
+    recovery_codes: Mapped[list[str]] = mapped_column(JsonType, default=list, server_default="[]")
+    tokens_valid_after: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+
+class AuthToken(Base):
+    """한 번 쓰는 링크 토큰(비밀번호 재설정·이메일 인증). 토큰 원문은 저장하지 않고 해시만 둔다."""
+
+    __tablename__ = "auth_tokens"
+    id: Mapped[str] = _id()
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    kind: Mapped[str] = mapped_column(String(20))  # reset | verify
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = _created()
+
+
+class UserSession(Base):
+    """로그인한 기기. 끊으면 그 기기의 토큰이 더 이상 통하지 않는다."""
+
+    __tablename__ = "user_sessions"
+    id: Mapped[str] = _id()
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    user_agent: Mapped[str] = mapped_column(String(300), default="", server_default="")
+    ip: Mapped[str] = mapped_column(String(64), default="", server_default="")
+    created_at: Mapped[datetime] = _created()
+    last_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class Membership(Base):

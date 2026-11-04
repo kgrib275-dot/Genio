@@ -540,3 +540,24 @@ Project = {id, workspace_id, name, description, color: indigo|sky|emerald|amber|
 
 - 모든 응답 헤더에 `X-Request-ID`가 붙는다. 요청에 안전한 형식(영숫자·`._-`, 6~64자)의 `X-Request-ID`를 보내면 그 값을 그대로 쓴다.
 - 처리하지 못한 오류(500)는 `detail.hint`에 문의 번호가 들어간다.
+
+
+## v0.7 계정 스스로 관리
+| 메서드·경로 | 권한 | 설명 |
+|---|---|---|
+| POST /auth/password/forgot `{email}` | 공개(IP 10회·이메일 3회/15분) | 재설정 링크 메일. 있는 계정·없는 계정 모두 같은 답. 메일 설정이 없으면 503 |
+| POST /auth/password/reset `{token, password}` | 공개 | 30분·1회용 토큰. 비밀번호 규칙 적용, 모든 기기 로그아웃 |
+| POST /auth/verify-email `{token}` | 공개 | 이메일 확인(48시간) |
+| POST /auth/verify-email/resend `{email}` | 공개(같은 답) | 확인 메일 다시 |
+| POST /me/verify-email/resend | 로그인 | 내 확인 메일 다시 |
+| POST /auth/login | 공개 | 토큰, 또는 `{verify_required, email}`, 또는 `{mfa_required, mfa_token(5분)}` |
+| POST /auth/login/mfa `{mfa_token, code}` | 공개(5회 틀리면 15분) | 앱 코드 6자리 또는 복구 코드(1회) → 토큰 |
+| POST /me/2fa/setup · /me/2fa/enable `{code}` · /me/2fa/disable `{password, code}` · /me/2fa/recovery-codes `{password}` | 로그인 | TOTP(RFC 6238, SHA1·6자리·30초). 비밀값은 Fernet, 복구 코드는 SHA-256 해시 |
+| GET /me/sessions · DELETE /me/sessions/{id} · POST /me/sessions/revoke-all | 로그인 | 로그인한 기기. revoke-all은 이 기기용 새 토큰을 돌려줌 |
+| GET /me/export | 로그인 | 내 데이터 JSON(비밀값 제외) |
+| POST /me/delete `{password, confirm:"탈퇴"}` | 로그인 | 하나뿐인 소유자(다른 멤버 있음)면 409. 계정 익명화·멤버십 삭제 |
+| GET/PUT /admin/system/mail · POST /admin/system/mail/test | 인스턴스 관리자 | 시스템 SMTP. 비밀번호는 ****abcd |
+| PATCH /admin/system `{require_email_verification}` | 인스턴스 관리자 | 메일 설정이 없으면 422 |
+| POST /workspaces/{ws}/members/{id}/reset-2fa | 소유자·관리자(소유자·관리자 대상은 소유자만) | 휴대폰 분실 시 2단계 인증 끄기 |
+
+토큰: JWT에 `sid`(user_sessions.id)를 넣고, 요청마다 기기가 끊겼는지와 `users.tokens_valid_after`(비밀번호 재설정·모든 기기 로그아웃·탈퇴 시각)를 확인한다. 마이그레이션 0010.

@@ -1,4 +1,4 @@
-"""인스턴스 설정(회원가입 허용)과 인스턴스 관리자 판별."""
+"""인스턴스 설정(회원가입 허용·이메일 인증 필수)과 인스턴스 관리자 판별."""
 
 from typing import Any
 
@@ -9,7 +9,8 @@ from api.models import Membership, Organization, SystemSetting, Workspace
 
 
 def defaults() -> dict[str, Any]:
-    return {"allow_signup": True}
+    # v0.7: 가입할 때 이메일 인증을 받아야 로그인할 수 있게(시스템 메일 설정이 있어야 켤 수 있음)
+    return {"allow_signup": True, "require_email_verification": False}
 
 
 def get_system(db: Session) -> dict[str, Any]:

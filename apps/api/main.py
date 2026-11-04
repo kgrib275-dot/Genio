@@ -16,6 +16,7 @@ from api.core.errors import install_error_handlers
 from api.db import Base, SessionLocal, engine
 from api.market.service import ensure_market_nodes, sync_catalog
 from api.routers import (
+    account,
     admin,
     apps,
     apps_v02,
@@ -128,6 +129,7 @@ async def _reject_nul(request: Request, call_next: Any) -> Any:
 
 
 for r in (
+    account,
     admin,
     auth,
     workspaces,

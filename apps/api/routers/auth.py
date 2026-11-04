@@ -15,8 +15,8 @@ from api.core.audit import audit
 from api.core.errors import AppError, not_found
 from api.core.password_policy import check_password
 from api.core.security import (
-    create_tokens,
-    decode_token,
+    create_short_token,
+    decode_payload,
     hash_password,
     needs_rehash,
     verify_password,
@@ -24,7 +24,7 @@ from api.core.security import (
 from api.deps import CurrentUser, DbDep
 from api.models import Invitation, Membership, Organization, User, Workspace
 from api.routers.common import client_ip
-from api.services import system
+from api.services import accounts, mailer, system
 from api.services.apps import slugify
 
 router = APIRouter(tags=["auth"])
@@ -89,8 +89,23 @@ def create_workspace(db: Session, owner: User, name: str) -> Workspace:
     return ws
 
 
+def send_verify_mail(db: Session, user: User, request: Request) -> None:
+    """이메일 인증 링크 메일(메일 설정이 없으면 MailNotConfigured)."""
+    from api.routers.common import public_origin
+
+    raw = accounts.make_link_token(db, user, "verify")
+    link = f"{public_origin(request)}/verify-email?token={raw}"
+    mailer.send(
+        db,
+        user.email,
+        "[Genio] 이메일 주소를 확인해 주세요",
+        f"{user.name}님, 안녕하세요.\n\n아래 링크를 열면 이메일 확인이 끝나요(48시간 안).\n{link}\n\n"
+        "직접 가입하지 않았다면 이 메일은 무시하세요.",
+    )
+
+
 @router.post("/auth/signup")
-def signup(body: SignupIn, db: DbDep) -> dict[str, str]:
+def signup(body: SignupIn, request: Request, db: DbDep) -> dict[str, Any]:
     if not system.get_system(db)["allow_signup"]:
         raise AppError(403, "지금은 새로 가입할 수 없어요.", "관리자에게 초대 링크를 요청하세요.")
     email = body.email.lower()
@@ -116,7 +131,15 @@ def signup(body: SignupIn, db: DbDep) -> dict[str, str]:
         target_id=user.id,
     )
     db.commit()
-    return create_tokens(user.id)
+    if system.get_system(db)["require_email_verification"]:
+        send_verify_mail(db, user, request)
+        return {"verify_required": True, "email": email}
+    if mailer.configured(db):
+        try:
+            send_verify_mail(db, user, request)
+        except Exception:  # 인증이 필수가 아니면 메일 실패가 가입을 막지 않는다
+            db.rollback()
+    return accounts.issue_tokens(db, user, request)
 
 
 def _too_many(minutes: int) -> AppError:
@@ -128,7 +151,7 @@ def _too_many(minutes: int) -> AppError:
 
 
 @router.post("/auth/login")
-def login(body: LoginIn, request: Request, db: DbDep) -> dict[str, str]:
+def login(body: LoginIn, request: Request, db: DbDep) -> dict[str, Any]:
     s = get_settings()
     email = body.email.strip().lower()
     ip = client_ip(request)
@@ -154,15 +177,24 @@ def login(body: LoginIn, request: Request, db: DbDep) -> dict[str, str]:
     if needs_rehash(user.password_hash):
         user.password_hash = hash_password(body.password)
         db.commit()
-    return create_tokens(user.id)
+    if user.email_verified_at is None and system.get_system(db)["require_email_verification"]:
+        # 인증 전에는 토큰을 주지 않고 '메일 확인' 화면으로 보낸다
+        return {"verify_required": True, "email": user.email}
+    if user.totp_enabled:
+        # 2단계 인증: 비밀번호 확인만 끝났다는 5분짜리 토큰을 주고 코드를 받는다
+        return {"mfa_required": True, "mfa_token": create_short_token(user.id, "mfa", 5)}
+    return accounts.issue_tokens(db, user, request)
 
 
 @router.post("/auth/refresh")
-def refresh(body: RefreshIn, db: DbDep) -> dict[str, str]:
-    user_id = decode_token(body.refresh_token, "refresh")
-    if not user_id or db.get(User, user_id) is None:
-        raise AppError(401, "로그인이 만료됐어요.", "다시 로그인하세요.")
-    return create_tokens(user_id)
+def refresh(body: RefreshIn, request: Request, db: DbDep) -> dict[str, str]:
+    expired = AppError(401, "로그인이 만료됐어요.", "다시 로그인하세요.")
+    payload = decode_payload(body.refresh_token, "refresh")
+    user = db.get(User, str(payload["sub"])) if payload else None
+    if payload is None or user is None or not accounts.token_still_valid(db, user, payload):
+        raise expired
+    sid = payload.get("sid")
+    return accounts.issue_tokens(db, user, request, str(sid) if sid else None)
 
 
 def _invitation(db: Session, token: str) -> Invitation:
@@ -191,7 +223,7 @@ def get_invitation(token: str, db: DbDep) -> dict[str, Any]:
 
 
 @router.post("/auth/invitations/{token}/accept")
-def accept_invitation(token: str, body: AcceptIn, db: DbDep) -> dict[str, str]:
+def accept_invitation(token: str, body: AcceptIn, request: Request, db: DbDep) -> dict[str, str]:
     inv = _invitation(db, token)
     if inv.accepted_at is not None:
         raise AppError(409, "이미 수락한 초대예요.", "로그인 화면에서 로그인하세요.")
@@ -208,6 +240,8 @@ def accept_invitation(token: str, body: AcceptIn, db: DbDep) -> dict[str, str]:
             password_hash=hash_password(body.password),
             name=body.name,
             preferences={"agreements": agreements},
+            # 초대 링크는 그 이메일로 받은 것이라 확인된 주소로 본다
+            email_verified_at=datetime.now(UTC),
         )
         db.add(user)
         db.flush()
@@ -233,7 +267,7 @@ def accept_invitation(token: str, body: AcceptIn, db: DbDep) -> dict[str, str]:
         meta={"role": inv.role},
     )
     db.commit()
-    return create_tokens(user.id)
+    return accounts.issue_tokens(db, user, request)
 
 
 @router.get("/me")
@@ -250,6 +284,9 @@ def me(user: CurrentUser, db: DbDep) -> dict[str, Any]:
         "name": user.name,
         "preferences": preferences_of(user),
         "workspaces": [{"id": w.id, "name": w.name, "slug": w.slug, "role": r} for w, r in rows],
+        # v0.7 계정 스스로 관리
+        "email_verified": user.email_verified_at is not None,
+        "two_factor": bool(user.totp_enabled),
     }
 
 
