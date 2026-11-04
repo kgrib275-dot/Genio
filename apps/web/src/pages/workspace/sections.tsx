@@ -3,6 +3,9 @@ import {
   CheckCircle2,
   Copy,
   Crown,
+  BarChart3,
+  Bot,
+  History,
   KeyRound,
   PlugZap,
   RotateCcw,
@@ -22,7 +25,8 @@ import { StatTile } from "@/components/charts";
 import { ErrorBox, Loading } from "@/components/ErrorBox";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardBody, CardHeader, Empty } from "@/components/ui/card";
+import { Card, CardBody, CardHeader } from "@/components/ui/card";
+import { EmptyState } from "@/components/EmptyState";
 import { Dialog } from "@/components/ui/dialog";
 import { Field, Input, Select } from "@/components/ui/input";
 import { toast } from "@/components/ui/toast-store";
@@ -719,9 +723,16 @@ export function LlmSection({
             {list.isLoading && <Loading />}
             <ErrorBox error={list.error} />
             {list.data?.length === 0 && (
-              <p className="px-5 py-6 text-sm text-slate-500">
-                아직 AI 연결이 없어요. 빌더를 쓰려면 하나 이상 등록해야 해요.
-              </p>
+              <EmptyState
+                compact
+                icon={<Bot className="h-5 w-5" />}
+                title="아직 AI 연결이 없어요"
+                description={
+                  manage
+                    ? "'새 AI 연결'에서 제공사를 고르고 키를 넣은 뒤 '연결 테스트'를 눌러요. 등록해야 빌더와 AI 단계가 동작해요."
+                    : "소유자·관리자가 AI 키를 등록해야 빌더와 AI 단계가 동작해요. 관리자에게 요청하세요."
+                }
+              />
             )}
             {(list.data?.length ?? 0) > 0 && (
               <ListToolbar c={pc} placeholder="이름·모델 검색" className="px-4 pb-3 sm:px-5" />
@@ -998,7 +1009,12 @@ export function UsageSection({ ws }: { ws: string }) {
       {group === "user" ? (
         <UsageByUserList ws={ws} />
       ) : u.by_app.length === 0 ? (
-        <Empty>아직 사용 기록이 없어요.</Empty>
+        <EmptyState
+          icon={<BarChart3 className="h-5 w-5" />}
+          title="아직 사용 기록이 없어요"
+          description="AI를 쓰는 앱을 실행하면 앱별 호출 수·토큰·비용이 여기에 쌓여요."
+          action={{ label: "앱 보러 가기", to: "/" }}
+        />
       ) : (
         <div className="space-y-3">
           <ListToolbar c={uc} placeholder="앱 이름 검색" />
@@ -1069,6 +1085,7 @@ const ACTION_LABELS: Record<string, string> = {
   "app.version_save": "버전 저장",
   "auth.password_change": "비밀번호 변경",
   "auth.signup": "가입",
+  "feedback.send": "의견·문의",
   "credential.create": "연결 정보 추가",
   "credential.delete": "연결 정보 삭제",
   "kb.create": "지식베이스 만들기",
@@ -1104,6 +1121,7 @@ const AREA_LABELS: Record<string, string> = {
   api_key: "API 키",
   auth: "계정",
   credential: "연결 정보",
+  feedback: "의견",
   kb: "지식베이스",
   llm_provider: "AI 모델",
   market: "마켓",
@@ -1138,6 +1156,7 @@ const areaOf = (a: string) => a.split(".")[0] ?? a;
 const AREA_TONE: Record<string, string> = {
   app: "bg-indigo-50 text-indigo-700",
   annotation: "bg-indigo-50 text-indigo-700",
+  feedback: "bg-amber-50 text-amber-800",
   member: "bg-violet-50 text-violet-700",
   auth: "bg-violet-50 text-violet-700",
   kb: "bg-emerald-50 text-emerald-700",
@@ -1250,7 +1269,14 @@ export function AuditSection({ ws }: { ws: string }) {
   });
   if (logs.isLoading) return <Loading />;
   if (logs.error) return <ErrorBox error={logs.error} />;
-  if (!logs.data?.length) return <Empty>아직 기록이 없어요.</Empty>;
+  if (!logs.data?.length)
+    return (
+      <EmptyState
+        icon={<History className="h-5 w-5" />}
+        title="아직 활동 기록이 없어요"
+        description="멤버 초대, 앱 배포, 설정 변경, 의견·문의처럼 누가 무엇을 했는지 여기에 쌓여요."
+      />
+    );
   return (
     <div className="space-y-3">
       <ListToolbar c={lc} placeholder="한 일·사람·내용 검색" />
@@ -1337,7 +1363,14 @@ export function AdminApiKeysSection({ ws }: { ws: string }) {
   if (keys.isLoading) return <Loading />;
   if (keys.error) return <ErrorBox error={keys.error} />;
   if (!keys.data?.length)
-    return <Empty>아직 만든 API 키가 없어요. 앱의 API 탭에서 만들어요.</Empty>;
+    return (
+      <EmptyState
+        icon={<KeyRound className="h-5 w-5" />}
+        title="아직 만든 API 키가 없어요"
+        description="다른 시스템에서 앱을 부르려면 앱을 열고 'API' 탭에서 키를 만들어요. 만든 키는 여기서 한눈에 관리해요."
+        action={{ label: "앱 고르러 가기", to: "/" }}
+      />
+    );
   return (
     <div className="space-y-3">
       <ListToolbar c={kc} placeholder="키 이름·앱 검색" />

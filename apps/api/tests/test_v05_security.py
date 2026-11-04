@@ -49,12 +49,24 @@ def test_password_policy(pw: str, ok: bool) -> None:
 def test_password_policy_on_signup_and_change(client: TestClient, team: Team) -> None:
     weak = client.post(
         "/api/v1/auth/signup",
-        json={"email": "w@example.com", "password": "12345678", "name": "약함"},
+        json={
+            "email": "w@example.com",
+            "password": "12345678",
+            "name": "약함",
+            "agree_terms": True,
+            "agree_privacy": True,
+        },
     )
     assert weak.status_code == 422 and weak.json()["detail"]["hint"]
     same = client.post(
         "/api/v1/auth/signup",
-        json={"email": "kimchi99@example.com", "password": "kimchi99", "name": "x"},
+        json={
+            "email": "kimchi99@example.com",
+            "password": "kimchi99",
+            "name": "x",
+            "agree_terms": True,
+            "agree_privacy": True,
+        },
     )
     assert same.status_code == 422
     res = client.post(

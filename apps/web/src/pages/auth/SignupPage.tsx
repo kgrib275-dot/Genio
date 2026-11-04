@@ -7,10 +7,12 @@ import { Field, Input } from "@/components/ui/input";
 import { useSignup } from "@/lib/api/auth";
 import { AuthShell } from "@/pages/auth/AuthShell";
 import { safeNext } from "@/lib/nav";
+import { AgreementChecks, LegalLinks } from "@/pages/legal/AgreementChecks";
 
 export default function SignupPage() {
   const [form, setForm] = useState({ name: "", email: "", password: "", workspace_name: "" });
   const signup = useSignup();
+  const [agree, setAgree] = useState({ terms: false, privacy: false });
   const navigate = useNavigate();
   const [params] = useSearchParams();
 
@@ -20,7 +22,12 @@ export default function SignupPage() {
   const submit = (e: FormEvent) => {
     e.preventDefault();
     signup.mutate(
-      { ...form, workspace_name: form.workspace_name || undefined },
+      {
+        ...form,
+        workspace_name: form.workspace_name || undefined,
+        agree_terms: agree.terms,
+        agree_privacy: agree.privacy,
+      },
       { onSuccess: () => navigate(safeNext(params.get("next")), { replace: true }) },
     );
   };
@@ -56,8 +63,13 @@ export default function SignupPage() {
         >
           <Input id="ws" value={form.workspace_name} onChange={set("workspace_name")} />
         </Field>
+        <AgreementChecks value={agree} onChange={setAgree} />
         <ErrorBox error={signup.error} />
-        <Button type="submit" className="w-full" disabled={signup.isPending}>
+        <Button
+          type="submit"
+          className="w-full"
+          disabled={signup.isPending || !agree.terms || !agree.privacy}
+        >
           {signup.isPending ? "가입 중…" : "가입하고 시작하기"}
         </Button>
       </form>
@@ -67,6 +79,7 @@ export default function SignupPage() {
           로그인
         </Link>
       </p>
+      <LegalLinks />
     </AuthShell>
   );
 }

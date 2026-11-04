@@ -1,5 +1,6 @@
 // 내 설정: 프로필, 화면(테마·글자 크기), 작업 환경(기본 워크스페이스·Enter로 보내기), 비밀번호.
-import { Check, KeyRound, Monitor, Moon, Sun, type LucideIcon } from "lucide-react";
+import { Check, KeyRound, Monitor, Moon, Sparkles, Sun, type LucideIcon } from "lucide-react";
+import { startTour } from "@/lib/helpEvents";
 import { PASSWORD_HINT, passwordProblem } from "@/lib/passwordRule";
 import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { PageContainer } from "@/app/Layout";
@@ -149,6 +150,17 @@ export default function SettingsPage() {
                     : "Enter는 줄바꿈이에요. Ctrl+Enter(Mac은 ⌘+Enter)로 보내요."
                 }
               />
+              <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-4">
+                <div className="text-sm">
+                  <p className="font-medium text-slate-800">화면 안내</p>
+                  <p className="text-xs text-slate-500">
+                    처음 로그인했을 때 본 화면 투어를 다시 볼 수 있어요.
+                  </p>
+                </div>
+                <Button size="sm" variant="outline" onClick={startTour}>
+                  <Sparkles className="h-3.5 w-3.5" /> 화면 안내 다시 보기
+                </Button>
+              </div>
             </CardBody>
           </Card>
 

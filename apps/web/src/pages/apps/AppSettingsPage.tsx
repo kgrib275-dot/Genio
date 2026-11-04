@@ -42,6 +42,7 @@ import {
 import { useMembers } from "@/lib/api/workspace";
 import { canEdit, useSession } from "@/store/session";
 import { AppNav } from "@/pages/apps/AppNav";
+import { EmptyState } from "@/components/EmptyState";
 
 const CHANNEL_LABEL: Record<Channel, string> = {
   share_link: "공유 링크",
@@ -310,9 +311,12 @@ function DeploymentsCard({ appId, editable }: { appId: string; editable: boolean
         )}
         {deployments.isLoading && <Loading />}
         {deployments.data?.length === 0 && (
-          <p className="text-sm text-slate-500">
-            아직 배포가 없어요. 먼저 &apos;버전 저장&apos;을 한 뒤 배포하세요.
-          </p>
+          <EmptyState
+            compact
+            title="아직 배포가 없어요"
+            description="만들기 화면에서 '버전 저장'을 한 뒤, 위에서 공유 링크·위젯·API 중 하나를 골라 배포하세요."
+            action={{ label: "만들기 화면으로", to: `/apps/${appId}/builder` }}
+          />
         )}
         {(deployments.data?.length ?? 0) > 0 && (
           <ListToolbar c={dc} placeholder="링크·주소로 찾기" />

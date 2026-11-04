@@ -26,6 +26,7 @@ import { useProjectsOverview } from "@/lib/api/v3";
 import { cn, formatCost, timeAgo } from "@/lib/cn";
 import { useListControls } from "@/lib/useListControls";
 import { canViewRuns, useSession } from "@/store/session";
+import { EmptyState } from "@/components/EmptyState";
 
 type Days = "7" | "30" | "90";
 type Sort = "runs" | "recent" | "cost" | "name";
@@ -353,13 +354,12 @@ export default function ProjectsBoardPage() {
           )}
           <NoMatch c={c} />
           {rows.length === 0 && !showUnassigned ? (
-            <Card className="flex flex-col items-center gap-2 p-10 text-center">
-              <FolderOpen className="h-8 w-8 text-slate-300" />
-              <p className="text-sm font-semibold text-slate-700">아직 프로젝트가 없어요</p>
-              <p className="text-sm text-slate-500">
-                왼쪽 메뉴의 <b>+ 새 프로젝트</b>로 앱과 지식을 묶어 보세요.
-              </p>
-            </Card>
+            <EmptyState
+              icon={<FolderOpen className="h-5 w-5" />}
+              title="아직 프로젝트가 없어요"
+              description="왼쪽 메뉴 '프로젝트'의 '+ 새 프로젝트'로 앱·지식베이스를 업무별로 묶으면, 여기서 실행·비용 현황을 한눈에 봐요."
+              action={{ label: "앱 보러 가기", to: "/" }}
+            />
           ) : (
             <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
               {c.pageItems.map((r) => (

@@ -15,6 +15,8 @@ def test_personal_settings(client: TestClient, team: Team) -> None:
         "default_workspace_id": None,
         "enter_to_send": True,
         "lists": {},
+        "onboarding": {"tour_done": False, "checklist_dismissed": False, "steps_done": []},
+        "agreements": {},
     }
     upd = client.patch(
         "/api/v1/me",

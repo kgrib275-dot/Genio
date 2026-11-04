@@ -7,6 +7,7 @@ import { ko } from "@/i18n/ko";
 import { useAcceptInvitation, useInvitationInfo } from "@/lib/api/auth";
 import { useSession } from "@/store/session";
 import { AuthShell } from "@/pages/auth/AuthShell";
+import { AgreementChecks, LegalLinks } from "@/pages/legal/AgreementChecks";
 
 export default function InviteAcceptPage() {
   const { token = "" } = useParams();
@@ -15,11 +16,12 @@ export default function InviteAcceptPage() {
   const navigate = useNavigate();
   const [name, setName] = useState("");
   const [password, setPassword] = useState("");
+  const [agree, setAgree] = useState({ terms: false, privacy: false });
 
   const submit = (e: FormEvent) => {
     e.preventDefault();
     accept.mutate(
-      { name, password },
+      { name, password, agree_terms: agree.terms, agree_privacy: agree.privacy },
       {
         onSuccess: () => {
           useSession.getState().setWorkspace("", null);
@@ -67,14 +69,20 @@ export default function InviteAcceptPage() {
                   onChange={(e) => setPassword(e.target.value)}
                 />
               </Field>
+              <AgreementChecks value={agree} onChange={setAgree} />
               <ErrorBox error={accept.error} />
-              <Button type="submit" className="w-full" disabled={accept.isPending}>
+              <Button
+                type="submit"
+                className="w-full"
+                disabled={accept.isPending || !agree.terms || !agree.privacy}
+              >
                 초대 수락하기
               </Button>
             </form>
           )}
         </>
       )}
+      <LegalLinks />
     </AuthShell>
   );
 }

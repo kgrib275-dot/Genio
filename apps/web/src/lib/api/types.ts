@@ -98,6 +98,16 @@ export interface Preferences {
   enter_to_send: boolean;
   /** v0.6: 목록마다 고른 한 번에 보기 개수·필터(계정별) */
   lists?: Record<string, ListPref>;
+  /** v0.6: 처음 쓰는 사람 안내(화면 투어·시작 체크리스트) */
+  onboarding?: OnboardingPref;
+  /** v0.6: 약관 동의 기록(서버가 가입 때 남김, 읽기 전용) */
+  agreements?: { terms?: string; privacy?: string; at?: string };
+}
+
+export interface OnboardingPref {
+  tour_done?: boolean;
+  checklist_dismissed?: boolean;
+  steps_done?: string[];
 }
 
 export interface ListPref {

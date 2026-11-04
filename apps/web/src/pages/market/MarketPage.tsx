@@ -26,6 +26,7 @@ const TYPE_ICON: Record<string, { Icon: LucideIcon; tile: string }> = {
   prompt_pack: { Icon: MessageSquareText, tile: "bg-amber-50 text-amber-700" },
 };
 import { canManage, useSession } from "@/store/session";
+import { EmptyState } from "@/components/EmptyState";
 
 function Installed({ ws }: { ws: string }) {
   const role = useSession((s) => s.role);
@@ -51,7 +52,15 @@ function Installed({ ws }: { ws: string }) {
   });
   if (list.isLoading) return <Loading />;
   if (list.error) return <ErrorBox error={list.error} />;
-  if (!list.data?.length) return <Empty>아직 설치한 아이템이 없어요.</Empty>;
+  if (!list.data?.length)
+    return (
+      <EmptyState
+        icon={<Puzzle className="h-5 w-5" />}
+        title="아직 설치한 아이템이 없어요"
+        description="'둘러보기'에서 서비스 연결(슬랙·노션 등), 업무 템플릿, 프롬프트 모음을 골라 설치하세요."
+        action={{ label: "둘러보기", to: "/market" }}
+      />
+    );
   return (
     <Card className="overflow-hidden">
       <ListToolbar

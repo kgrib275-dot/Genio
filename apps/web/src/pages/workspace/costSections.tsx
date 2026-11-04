@@ -5,7 +5,7 @@ import { ErrorBox, Loading } from "@/components/ErrorBox";
 import { ListPager, ListToolbar, NoMatch } from "@/components/ListControls";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardBody, CardHeader, Empty } from "@/components/ui/card";
+import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Field, Input, Select } from "@/components/ui/input";
 import { toast } from "@/components/ui/toast-store";
 import { useCredentials } from "@/lib/api/resources";
@@ -19,6 +19,7 @@ import {
 } from "@/lib/api/v5b";
 import { formatCost } from "@/lib/cn";
 import { optionsFrom, useListControls } from "@/lib/useListControls";
+import { EmptyState } from "@/components/EmptyState";
 
 const PROVIDER_LABEL: Record<string, string> = {
   anthropic: "Anthropic",
@@ -127,7 +128,13 @@ export function UsageByUserList({ ws }: { ws: string }) {
   });
   if (u.isLoading) return <Loading />;
   if (u.error) return <ErrorBox error={u.error} />;
-  if (!u.data?.by_user.length) return <Empty>아직 사용 기록이 없어요.</Empty>;
+  if (!u.data?.by_user.length)
+    return (
+      <EmptyState
+        title="아직 사람별 사용 기록이 없어요"
+        description="멤버가 AI를 쓰는 앱을 실행하면 사람별 호출 수·비용이 여기에 쌓여요."
+      />
+    );
   return (
     <div className="space-y-3">
       <ListToolbar c={c} placeholder="이름·이메일 검색" />
