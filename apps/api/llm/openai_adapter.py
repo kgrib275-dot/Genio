@@ -6,6 +6,12 @@ from typing import Any, cast
 import openai
 
 from api.llm.base import (
+    KIND_AUTH,
+    KIND_CONTENT_FILTER,
+    KIND_CONTEXT,
+    KIND_OTHER,
+    KIND_OUTAGE,
+    KIND_RATE_LIMIT,
     ChatTurn,
     LlmError,
     Message,
@@ -36,10 +42,23 @@ def azure_endpoint(base_url: str) -> tuple[str, str]:
     return f"https://{u.netloc}/", version
 
 
+def _bad_request_kind(exc: Exception) -> str:
+    """400 오류가 '입력이 너무 길다' / '안전 정책에 걸렸다'인지 코드·문구로 가려낸다."""
+    code = str(getattr(exc, "code", "") or "").lower()
+    text = f"{code} {exc}".lower()
+    if "context_length" in text or "maximum context" in text or "too many tokens" in text:
+        return KIND_CONTEXT
+    if "content_filter" in text or "content management policy" in text or "safety" in code:
+        return KIND_CONTENT_FILTER
+    return KIND_OTHER
+
+
 def _map_error(exc: Exception) -> LlmError:
-    if isinstance(exc, openai.AuthenticationError):
+    if isinstance(exc, openai.AuthenticationError | openai.PermissionDeniedError):
         return LlmError(
-            "AI 연결 키가 올바르지 않아요.", "워크스페이스 설정에서 키를 다시 등록하세요."
+            "AI 연결 키가 올바르지 않아요.",
+            "워크스페이스 설정에서 키를 다시 등록하세요.",
+            kind=KIND_AUTH,
         )
     if isinstance(exc, openai.NotFoundError):
         return LlmError("모델을 찾을 수 없어요.", "모델 이름을 확인하세요(예: gpt-4o-mini).")
@@ -48,19 +67,29 @@ def _map_error(exc: Exception) -> LlmError:
             "AI 요청이 너무 많거나 사용 한도를 넘었어요.",
             "잠시 후 다시 시도하거나 결제 한도를 확인하세요.",
             retryable=True,
+            kind=KIND_RATE_LIMIT,
         )
     if isinstance(exc, openai.BadRequestError):
         return LlmError(
-            "AI가 요청 형식을 받아들이지 않았어요.", "모델 이름과 단계 설정을 확인하세요."
+            "AI가 요청 형식을 받아들이지 않았어요.",
+            "모델 이름과 단계 설정을 확인하세요.",
+            kind=_bad_request_kind(exc),
         )
     if isinstance(exc, openai.APIConnectionError):
         return LlmError(
             "AI 서버에 연결하지 못했어요.",
             "주소(base URL)와 네트워크를 확인하세요.",
             retryable=True,
+            kind=KIND_OUTAGE,
         )
     if isinstance(exc, openai.APIStatusError):
-        return LlmError("AI 서버에서 오류가 났어요.", "잠시 후 다시 시도하세요.", retryable=True)
+        status = int(getattr(exc, "status_code", 0) or 0)
+        return LlmError(
+            "AI 서버에서 오류가 났어요.",
+            "잠시 후 다시 시도하세요.",
+            retryable=True,
+            kind=KIND_OUTAGE if status >= 500 else KIND_OTHER,
+        )
     return LlmError("AI 호출 중 문제가 생겼어요.", "잠시 후 다시 시도하세요.")
 
 

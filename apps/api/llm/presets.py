@@ -19,6 +19,8 @@ class PresetModel:
     label: str
     vision: bool = False
     json: bool = True
+    # 도구 호출(에이전트·빌더)을 지원하는지. 자동 전환 때 도구가 필요한 호출은 지원하는 모델로만 넘어간다
+    tools: bool = True
 
 
 @dataclass(frozen=True)
@@ -34,6 +36,8 @@ class Preset:
     # 주소를 꼭 사용자에게 받아야 하는지(Azure·직접 입력)
     needs_base_url: bool = False
     embedding: bool = False
+    # v0.9: 지식 검색 '재정렬 전용' 모델 공급자(대화·임베딩에는 쓰지 않는다)
+    rerank: bool = False
 
     @property
     def default_model(self) -> str:
@@ -54,6 +58,7 @@ class Preset:
             "native": self.native,
             "needs_base_url": self.needs_base_url,
             "embedding": self.embedding,
+            "rerank": self.rerank,
             "vision": any(m.vision for m in self.models),
         }
 
@@ -166,7 +171,10 @@ _LIST: tuple[Preset, ...] = (
         "Perplexity (검색형)",
         "해외",
         "https://api.perplexity.ai",
-        (M("sonar", "Sonar", json=False), M("sonar-pro", "Sonar Pro", json=False)),
+        (
+            M("sonar", "Sonar", json=False, tools=False),
+            M("sonar-pro", "Sonar Pro", json=False, tools=False),
+        ),
         note="웹 검색을 곁들여 답해요. 출력 형식(JSON)은 지원이 제한적이에요.",
     ),
     Preset(
@@ -234,6 +242,51 @@ _LIST: tuple[Preset, ...] = (
         (M("HCX-005", "HCX-005", vision=True), M("HCX-DASH-002", "HCX-DASH-002 (가벼움)")),
         note="CLOVA Studio의 OpenAI 호환 API 주소예요. 키는 CLOVA Studio에서 발급한 API 키를 넣어요.",
     ),
+    # ---- 재정렬 전용(v0.9): 검색 결과를 질문과의 관련도로 다시 줄 세우는 모델 ----
+    Preset(
+        "cohere-rerank",
+        "Cohere Rerank",
+        "재정렬 전용",
+        "https://api.cohere.com",
+        (
+            M("rerank-v3.5", "Rerank 3.5 (다국어, 추천)"),
+            M("rerank-multilingual-v3.0", "Rerank 다국어 3.0"),
+        ),
+        note="지식 검색 결과를 다시 줄 세우는 전용 모델이에요. 대화에는 쓰지 않아요.",
+        native=True,
+        rerank=True,
+    ),
+    Preset(
+        "jina-rerank",
+        "Jina Reranker",
+        "재정렬 전용",
+        "https://api.jina.ai",
+        (M("jina-reranker-v2-base-multilingual", "Jina Reranker v2 (다국어)"),),
+        note="지식 검색 결과를 다시 줄 세우는 전용 모델이에요. 대화에는 쓰지 않아요.",
+        native=True,
+        rerank=True,
+    ),
+    Preset(
+        "voyage-rerank",
+        "Voyage Rerank",
+        "재정렬 전용",
+        "https://api.voyageai.com",
+        (M("rerank-2.5", "Rerank 2.5"), M("rerank-2", "Rerank 2")),
+        note="지식 검색 결과를 다시 줄 세우는 전용 모델이에요. 대화에는 쓰지 않아요.",
+        native=True,
+        rerank=True,
+    ),
+    Preset(
+        "rerank-compatible",
+        "재정렬 호환 서버 (직접 입력)",
+        "재정렬 전용",
+        None,
+        (),
+        note="Cohere 형식의 /rerank 주소를 내놓는 서버(vLLM·TEI·사내 서버)의 주소와 모델 이름을 직접 넣어요.",
+        native=True,
+        needs_base_url=True,
+        rerank=True,
+    ),
     # ---- 오픈 모델 호스팅 ----
     Preset(
         "groq",
@@ -295,7 +348,13 @@ _LIST: tuple[Preset, ...] = (
 PRESETS: dict[str, Preset] = {p.key: p for p in _LIST}
 NATIVE_KEYS = tuple(p.key for p in _LIST if p.native)
 COMPAT_KEYS = tuple(p.key for p in _LIST if not p.native)
-GROUP_ORDER = ("기본", "국내", "해외", "오픈 모델 호스팅", "직접 입력")
+GROUP_ORDER = ("기본", "국내", "해외", "오픈 모델 호스팅", "재정렬 전용", "직접 입력")
+RERANK_KEYS = tuple(p.key for p in _LIST if p.rerank)
+
+
+def is_rerank(provider: str) -> bool:
+    """재정렬 전용 공급자(대화·임베딩 연결로는 고를 수 없다)인지."""
+    return provider in RERANK_KEYS
 
 
 def provider_list() -> list[dict[str, Any]]:
@@ -306,6 +365,27 @@ def provider_list() -> list[dict[str, Any]]:
 def preset_base_url(key: str) -> str | None:
     p = PRESETS.get(key)
     return p.base_url if p and not p.native else None
+
+
+def _model(provider: str, model: str) -> PresetModel | None:
+    p = PRESETS.get(provider)
+    if p is None:
+        return None
+    return next((m for m in p.models if m.model == model), None)
+
+
+def model_supports_json(provider: str, model: str) -> bool:
+    """출력 형식(JSON)을 지원하는지. 목록에 없는 모델은 지원한다고 본다."""
+    m = _model(provider, model)
+    return True if m is None else m.json
+
+
+def provider_supports_tools(provider: str, model: str) -> bool:
+    """도구 호출(에이전트·빌더)이 되는지. Google 어댑터는 아직 도구 대화를 지원하지 않는다."""
+    if provider == "google" or is_rerank(provider):
+        return False
+    m = _model(provider, model)
+    return True if m is None else m.tools
 
 
 def model_supports_vision(provider: str, model: str) -> bool | None:

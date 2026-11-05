@@ -9,6 +9,7 @@ from sqlalchemy import select
 from api.core import ratelimit
 from api.core.security import create_tokens, hash_password
 from api.db import Base, SessionLocal, engine
+from api.llm import keypool
 from api.llm import registry as llm_registry
 from api.main import app
 from api.market.service import sync_catalog
@@ -24,6 +25,7 @@ def fresh_db() -> Iterator[None]:
     Base.metadata.drop_all(engine)
     Base.metadata.create_all(engine)
     ratelimit.reset()
+    keypool.reset()
     with SessionLocal() as db:
         sync_catalog(db)
     yield

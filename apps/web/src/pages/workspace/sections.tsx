@@ -64,6 +64,9 @@ import {
   type NewLlmProvider,
 } from "@/lib/api/workspace";
 import { LlmModelPicker } from "@/pages/workspace/LlmModelPicker";
+import { LlmFallbackCard } from "@/components/llm/LlmFallbackCard";
+import { LlmKeysPanel } from "@/components/llm/LlmKeysPanel";
+import { asProviderV9 } from "@/lib/api/v9llm";
 import { downloadAuditCsv } from "@/lib/api/ops";
 import { SystemMailCard } from "@/pages/workspace/SystemMailCard";
 import { useResetMember2fa } from "@/lib/api/account";
@@ -621,7 +624,7 @@ function DefaultModels({ ws }: { ws: string }) {
     setChat(current.chat ?? "");
     setEmbedding(current.embedding ?? "");
   }, [current.chat, current.embedding]);
-  const list = providers.data ?? [];
+  const list = (providers.data ?? []).filter((p) => !asProviderV9(p).rerank);
   if (!list.length) return null;
   return (
     <Card>
@@ -733,6 +736,7 @@ export function LlmSection({
         provider: form.provider,
         api_key: form.api_key,
         base_url: baseUrlToSend(chosen, form.base_url ?? ""),
+        model: form.default_model,
       },
       {
         onSuccess: (r) => {
@@ -795,6 +799,7 @@ export function LlmSection({
                   <span className="font-medium">{p.label}</span>
                   <Badge tone="blue">{presetName(presets, p.provider)}</Badge>
                   {p.is_default && <Badge tone="green">기본</Badge>}
+                  {asProviderV9(p).rerank && <Badge tone="amber">재정렬 전용</Badge>}
                   <span className="basis-full text-xs text-slate-500 sm:basis-auto">
                     {p.default_model} · 키 {p.api_key_masked}
                     {p.base_url && ` · ${p.base_url}`}
@@ -830,6 +835,7 @@ export function LlmSection({
                       <Trash2 className="h-3.5 w-3.5" />
                     </Button>
                   )}
+                  <LlmKeysPanel ws={ws} provider={p} manage={manage} />
                 </li>
               ))}
             </ul>
@@ -860,6 +866,7 @@ export function LlmSection({
                         default_model: p?.default_model ?? "",
                         label: p?.name.split(" (")[0] ?? form.label,
                         base_url: "",
+                        is_default: p?.rerank ? false : true,
                       });
                       setProbe(null);
                     }}
@@ -955,14 +962,16 @@ export function LlmSection({
                     </details>
                   )
                 )}
-                <label className="flex items-center gap-2 text-sm">
-                  <input
-                    type="checkbox"
-                    checked={form.is_default}
-                    onChange={(e) => setForm({ ...form, is_default: e.target.checked })}
-                  />
-                  기본 연결로 쓰기
-                </label>
+                {!chosen?.rerank && (
+                  <label className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={form.is_default}
+                      onChange={(e) => setForm({ ...form, is_default: e.target.checked })}
+                    />
+                    기본 연결로 쓰기
+                  </label>
+                )}
                 {probe && (
                   <div
                     role="status"
@@ -1004,6 +1013,7 @@ export function LlmSection({
         )}
       </div>
       {showDefaults && manage && <DefaultModels ws={ws} />}
+      {showDefaults && <LlmFallbackCard ws={ws} manage={manage} />}
       <ModelCatalogCard />
     </div>
   );

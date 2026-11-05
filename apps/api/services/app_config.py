@@ -32,6 +32,19 @@ DEFAULT_FEATURES: dict[str, Any] = {
     },
     # v0.6: MCP 서버로 게시(ADR 0010). tool_name은 영문·숫자·_-만(비우면 앱 이름에서 만든다)
     "mcp": {"enabled": False, "tool_name": "", "description": ""},
+    # v0.9: 앱별 AI 자동 전환. mode = inherit(워크스페이스 설정을 따름) | off(이 앱은 쓰지 않음) |
+    # custom(이 앱만의 순서). links: [{provider_id, model}], triggers: llm/chain.py DEFAULT_TRIGGERS와 같은 이름
+    "llm_fallback": {
+        "mode": "inherit",
+        "links": [],
+        "triggers": {
+            "outage": True,
+            "rate_limit": True,
+            "content_filter": False,
+            "context_length": False,
+            "auth": False,
+        },
+    },
 }
 
 
@@ -78,6 +91,19 @@ def patch_features(saved: dict[str, Any] | None, patch: dict[str, Any]) -> dict[
     current["mcp"]["tool_name"] = mcp_name[:64]
     current["mcp"]["enabled"] = bool(current["mcp"]["enabled"])
     current["mcp"]["description"] = str(current["mcp"]["description"] or "")[:1000]
+    fb = current["llm_fallback"]
+    fb["mode"] = fb["mode"] if fb["mode"] in ("inherit", "off", "custom") else "inherit"
+    links: list[dict[str, str]] = []
+    seen: set[str] = set()
+    for link in fb["links"] if isinstance(fb["links"], list) else []:
+        pid = str(link.get("provider_id") or "").strip()[:36] if isinstance(link, dict) else ""
+        if pid and pid not in seen and len(links) < 5:
+            seen.add(pid)
+            links.append({"provider_id": pid, "model": str(link.get("model") or "").strip()[:100]})
+    fb["links"] = links
+    trig = fb["triggers"] if isinstance(fb["triggers"], dict) else {}
+    defaults = DEFAULT_FEATURES["llm_fallback"]["triggers"]
+    fb["triggers"] = {k: bool(trig.get(k, defaults[k])) for k in defaults}
     thr = float(current["annotation_reply"]["score_threshold"] or 0.85)
     current["annotation_reply"]["score_threshold"] = max(0.5, min(thr, 1.0))
     return current

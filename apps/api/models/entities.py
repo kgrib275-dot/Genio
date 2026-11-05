@@ -475,6 +475,16 @@ class LlmProvider(Base):
     base_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     default_model: Mapped[str] = mapped_column(String(100))
     is_default: Mapped[bool] = mapped_column(default=False)
+    # v0.9 키 분산: 기본 키(api_key_encrypted) 말고 더 둔 키들.
+    # [{id, label, key_encrypted(Fernet 글), weight, disabled}]
+    extra_keys: Mapped[list[dict[str, Any]]] = mapped_column(
+        JsonType, default=list, server_default="[]"
+    )
+    # failover(앞의 키부터) | round_robin(돌아가며) | weighted(비중대로)
+    key_strategy: Mapped[str] = mapped_column(
+        String(20), default="failover", server_default="failover"
+    )
+    primary_weight: Mapped[int] = mapped_column(Integer, default=1, server_default="1")
 
 
 # ---------- v0.2 ----------

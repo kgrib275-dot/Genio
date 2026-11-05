@@ -28,6 +28,7 @@ from api.engine.code_runner import get_code_runner
 from api.engine.pricing import cost_of
 from api.engine.templating import TemplateRenderError, evaluate, render, render_value
 from api.llm.base import LlmError
+from api.llm.chain import pop_notes
 from api.llm.registry import resolve_llm
 from api.market.service import ensure_market_nodes
 from api.models import App, DataTable, Run, RunStep, StoredFile, WorkflowVersion
@@ -75,6 +76,10 @@ class RunServices:
         # v0.4: 답 조각을 받는 곳(node_id, 글 조각)과 지금 실행 중인 단계
         self.on_delta: Callable[[str, str], None] | None = None
         self.current_node: str = ""
+        # v0.9: 앱별 자동 전환 설정(features.llm_fallback)과, AI 호출 중 생긴 안내 문장
+        # (키를 바꿨어요·대체 연결로 답했어요). 단계가 끝나면 단계 기록(logs)에 옮겨 적는다.
+        self.app_fallback: dict[str, Any] | None = None
+        self.notes: list[str] = []
 
     def llm_complete(
         self,
@@ -96,8 +101,11 @@ class RunServices:
             if stream and sink is not None and json_schema is None
             else None
         )
+        llm = None
         try:
-            llm = resolve_llm(self.db, self.workspace_id, provider, model)
+            llm = resolve_llm(
+                self.db, self.workspace_id, provider, model, fallback=self.app_fallback
+            )
             extra: dict[str, Any] = {"images": pictures} if pictures else {}
             result = llm.adapter.complete(
                 model=llm.model,
@@ -110,6 +118,9 @@ class RunServices:
             )
         except LlmError as exc:
             raise NodeError(f"{exc.message} {exc.hint}", retryable=exc.retryable) from None
+        finally:
+            if llm is not None:
+                self.notes.extend(pop_notes(llm.adapter))
         result.model = result.model or llm.model
         self.usage.append((result.model, result.input_tokens, result.output_tokens))
         return result
@@ -827,7 +838,20 @@ def _decide_person(
 
 
 def _invoke(spec: Any, node: Any, ctx: NodeContext) -> tuple[str, Any]:
-    """단계 하나를 실행한다(스레드에서도 부름). ('ok', 결과) | ('error', 문장) | ('crash', 이름)."""
+    """단계 하나를 실행한다(스레드에서도 부름). ('ok', 결과) | ('error', 문장) | ('crash', 이름).
+
+    AI 호출 중 생긴 안내(키를 바꿨어요·대체 연결로 답했어요)는 끝난 뒤 단계 기록에 옮겨 적는다.
+    """
+    try:
+        return _invoke_inner(spec, node, ctx)
+    finally:
+        notes = getattr(ctx.services, "notes", None)
+        if notes:
+            ctx.logs.extend(notes)
+            notes.clear()
+
+
+def _invoke_inner(spec: Any, node: Any, ctx: NodeContext) -> tuple[str, Any]:
     retry_cfg = node.data.get("_retry") or {}
     user_retries = int(retry_cfg.get("max_retries") or 0) if isinstance(retry_cfg, dict) else 0
     interval = (
@@ -925,6 +949,7 @@ def run_node_once(
         return {"kind": "error", "value": f"'{node_id}' 단계를 찾지 못했어요.", "logs": [], "ms": 0}
     services = RunServices(db, app.workspace_id)
     services.current_node = node.id
+    services.app_fallback = merged_features(app.features).get("llm_fallback")
     env_vars = decrypt_env_vars(app.env_vars or [])
     ctx = _build_ctx(
         "node-test", node.id, services, graph, dict(values), run_input, env_vars, dict(conv)
@@ -953,6 +978,7 @@ def _execute(db: Session, run_id: str) -> None:
         return
     ensure_market_nodes(db)
     services = RunServices(db, app.workspace_id)
+    services.app_fallback = merged_features(app.features).get("llm_fallback")
     run_id_for_events = run.id
 
     def delta_sink(node_id: str, text: str) -> None:
@@ -1166,6 +1192,7 @@ def _execute(db: Session, run_id: str) -> None:
                 # 여러 갈래가 동시에 돌 때: 갈래마다 DB 연결을 따로 쓴다
                 local = RunServices(SessionLocal(), app.workspace_id)
                 local.depth = services.depth
+                local.app_fallback = services.app_fallback
                 local.on_delta = services.on_delta
                 local.current_node = node.id
                 ctx = make_ctx(node.id, local)

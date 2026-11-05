@@ -121,7 +121,8 @@ def _run_llm(data: dict[str, Any], ctx: NodeContext) -> NodeResult:
             raise NodeError(
                 "AI 응답을 정해진 형식으로 읽지 못했어요. 프롬프트나 출력 형식을 단순하게 바꿔 보세요."
             )
-    output: dict[str, Any] = {"text": result.text}
+    # model_used: 실제로 답한 모델(자동 전환이 일어났다면 대체 연결의 모델)
+    output: dict[str, Any] = {"text": result.text, "model_used": result.model}
     if result.data is not None:
         output.update(result.data)
     usage["model"] = result.model
@@ -147,7 +148,7 @@ def _image_refs(raw: Any, ctx: NodeContext) -> list[str]:
 def _llm_outputs(data: dict[str, Any]) -> list[str]:
     schema = data.get("output_schema") or {}
     props = schema.get("properties", {}) if isinstance(schema, dict) else {}
-    return ["text", *props.keys()]
+    return ["text", "model_used", *props.keys()]
 
 
 LLM = NodeSpec(
