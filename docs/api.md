@@ -992,3 +992,41 @@ ADR 0013. 마이그레이션 0015(`apps.draft_rev`·`updated_by`, `draft_snapsho
 ### 마켓
 템플릿 2개 추가: `tpl_product_image`(제품 사진 만들기, 챗, 이미지 생성 연결 필요), `tpl_weekly_report_xlsx`(주간 보고 엑셀 파일로 받기, AI 없이 동작). 마켓 항목은 71개.
 
+
+
+## v0.9 관측 도구 확대(OpenTelemetry·Phoenix·Arize·Opik·Weave) (ADR 0013)
+
+외부 추적을 **여러 서비스를 한꺼번에** 쓸 수 있게 확대했다. 설정은 `workspaces.settings["tracing"]`(마이그레이션 없음), 소유자·관리자만 읽고 쓴다. v0.6 때 저장한 `{"langfuse": …, "langsmith": …}` 모양도 그대로 읽고, 다음 저장 때 목록으로 옮긴다.
+
+| 메서드·경로 | 권한 | 설명 |
+|---|---|---|
+| GET /workspaces/{ws}/tracing | 소유자·관리자 | `{include_content, kinds[], providers[], langfuse, langsmith}`. `kinds`는 서비스 종류와 입력 칸 목록(화면이 폼을 그린다), `providers`는 연결한 서비스(비밀값은 `{has, masked}`로만), `langfuse`·`langsmith`는 v0.6 호환 모양 |
+| PUT /workspaces/{ws}/tracing | 소유자·관리자 | `{include_content?, providers?[]}` — `providers`를 보내면 **그 목록으로 통째로 바꾼다**(빠진 서비스는 지움, 최대 10개). 목록 없이 `langfuse`·`langsmith`만 보내면 예전처럼 그 둘만 고친다 |
+| POST /workspaces/{ws}/tracing/test `{target}` | 소유자·관리자 | `target`은 서비스 id(예전 이름 `langfuse`·`langsmith`도 받음). 작은 '연결 시험' 기록 하나를 보내고 `{ok, message}`를 돌려준다. 결과는 서비스의 `last`에도 남는다 |
+
+**서비스 한 개(providers 항목)**: `{id?, kind, name, enabled, sample_rate(0~100), only_failed, fields{}, secrets{}, clear_secrets[], headers[{name, value}]}`.
+- `kind`: `langfuse` · `langsmith` · `otlp` · `phoenix` · `arize` · `opik` · `weave`.
+- `id`가 없으면 새 서비스(서버가 id를 정한다). 있으면 그 서비스를 고친다.
+- 비밀 칸(`secrets`)과 헤더 값은 **비우거나 `****`로 시작하면 저장된 값을 그대로 둔다**. 지우려면 `clear_secrets`에 칸 이름을 넣는다.
+- 응답: `ready`(필수 칸이 찼는지), `experimental`, `last {at, ok, message}`(마지막 전송 결과, 비밀값 없음).
+- 오류는 두 줄: 알 수 없는 서비스, 주소가 http(s)가 아님, 헤더 이름·값이 잘못됨, 서비스가 10개를 넘음 → 422.
+
+**서비스별 보내는 방식**
+| 서비스 | 보내는 곳 | 인증·특징 | 공식 문서로 확인 |
+|---|---|---|---|
+| Langfuse | `{host}/api/public/ingestion` | Basic(공개 키:비밀 키) | v0.6 |
+| LangSmith | `{endpoint}/runs/batch` | `x-api-key` | v0.6 |
+| OpenTelemetry(OTLP) | `{endpoint}/v1/traces`(이미 붙어 있으면 그대로) | 사용자가 넣은 헤더, OTLP/HTTP **JSON**(trace id 32자·span id 16자 16진수, 시각은 나노초 문자열, 정수는 문자열) + GenAI 속성(`gen_ai.*`) | 인코딩 규칙은 구현 사례들로 확인(공식 명세 본문은 못 읽음) |
+| Arize Phoenix | `{endpoint}/v1/traces` | `Authorization: Bearer 키`(있을 때), `x-project-name`, 리소스 속성 `openinference.project.name`, OpenInference 속성(LLM·CHAIN·TOOL) | 엔드포인트·Bearer는 확인, 프로젝트 속성 이름은 확인 못 함 |
+| Arize AX | `{endpoint}/v1/traces`(기본 `https://otlp.arize.com`) | 문서마다 헤더 이름이 달라 `arize-space-id`·`arize-api-key`와 `space_id`·`api_key`를 **둘 다** 보냄, 리소스 속성 `model_id` | **실험적**: 엔드포인트만 확인, 헤더는 문서 간 충돌 |
+| Opik | `{host}/v1/private/traces/batch`, `/v1/private/spans/batch` | `Authorization: 키`, `Comet-Workspace`, id는 UUID v7 | **실험적**: spans 경로만 확인, traces 경로·본문은 못 확인 |
+| W&B Weave | `{host}/call/upsert_batch` | Basic(`api:키`), 호출마다 start·end 쌍 | **실험적**: 경로만 확인, 인증 방식·본문 못 확인 |
+
+**개인정보(기본은 내용 빼고)**
+- `include_content`가 꺼져 있으면(기본) 단계 이름·상태·시간·모델·토큰·비용만 보낸다. 사용자 입력, AI 답, 단계 설정, 오류 원문은 보내지 않고 오류는 "실행이 실패했어요." 같은 일반 문장으로 바꾼다.
+- 켜면 입력·결과·단계 입력/출력을 보내되 값마다 **2KB(2,048자)로 자르고**(`…(잘림)`), 앱의 비밀 환경 값은 `****`로 가린다.
+- v0.6에서 저장한 설정도 같은 규칙(기본 꺼짐)을 따른다.
+
+**보내는 조건**: 켜져 있고 필수 칸이 찬 서비스만. `sample_rate`(실행 id로 정해서 같은 실행은 늘 같은 결정), `only_failed`(실패한 실행만)를 통과한 서비스에만 보낸다. 받을 서비스가 하나도 없으면 큐에 올리지도 않는다. 실패는 기록만 남기고(비밀값 없음) 실행에는 영향이 없다. 모든 호출은 `safe_http`를 거친다(사설 IP 차단).
+
+감사 기록: `tracing.update`(켠 서비스 종류, 내용 포함 여부).

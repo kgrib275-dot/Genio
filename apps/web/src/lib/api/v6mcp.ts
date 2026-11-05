@@ -1,5 +1,5 @@
-// v0.6 API 훅: MCP 서버로 게시(앱 기능 mcp), 외부 추적(Langfuse·LangSmith) 설정·연결 시험(docs/api.md v0.6)
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+// v0.6 API 훅: MCP 서버로 게시(앱 기능 mcp) (docs/api.md v0.6)
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api/client";
 import type { AppDetailV2 } from "@/lib/api/types";
 
@@ -62,65 +62,4 @@ export function mcpConfigSnippets(url: string, key: string, name: string) {
   return { desktop, http, cli };
 }
 
-// ---------------- 외부 추적 ----------------
-export interface TracingConfig {
-  langfuse: {
-    enabled: boolean;
-    host: string;
-    public_key: string;
-    secret_key: string;
-    has_secret: boolean;
-  };
-  langsmith: {
-    enabled: boolean;
-    endpoint: string;
-    project: string;
-    api_key: string;
-    has_key: boolean;
-  };
-}
-
-export interface TracingIn {
-  langfuse?: {
-    enabled: boolean;
-    host: string;
-    public_key: string;
-    secret_key?: string;
-    clear_secret?: boolean;
-  };
-  langsmith?: {
-    enabled: boolean;
-    endpoint: string;
-    project: string;
-    api_key?: string;
-    clear_key?: boolean;
-  };
-}
-
-export interface TracingTestResult {
-  ok: boolean;
-  message: string;
-}
-
-export function useTracing(ws: string) {
-  return useQuery({
-    queryKey: ["tracing", ws],
-    queryFn: () => api.get<TracingConfig>(`/workspaces/${ws}/tracing`),
-    enabled: Boolean(ws),
-  });
-}
-
-export function useSaveTracing(ws: string) {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (body: TracingIn) => api.put<TracingConfig>(`/workspaces/${ws}/tracing`, body),
-    onSuccess: (data) => qc.setQueryData(["tracing", ws], data),
-  });
-}
-
-export function useTestTracing(ws: string) {
-  return useMutation({
-    mutationFn: (target: "langfuse" | "langsmith") =>
-      api.post<TracingTestResult>(`/workspaces/${ws}/tracing/test`, { target }),
-  });
-}
+// 외부 추적 설정 훅은 v0.9에서 lib/api/trace.ts로 옮겼다.

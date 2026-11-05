@@ -7,6 +7,7 @@ import { CONVENIENCE_HELP_SECTIONS } from "@/help/content_convenience";
 import { DIFY_HELP_SECTIONS } from "@/help/content_dify";
 import { FILES_HELP_SECTIONS } from "@/help/content_files";
 import { EVENTS_HELP_SECTIONS } from "@/help/content_events";
+import { TRACE_HELP_SECTIONS } from "@/help/content_trace";
 import { KB_HELP_SECTIONS } from "@/help/content_kb";
 import { HELP_SECTIONS_TOOLS } from "@/help/content_mcp";
 
@@ -500,6 +501,7 @@ export const HELP_SECTIONS: HelpSection[] = [
   ...EVENTS_HELP_SECTIONS,
   ...COLLAB_HELP_SECTIONS,
   ...FILES_HELP_SECTIONS,
+  ...TRACE_HELP_SECTIONS,
   {
     id: "faq",
     title: "자주 묻는 질문",

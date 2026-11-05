@@ -1,92 +1,67 @@
-// 외부 추적(v0.6): 끝난 실행을 Langfuse·LangSmith로 보내 단계·AI 사용량을 살펴본다(소유자·관리자)
-import { Activity, PlugZap } from "lucide-react";
-import { useEffect, useState } from "react";
+// 외부 추적(v0.6 → v0.9 확대): 끝난 실행을 여러 추적 서비스로 보내 단계·AI 사용량을 살펴본다(소유자·관리자)
+import { Activity, Plus, ShieldCheck } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { EmptyState } from "@/components/EmptyState";
 import { ErrorBox, Loading } from "@/components/ErrorBox";
+import { ProviderCard } from "@/components/tracing/ProviderCard";
 import { Button } from "@/components/ui/button";
-import { Card, CardBody, CardHeader } from "@/components/ui/card";
-import { Field, Input } from "@/components/ui/input";
+import { Card, CardBody } from "@/components/ui/card";
 import { toast } from "@/components/ui/toast-store";
-import { useSaveTracing, useTestTracing, useTracing, type TracingConfig } from "@/lib/api/v6mcp";
-
-type Target = "langfuse" | "langsmith";
-
-function Toggle({
-  id,
-  checked,
-  onChange,
-  label,
-}: {
-  id: string;
-  checked: boolean;
-  onChange: (v: boolean) => void;
-  label: string;
-}) {
-  return (
-    <label htmlFor={id} className="inline-flex cursor-pointer items-center gap-2 text-sm">
-      <input
-        id={id}
-        type="checkbox"
-        className="h-4 w-4 accent-indigo-600"
-        checked={checked}
-        onChange={(e) => onChange(e.target.checked)}
-      />
-      {label}
-    </label>
-  );
-}
+import {
+  useSaveTraceConfig,
+  useTestTrace,
+  useTraceConfig,
+  type TraceConfig,
+} from "@/lib/api/trace";
+import {
+  kindOf,
+  MAX_PROVIDERS,
+  newDraft,
+  toDraft,
+  toPayload,
+  type ProviderDraft,
+} from "@/lib/tracingForm";
 
 export function TracingSection({ ws }: { ws: string }) {
-  const cfg = useTracing(ws);
-  const save = useSaveTracing(ws);
-  const test = useTestTracing(ws);
-  const [lf, setLf] = useState({ enabled: false, host: "", public_key: "", secret_key: "" });
-  const [ls, setLs] = useState({ enabled: false, endpoint: "", project: "", api_key: "" });
-  const [result, setResult] = useState<Partial<Record<Target, { ok: boolean; message: string }>>>(
-    {},
-  );
+  const cfg = useTraceConfig(ws);
+  const save = useSaveTraceConfig(ws);
+  const test = useTestTrace(ws);
+  const [drafts, setDrafts] = useState<ProviderDraft[]>([]);
+  const [includeContent, setIncludeContent] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const loaded = useRef(false);
 
+  const load = (d: TraceConfig) => {
+    setDrafts(d.providers.map(toDraft));
+    setIncludeContent(d.include_content);
+  };
+  // 처음 한 번만 서버 값으로 채운다(시험 뒤 다시 읽어도 편집 중인 값은 지키려고)
   useEffect(() => {
-    const d: TracingConfig | undefined = cfg.data;
-    if (!d) return;
-    setLf({
-      enabled: d.langfuse.enabled,
-      host: d.langfuse.host,
-      public_key: d.langfuse.public_key,
-      secret_key: "",
-    });
-    setLs({
-      enabled: d.langsmith.enabled,
-      endpoint: d.langsmith.endpoint,
-      project: d.langsmith.project,
-      api_key: "",
-    });
+    if (cfg.data && !loaded.current) {
+      loaded.current = true;
+      load(cfg.data);
+    }
   }, [cfg.data]);
+
+  if (cfg.isLoading) return <Loading />;
+  const data = cfg.data;
+  const savedById = new Map((data?.providers ?? []).map((p) => [p.id, p]));
+  const kinds = data?.kinds ?? [];
 
   const submit = () =>
     save.mutate(
+      { include_content: includeContent, providers: drafts.map(toPayload) },
       {
-        langfuse: {
-          enabled: lf.enabled,
-          host: lf.host,
-          public_key: lf.public_key,
-          ...(lf.secret_key ? { secret_key: lf.secret_key } : {}),
-        },
-        langsmith: {
-          enabled: ls.enabled,
-          endpoint: ls.endpoint,
-          project: ls.project,
-          ...(ls.api_key ? { api_key: ls.api_key } : {}),
+        onSuccess: (d) => {
+          load(d);
+          toast.success("저장했어요. 이제 끝난 실행부터 보내요.");
         },
       },
-      { onSuccess: () => toast.success("저장했어요. 이제 끝난 실행부터 보내요.") },
     );
 
-  const runTest = (t: Target) =>
-    test.mutate(t, {
-      onSuccess: (r) => setResult((cur) => ({ ...cur, [t]: r })),
-    });
+  const update = (uid: string, next: ProviderDraft) =>
+    setDrafts((cur) => cur.map((d) => (d.uid === uid ? next : d)));
 
-  if (cfg.isLoading) return <Loading />;
   return (
     <div className="space-y-4">
       <Card>
@@ -94,142 +69,114 @@ export function TracingSection({ ws }: { ws: string }) {
           <Activity className="mt-0.5 h-5 w-5 shrink-0 text-indigo-500" />
           <p>
             실행이 끝날 때마다 단계별 기록(걸린 시간, AI 모델·토큰·비용)을 외부 추적 서비스로
-            보내요. 보낸 값에는 입력과 결과가 들어가니, 회사 정책에 맞는 곳에만 연결하세요. 보내기에
-            실패해도 실행에는 영향이 없어요.
+            보내요. 서비스는 여러 개를 함께 연결할 수 있고, 서비스마다 켜고 끄거나 일부만 골라 보낼
+            수 있어요. 보내기에 실패해도 실행에는 영향이 없어요.
           </p>
         </CardBody>
       </Card>
+
+      <Card>
+        <CardBody className="space-y-2">
+          <label htmlFor="trace-content" className="flex cursor-pointer items-start gap-2 text-sm">
+            <input
+              id="trace-content"
+              type="checkbox"
+              className="mt-0.5 h-4 w-4 accent-indigo-600"
+              checked={includeContent}
+              onChange={(e) => setIncludeContent(e.target.checked)}
+            />
+            <span>
+              <span className="font-medium text-slate-900">입력·출력 내용도 함께 보내기</span>
+              <span className="block text-xs text-slate-500">
+                꺼 두면(권장) 단계 이름·상태·시간·토큰·비용만 보내고, 사용자가 입력한 글과 AI의 답은
+                보내지 않아요. 켜면 내용을 2KB까지 잘라 보내고, 앱의 비밀 환경 값은 가려요. 회사
+                정책에 맞는 곳에만 켜세요.
+              </span>
+            </span>
+          </label>
+          {includeContent && (
+            <p className="flex items-center gap-1.5 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-900">
+              <ShieldCheck className="h-4 w-4 shrink-0" /> 켜면 연결한 모든 서비스로 사용자 입력과
+              결과가 나가요.
+            </p>
+          )}
+        </CardBody>
+      </Card>
+
       <ErrorBox error={cfg.error ?? save.error ?? test.error} />
-      <div className="grid gap-4 lg:grid-cols-2">
-        <Card>
-          <CardHeader title="Langfuse" description="클라우드 또는 직접 설치한 Langfuse" />
-          <CardBody className="space-y-3">
-            <Toggle
-              id="lf-on"
-              label="Langfuse로 보내기"
-              checked={lf.enabled}
-              onChange={(v) => setLf({ ...lf, enabled: v })}
-            />
-            <Field label="주소" htmlFor="lf-host" hint="예: https://cloud.langfuse.com">
-              <Input
-                id="lf-host"
-                value={lf.host}
-                onChange={(e) => setLf({ ...lf, host: e.target.value })}
+
+      {drafts.length === 0 ? (
+        <EmptyState
+          icon={<Activity className="h-5 w-5" />}
+          title="연결한 추적 서비스가 없어요"
+          description="아래 '서비스 추가'에서 Langfuse·LangSmith·OpenTelemetry·Phoenix·Arize·Opik·Weave 중 쓰는 곳을 골라 연결하세요."
+        />
+      ) : (
+        <div className="grid gap-4 xl:grid-cols-2">
+          {drafts.map((d) => {
+            const kind = kindOf(kinds, d.kind);
+            if (!kind) return null;
+            return (
+              <ProviderCard
+                key={d.uid}
+                draft={d}
+                kind={kind}
+                saved={d.id ? savedById.get(d.id) : undefined}
+                testing={test.isPending}
+                onChange={(next) => update(d.uid, next)}
+                onRemove={() => {
+                  if (window.confirm(`'${d.name}' 연결을 지울까요? 저장하면 반영돼요.`))
+                    setDrafts((cur) => cur.filter((x) => x.uid !== d.uid));
+                }}
+                onTest={() => test.mutateAsync(d.id)}
               />
-            </Field>
-            <Field label="공개 키(pk-lf-…)" htmlFor="lf-pk">
-              <Input
-                id="lf-pk"
-                value={lf.public_key}
-                onChange={(e) => setLf({ ...lf, public_key: e.target.value })}
-              />
-            </Field>
-            <Field
-              label="비밀 키(sk-lf-…)"
-              htmlFor="lf-sk"
-              hint={
-                cfg.data?.langfuse.has_secret
-                  ? `저장됨 ${cfg.data.langfuse.secret_key}. 바꿀 때만 새로 넣으세요.`
-                  : "암호화해서 저장하고 다시 보여 주지 않아요."
-              }
+            );
+          })}
+        </div>
+      )}
+
+      <div className="flex flex-wrap items-start gap-3">
+        <div className="relative">
+          <Button
+            variant="outline"
+            disabled={drafts.length >= MAX_PROVIDERS}
+            aria-haspopup="menu"
+            aria-expanded={menuOpen}
+            onClick={() => setMenuOpen((o) => !o)}
+          >
+            <Plus className="h-4 w-4" /> 서비스 추가
+          </Button>
+          {menuOpen && (
+            <div
+              role="menu"
+              className="absolute left-0 z-20 mt-1 w-72 rounded-xl border border-slate-200 bg-white p-1 shadow-lift"
             >
-              <Input
-                id="lf-sk"
-                type="password"
-                autoComplete="off"
-                value={lf.secret_key}
-                onChange={(e) => setLf({ ...lf, secret_key: e.target.value })}
-              />
-            </Field>
-            <div className="flex flex-wrap items-center gap-2">
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => runTest("langfuse")}
-                disabled={test.isPending}
-              >
-                <PlugZap className="h-4 w-4" /> 연결 시험
-              </Button>
-              {result.langfuse && (
-                <span
-                  className={
-                    result.langfuse.ok ? "text-xs text-emerald-700" : "text-xs text-red-600"
-                  }
+              {kinds.map((k) => (
+                <button
+                  key={k.kind}
+                  type="button"
+                  role="menuitem"
+                  className="flex w-full flex-col rounded-lg px-3 py-2 text-left hover:bg-slate-100"
+                  onClick={() => {
+                    setDrafts((cur) => [...cur, newDraft(k)]);
+                    setMenuOpen(false);
+                  }}
                 >
-                  {result.langfuse.message}
-                </span>
-              )}
+                  <span className="flex items-center gap-1.5 text-sm font-medium text-slate-900">
+                    {k.label}
+                    {k.experimental && <span className="text-[10px] text-amber-700">실험적</span>}
+                  </span>
+                  <span className="text-xs text-slate-500">{k.description}</span>
+                </button>
+              ))}
             </div>
-          </CardBody>
-        </Card>
-        <Card>
-          <CardHeader title="LangSmith" description="LangChain의 추적 서비스" />
-          <CardBody className="space-y-3">
-            <Toggle
-              id="ls-on"
-              label="LangSmith로 보내기"
-              checked={ls.enabled}
-              onChange={(v) => setLs({ ...ls, enabled: v })}
-            />
-            <Field label="주소" htmlFor="ls-endpoint" hint="예: https://api.smith.langchain.com">
-              <Input
-                id="ls-endpoint"
-                value={ls.endpoint}
-                onChange={(e) => setLs({ ...ls, endpoint: e.target.value })}
-              />
-            </Field>
-            <Field label="프로젝트 이름" htmlFor="ls-project">
-              <Input
-                id="ls-project"
-                value={ls.project}
-                onChange={(e) => setLs({ ...ls, project: e.target.value })}
-              />
-            </Field>
-            <Field
-              label="API 키"
-              htmlFor="ls-key"
-              hint={
-                cfg.data?.langsmith.has_key
-                  ? `저장됨 ${cfg.data.langsmith.api_key}. 바꿀 때만 새로 넣으세요.`
-                  : "암호화해서 저장하고 다시 보여 주지 않아요."
-              }
-            >
-              <Input
-                id="ls-key"
-                type="password"
-                autoComplete="off"
-                value={ls.api_key}
-                onChange={(e) => setLs({ ...ls, api_key: e.target.value })}
-              />
-            </Field>
-            <div className="flex flex-wrap items-center gap-2">
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => runTest("langsmith")}
-                disabled={test.isPending}
-              >
-                <PlugZap className="h-4 w-4" /> 연결 시험
-              </Button>
-              {result.langsmith && (
-                <span
-                  className={
-                    result.langsmith.ok ? "text-xs text-emerald-700" : "text-xs text-red-600"
-                  }
-                >
-                  {result.langsmith.message}
-                </span>
-              )}
-            </div>
-          </CardBody>
-        </Card>
-      </div>
-      <div>
+          )}
+        </div>
         <Button onClick={submit} disabled={save.isPending}>
           {save.isPending ? "저장하는 중…" : "저장"}
         </Button>
-        <p className="mt-2 text-xs text-slate-500">
-          연결 시험은 저장된 키로 해요. 키를 바꿨다면 먼저 저장하세요.
+        <p className="basis-full text-xs text-slate-500">
+          연결 시험은 저장된 설정으로 해요. 서비스를 추가하거나 값을 바꿨다면 먼저 저장하세요.
         </p>
       </div>
     </div>
