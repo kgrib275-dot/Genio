@@ -1,0 +1,74 @@
+{
+  "key": "clickup",
+  "type": "connector",
+  "name": "ClickUp",
+  "summary": "ClickUp 목록에 작업을 만들어요.",
+  "version": "1.0.0",
+  "publisher": "platform",
+  "price": 0,
+  "category": "개발·업무관리",
+  "tags": [
+    "clickup",
+    "클릭업",
+    "작업",
+    "업무관리",
+    "프로젝트",
+    "할 일"
+  ],
+  "requires": {
+    "credentials": [
+      {
+        "key": "api_token",
+        "label": "개인 API 토큰(pk_…)",
+        "secret": true,
+        "required": true
+      }
+    ]
+  },
+  "actions": [
+    {
+      "key": "create_task",
+      "label": "작업 만들기",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "list_id": {
+            "type": "string",
+            "title": "목록(List) id"
+          },
+          "name": {
+            "type": "string",
+            "title": "작업 이름"
+          },
+          "description": {
+            "type": "string",
+            "title": "설명"
+          },
+          "priority": {
+            "type": "integer",
+            "title": "우선순위(1 긴급 ~ 4 낮음)"
+          }
+        },
+        "required": [
+          "list_id",
+          "name"
+        ]
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "task_id": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          }
+        },
+        "required": []
+      }
+    }
+  ],
+  "permissions": [
+    "network:api.clickup.com"
+  ]
+}

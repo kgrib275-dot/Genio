@@ -1,0 +1,135 @@
+{
+  "key": "solapi",
+  "type": "connector",
+  "name": "솔라피(Solapi)",
+  "summary": "솔라피로 문자(SMS·LMS)와 카카오 알림톡을 보내요.",
+  "version": "1.0.0",
+  "publisher": "platform",
+  "price": 0,
+  "category": "문자·이메일",
+  "tags": [
+    "솔라피",
+    "solapi",
+    "문자",
+    "sms",
+    "알림톡",
+    "카카오",
+    "알림"
+  ],
+  "requires": {
+    "credentials": [
+      {
+        "key": "api_key",
+        "label": "API Key",
+        "secret": true,
+        "required": true
+      },
+      {
+        "key": "api_secret",
+        "label": "API Secret",
+        "secret": true,
+        "required": true
+      },
+      {
+        "key": "sender",
+        "label": "발신번호(솔라피에 등록한 번호)",
+        "secret": false,
+        "required": true
+      }
+    ]
+  },
+  "actions": [
+    {
+      "key": "send_sms",
+      "label": "문자 보내기",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "to": {
+            "type": "string",
+            "title": "받는 번호(01012345678)"
+          },
+          "text": {
+            "type": "string",
+            "title": "내용(길면 자동으로 장문)"
+          },
+          "from": {
+            "type": "string",
+            "title": "보내는 번호(비우면 연결 정보 값)"
+          }
+        },
+        "required": [
+          "to",
+          "text"
+        ]
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "group_id": {
+            "type": "string"
+          },
+          "message_id": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          }
+        },
+        "required": []
+      }
+    },
+    {
+      "key": "send_alimtalk",
+      "label": "알림톡 보내기",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "to": {
+            "type": "string",
+            "title": "받는 번호"
+          },
+          "pf_id": {
+            "type": "string",
+            "title": "카카오 채널 id(pfId)"
+          },
+          "template_id": {
+            "type": "string",
+            "title": "템플릿 id"
+          },
+          "variables": {
+            "type": "object",
+            "title": "템플릿 변수({\"#{이름}\": \"값\"})"
+          },
+          "from": {
+            "type": "string",
+            "title": "보내는 번호(비우면 연결 정보 값)"
+          }
+        },
+        "required": [
+          "to",
+          "pf_id",
+          "template_id"
+        ]
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "group_id": {
+            "type": "string"
+          },
+          "message_id": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          }
+        },
+        "required": []
+      }
+    }
+  ],
+  "permissions": [
+    "network:api.solapi.com"
+  ]
+}

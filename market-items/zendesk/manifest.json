@@ -1,0 +1,129 @@
+{
+  "key": "zendesk",
+  "type": "connector",
+  "name": "Zendesk",
+  "summary": "Zendesk에 티켓을 만들거나 티켓을 검색해요.",
+  "version": "1.0.0",
+  "publisher": "platform",
+  "price": 0,
+  "category": "고객지원",
+  "tags": [
+    "zendesk",
+    "젠데스크",
+    "티켓",
+    "고객지원",
+    "문의",
+    "cs"
+  ],
+  "requires": {
+    "credentials": [
+      {
+        "key": "subdomain",
+        "label": "서브도메인(acme.zendesk.com의 acme)",
+        "secret": false,
+        "required": true
+      },
+      {
+        "key": "email",
+        "label": "로그인 이메일",
+        "secret": false,
+        "required": true
+      },
+      {
+        "key": "api_token",
+        "label": "API 토큰",
+        "secret": true,
+        "required": true
+      }
+    ]
+  },
+  "actions": [
+    {
+      "key": "create_ticket",
+      "label": "티켓 만들기",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "subject": {
+            "type": "string",
+            "title": "제목"
+          },
+          "body": {
+            "type": "string",
+            "title": "내용"
+          },
+          "requester_name": {
+            "type": "string",
+            "title": "요청한 사람 이름(선택)"
+          },
+          "requester_email": {
+            "type": "string",
+            "title": "요청한 사람 이메일(선택)"
+          },
+          "priority": {
+            "type": "string",
+            "title": "우선순위(low·normal·high·urgent, 선택)"
+          },
+          "tags": {
+            "type": "string",
+            "title": "태그(쉼표로 구분, 선택)"
+          }
+        },
+        "required": [
+          "subject",
+          "body"
+        ]
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "ticket_id": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          }
+        },
+        "required": []
+      }
+    },
+    {
+      "key": "search_tickets",
+      "label": "티켓 찾기",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "title": "검색어(Zendesk 검색 문법 가능)"
+          },
+          "limit": {
+            "type": "integer",
+            "title": "가져올 개수(최대 50)"
+          }
+        },
+        "required": [
+          "query"
+        ]
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "count": {
+            "type": "integer"
+          },
+          "text": {
+            "type": "string"
+          },
+          "results": {
+            "type": "array"
+          }
+        },
+        "required": []
+      }
+    }
+  ],
+  "permissions": [
+    "network:zendesk.com"
+  ]
+}

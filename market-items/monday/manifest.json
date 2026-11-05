@@ -1,0 +1,66 @@
+{
+  "key": "monday",
+  "type": "connector",
+  "name": "monday.com",
+  "summary": "monday.com 보드에 항목(행)을 만들어요.",
+  "version": "1.0.0",
+  "publisher": "platform",
+  "price": 0,
+  "category": "개발·업무관리",
+  "tags": [
+    "monday",
+    "먼데이",
+    "보드",
+    "업무관리",
+    "프로젝트"
+  ],
+  "requires": {
+    "credentials": [
+      {
+        "key": "api_token",
+        "label": "개인 API 토큰",
+        "secret": true,
+        "required": true
+      }
+    ]
+  },
+  "actions": [
+    {
+      "key": "create_item",
+      "label": "항목 만들기",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "board_id": {
+            "type": "string",
+            "title": "보드 id(숫자)"
+          },
+          "item_name": {
+            "type": "string",
+            "title": "항목 이름"
+          },
+          "column_values": {
+            "type": "object",
+            "title": "열 값(열 id: 값, 선택)"
+          }
+        },
+        "required": [
+          "board_id",
+          "item_name"
+        ]
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "item_id": {
+            "type": "string"
+          }
+        },
+        "required": []
+      }
+    }
+  ],
+  "permissions": [
+    "network:api.monday.com"
+  ]
+}

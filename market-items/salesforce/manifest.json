@@ -1,0 +1,123 @@
+{
+  "key": "salesforce",
+  "type": "connector",
+  "name": "Salesforce",
+  "summary": "Salesforce에 리드를 만들거나 SOQL로 조회해요(액세스 토큰 방식).",
+  "version": "1.0.0",
+  "publisher": "platform",
+  "price": 0,
+  "category": "영업·CRM",
+  "tags": [
+    "salesforce",
+    "세일즈포스",
+    "crm",
+    "리드",
+    "영업"
+  ],
+  "requires": {
+    "credentials": [
+      {
+        "key": "instance_url",
+        "label": "인스턴스 주소(https://acme.my.salesforce.com)",
+        "secret": false,
+        "required": true
+      },
+      {
+        "key": "access_token",
+        "label": "액세스 토큰",
+        "secret": true,
+        "required": true
+      }
+    ]
+  },
+  "actions": [
+    {
+      "key": "create_lead",
+      "label": "리드 만들기",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "last_name": {
+            "type": "string",
+            "title": "성(필수)"
+          },
+          "company": {
+            "type": "string",
+            "title": "회사(필수)"
+          },
+          "first_name": {
+            "type": "string",
+            "title": "이름"
+          },
+          "email": {
+            "type": "string",
+            "title": "이메일"
+          },
+          "phone": {
+            "type": "string",
+            "title": "전화"
+          },
+          "description": {
+            "type": "string",
+            "title": "메모"
+          },
+          "lead_source": {
+            "type": "string",
+            "title": "유입 경로(예: Web)"
+          }
+        },
+        "required": [
+          "last_name",
+          "company"
+        ]
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "lead_id": {
+            "type": "string"
+          },
+          "success": {
+            "type": "boolean"
+          }
+        },
+        "required": []
+      }
+    },
+    {
+      "key": "query",
+      "label": "SOQL로 조회",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "soql": {
+            "type": "string",
+            "title": "SELECT로 시작하는 조회문"
+          }
+        },
+        "required": [
+          "soql"
+        ]
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "count": {
+            "type": "integer"
+          },
+          "text": {
+            "type": "string"
+          },
+          "records": {
+            "type": "array"
+          }
+        },
+        "required": []
+      }
+    }
+  ],
+  "permissions": [
+    "network:salesforce.com",
+    "network:force.com"
+  ]
+}

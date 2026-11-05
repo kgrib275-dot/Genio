@@ -1,0 +1,108 @@
+{
+  "version": 1,
+  "nodes": [
+    {
+      "id": "n1",
+      "type": "input",
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "data": {
+        "label": "받는 사람",
+        "fields": [
+          {
+            "key": "to_email",
+            "label": "보고 받을 메일 주소",
+            "type": "text",
+            "required": true
+          }
+        ]
+      }
+    },
+    {
+      "id": "n2",
+      "type": "connector",
+      "position": {
+        "x": 300,
+        "y": 0
+      },
+      "data": {
+        "label": "최근 주문 읽기",
+        "connector": "shopify",
+        "credential_id": "{{credential:shopify}}",
+        "action": "list_orders",
+        "params": {
+          "status": "any",
+          "limit": 20
+        }
+      }
+    },
+    {
+      "id": "n3",
+      "type": "template",
+      "position": {
+        "x": 600,
+        "y": 0
+      },
+      "data": {
+        "label": "보고서 만들기",
+        "template": "최근 주문 {{n2.count}}건\n\n{{n2.text}}"
+      }
+    },
+    {
+      "id": "n4",
+      "type": "connector",
+      "position": {
+        "x": 900,
+        "y": 0
+      },
+      "data": {
+        "label": "메일 보내기",
+        "connector": "sendgrid",
+        "credential_id": "{{credential:sendgrid}}",
+        "action": "send_mail",
+        "params": {
+          "to": "{{n1.to_email}}",
+          "subject": "주문 현황",
+          "text": "{{n3.output}}"
+        }
+      }
+    },
+    {
+      "id": "n5",
+      "type": "output",
+      "position": {
+        "x": 1200,
+        "y": 0
+      },
+      "data": {
+        "label": "결과",
+        "template": "주문 현황 메일을 보냈어요."
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "e1",
+      "source": "n1",
+      "target": "n2"
+    },
+    {
+      "id": "e2",
+      "source": "n2",
+      "target": "n3"
+    },
+    {
+      "id": "e3",
+      "source": "n3",
+      "target": "n4"
+    },
+    {
+      "id": "e4",
+      "source": "n4",
+      "target": "n5"
+    }
+  ],
+  "variables": {}
+}

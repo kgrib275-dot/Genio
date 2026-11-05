@@ -1,0 +1,35 @@
+{
+  "key": "tpl_shopify_orders_mail",
+  "type": "template",
+  "name": "Shopify 주문 현황을 메일로",
+  "summary": "Shopify 최근 주문을 읽어 요약해 SendGrid 메일로 보내요(예약 실행과 함께 쓰면 일일 보고).",
+  "version": "1.0.0",
+  "publisher": "platform",
+  "price": 0,
+  "category": "주문·물류",
+  "app_type": "workflow",
+  "tags": [
+    "shopify",
+    "주문",
+    "sendgrid",
+    "메일",
+    "일일 보고",
+    "쇼핑몰"
+  ],
+  "requires": {
+    "items": [
+      "shopify",
+      "sendgrid"
+    ]
+  },
+  "blanks": [
+    {
+      "key": "limit",
+      "label": "가져올 주문 수",
+      "node_id": "n2",
+      "field": "params.limit",
+      "example": "20"
+    }
+  ],
+  "permissions": []
+}

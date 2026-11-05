@@ -1,0 +1,42 @@
+{
+  "key": "api_tool_set",
+  "type": "connector",
+  "name": "API 도구(OpenAPI)",
+  "summary": "OpenAPI 명세를 가져와 API의 기능을 도구로 쓰게 해요. 주소와 인증을 한 번만 정해 두면 돼요.",
+  "version": "1.0.0",
+  "publisher": "platform",
+  "price": 0,
+  "category": "기본",
+  "tags": ["openapi", "swagger", "api", "도구", "명세"],
+  "credential_only": true,
+  "requires": {
+    "credentials": [
+      {
+        "key": "operations",
+        "label": "도구 목록(가져올 때 자동으로 채워져요)",
+        "secret": false,
+        "required": true
+      },
+      {
+        "key": "base_url",
+        "label": "기본 주소",
+        "secret": false,
+        "required": false
+      },
+      {
+        "key": "auth_type",
+        "label": "인증 방식(none·bearer·basic·header)",
+        "secret": false,
+        "required": false
+      },
+      {
+        "key": "auth_credential_id",
+        "label": "HTTP 인증 정보 연결 정보 id",
+        "secret": false,
+        "required": false
+      }
+    ]
+  },
+  "actions": [],
+  "permissions": []
+}

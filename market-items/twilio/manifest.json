@@ -1,0 +1,81 @@
+{
+  "key": "twilio",
+  "type": "connector",
+  "name": "Twilio",
+  "summary": "Twilio로 해외·국내 번호에 문자(SMS)를 보내요.",
+  "version": "1.0.0",
+  "publisher": "platform",
+  "price": 0,
+  "category": "문자·이메일",
+  "tags": [
+    "twilio",
+    "문자",
+    "sms",
+    "알림",
+    "트윌리오"
+  ],
+  "requires": {
+    "credentials": [
+      {
+        "key": "account_sid",
+        "label": "Account SID(AC로 시작)",
+        "secret": true,
+        "required": true
+      },
+      {
+        "key": "auth_token",
+        "label": "Auth Token",
+        "secret": true,
+        "required": true
+      },
+      {
+        "key": "from_number",
+        "label": "보내는 번호(+로 시작) 또는 메시지 서비스 SID(MG…)",
+        "secret": false,
+        "required": false
+      }
+    ]
+  },
+  "actions": [
+    {
+      "key": "send_sms",
+      "label": "문자 보내기",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "to": {
+            "type": "string",
+            "title": "받는 번호(+82… 형식)"
+          },
+          "body": {
+            "type": "string",
+            "title": "내용"
+          },
+          "from": {
+            "type": "string",
+            "title": "보내는 번호(비우면 연결 정보 값)"
+          }
+        },
+        "required": [
+          "to",
+          "body"
+        ]
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "message_sid": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          }
+        },
+        "required": []
+      }
+    }
+  ],
+  "permissions": [
+    "network:api.twilio.com"
+  ]
+}

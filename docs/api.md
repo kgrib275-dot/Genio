@@ -561,3 +561,54 @@ Project = {id, workspace_id, name, description, color: indigo|sky|emerald|amber|
 | POST /workspaces/{ws}/members/{id}/reset-2fa | 소유자·관리자(소유자·관리자 대상은 소유자만) | 휴대폰 분실 시 2단계 인증 끄기 |
 
 토큰: JWT에 `sid`(user_sessions.id)를 넣고, 요청마다 기기가 끊겼는지와 `users.tokens_valid_after`(비밀번호 재설정·모든 기기 로그아웃·탈퇴 시각)를 확인한다. 마이그레이션 0010.
+
+
+## v0.8 MCP 클라이언트·API 도구·연동 (ADR 0012)
+외부 MCP 서버와 OpenAPI로 가져온 API를 흐름 단계(`mcp_tool`·`api_tool`)와 에이전트에서 도구로 쓴다.
+둘 다 **연결 정보**(`connector_credentials`)에 암호화해 저장하므로 DB 마이그레이션은 없다.
+- `mcp_server`: 항목(market-items)은 동작 없는 `credential_only`. 값 `url`·`token`·`header_name`(모두 암호화, 응답에는 `****abcd`).
+- `api_tool_set`: 값 `operations`(도구 목록 JSON, 300KB 이하)·`base_url`·`auth_type`·`auth_credential_id`(HTTP 인증 정보 id). 인증 비밀값은 여기에 없다.
+- 두 종류 모두 처음 만들 때 이 워크스페이스에 자동으로 설치된다.
+
+### MCP 서버
+| 메서드 | 경로 | 권한 | 설명 |
+|---|---|---|---|
+| GET | `/workspaces/{ws}/mcp/servers` | 제작자 이상 | `[{id, name, host, has_token, created_at}]`(주소 전체는 비밀이 섞일 수 있어 호스트만) |
+| POST | `/workspaces/{ws}/mcp/servers` | 소유자·관리자 | `{name, url, token?, header_name?}` → 201 `{id, name, host, has_token}`. 최대 30개. 주소는 http(s)만, 헤더 이름은 영문·숫자·하이픈 |
+| GET | `/workspaces/{ws}/mcp/servers/{id}/tools?refresh=` | 제작자 이상 | 서버에 붙어 도구 목록을 읽는다 `{ok, message, tools[{name, description, input_schema}]}`. 실패해도 200이고 `ok=false`(비밀값 마스킹). 기본은 60초 캐시, `refresh=1`은 다시 연결 |
+| POST | `/workspaces/{ws}/connectors/credentials/{id}/test` | 제작자 이상 | 공통 연결 테스트. `mcp_server`는 도구 목록을 읽어 `연결됐어요. 도구 N개: …`를 돌려준다 |
+
+- 삭제는 공통 `DELETE /workspaces/{ws}/connectors/credentials/{id}`(소유자·관리자).
+- 프로토콜: Streamable HTTP JSON-RPC 2.0. `initialize`(요청 규격 2025-06-18, 서버가 2025-11-25·2025-06-18·2025-03-26·2024-11-05 중 하나로 답하면 받아들임) → `notifications/initialized` → `tools/list`(`nextCursor`로 최대 10쪽, 도구 200개·설명 500자·스키마 2만 자 상한) · `tools/call`.
+  - 응답은 `application/json` 또는 `text/event-stream` 한 번의 답. `Mcp-Session-Id`가 오면 이후 요청에 붙이고, 404면 한 번만 새 세션으로 다시 시작한다. 끝나면 DELETE로 세션을 닫는다(실패해도 무시).
+  - 모든 요청은 `safe_http`를 거친다(사설 IP·localhost 차단, 15초, 응답 1MB). 인증 실패(401·403)·MCP 주소가 아님(404·405·406·415)·규격 불일치·JSON-RPC 오류는 두 줄 한국어 오류다.
+  - 결과 정리: `{text, content[], structured, is_error}`. 이미지·오디오 데이터는 싣지 않고 길이만 적는다. 서버가 되돌려 보낸 주소·토큰은 `****abcd`로 가린다.
+
+### API 도구(OpenAPI)
+| 메서드 | 경로 | 권한 | 설명 |
+|---|---|---|---|
+| POST | `/workspaces/{ws}/api-tools/preview` | 제작자 이상 | `{url}` 또는 `{text}`(JSON·YAML 중 하나만) → `{title, version, base_url, operations[], total, truncated}`. 저장하지 않는다 |
+| POST | `/workspaces/{ws}/api-tools` | 소유자·관리자 | `{name, url\|text, base_url?, selected[], auth_type: none\|bearer\|basic\|header, auth_credential_id?}` → 201 `{id, name, tools, base_url}`. 최대 20묶음 |
+| GET | `/workspaces/{ws}/api-tools` | 제작자 이상 | `[{id, name, base_url, tools, auth_type, created_at}]` |
+| GET | `/workspaces/{ws}/api-tools/{id}` | 제작자 이상 | 도구 목록(인증 값 없음). 흐름 단계가 도구·값 칸을 만들 때 쓴다 |
+
+- 명세 1MB 이하, OpenAPI 3.x만, 도구(연산) 200개 이하(넘으면 앞의 200개만 미리 보기에 나오고 `truncated=true`), 같은 문서 안의 `$ref`(`#/…`)만 풀고 깊이 6을 넘거나 바깥 참조는 빈 객체로 바꾼다. 쿠키 파라미터와 JSON이 아닌 본문은 무시한다.
+- `auth_type`이 `none`이 아니면 `auth_credential_id`는 같은 워크스페이스의 `http_credentials` 연결 정보여야 한다(아니면 422).
+- 호출은 HTTP 단계와 같은 길(`safe_http` + `auth_headers`)로 나간다. 경로 값은 주소 조각으로 안전하게 바꾸고(`quote(safe="")`), 빠진 필수 값·필수 본문은 한국어 오류다.
+
+### 새 단계
+| 타입 | 이름 | 설정 | 출력 |
+|---|---|---|---|
+| `mcp_tool` | 외부 도구 호출(MCP) | `credential_id`(mcp_server), `tool`, `arguments`(값 끌어오기 가능), `fail_on_tool_error` | `text`, `content`, `structured`, `is_error` |
+| `api_tool` | API 도구 호출 | `tool_set`(api_tool_set), `operation`, `params`, `body`, `fail_on_error_status` | `status`, `ok`, `body`, `text` |
+
+- 그래프 검증: 두 단계의 연결 정보 칸이 없는 id이거나 종류가 다르면 오류.
+- 에이전트 단계 도구에 `{"type":"mcp","credential_id":…,"tools":["이름",…]}`를 쓰면 그 서버의 도구를 AI가 스스로 부른다(이름을 비우면 앞의 20개).
+- 실행 기록의 단계 설명(`summary`)에 두 단계의 한 문장 설명이 들어간다.
+
+### 새 마켓 커넥터 12개와 템플릿 3개
+- 커넥터: `twilio`·`sendgrid`·`mailgun`·`google_chat`·`zendesk`·`freshdesk`·`shopify`·`salesforce`·`clickup`·`monday`·`solapi`·`naver_sens`. 기본 항목 `mcp_server`·`api_tool_set`을 더해 마켓은 69개.
+- 서명이 필요한 서비스(솔라피·SENS)를 위해 커넥터 `net`에 `sign_hmac_sha256(key, message, encoding="hex"|"base64")`, `now_ms()`, `now_iso()`, `random_hex(n)`이 생겼다(번들은 hmac·time 모듈을 직접 쓸 수 없는 허용 목록 유지).
+- 템플릿: `tpl_inquiry_zendesk_slack`(병렬), `tpl_order_sms_notify`(병렬), `tpl_shopify_orders_mail`.
+- `safe_http` 응답 헤더 허용 목록에 `mcp-session-id`가 추가됐다.
+- 새 의존성: `PyYAML>=6`.

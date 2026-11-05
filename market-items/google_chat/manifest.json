@@ -1,0 +1,65 @@
+{
+  "key": "google_chat",
+  "type": "connector",
+  "name": "Google Chat",
+  "summary": "구글 챗 스페이스에 웹훅으로 메시지를 보내요.",
+  "version": "1.0.0",
+  "publisher": "platform",
+  "price": 0,
+  "category": "메신저",
+  "tags": [
+    "google chat",
+    "구글 챗",
+    "행아웃",
+    "메신저",
+    "알림",
+    "웹훅"
+  ],
+  "requires": {
+    "credentials": [
+      {
+        "key": "webhook_url",
+        "label": "스페이스 웹훅 주소(https://chat.googleapis.com/…)",
+        "secret": true,
+        "required": true
+      }
+    ]
+  },
+  "actions": [
+    {
+      "key": "send_message",
+      "label": "메시지 보내기",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string",
+            "title": "내용"
+          },
+          "thread_key": {
+            "type": "string",
+            "title": "스레드 이름(같은 이름이면 한 대화로 묶임, 선택)"
+          }
+        },
+        "required": [
+          "text"
+        ]
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "sent": {
+            "type": "boolean"
+          },
+          "message_name": {
+            "type": "string"
+          }
+        },
+        "required": []
+      }
+    }
+  ],
+  "permissions": [
+    "network:chat.googleapis.com"
+  ]
+}

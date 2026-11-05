@@ -1,0 +1,109 @@
+{
+  "version": 1,
+  "nodes": [
+    {
+      "id": "n1",
+      "type": "input",
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "data": {
+        "label": "고객 문의",
+        "fields": [
+          {
+            "key": "name",
+            "label": "이름",
+            "type": "text",
+            "required": true
+          },
+          {
+            "key": "email",
+            "label": "이메일",
+            "type": "text",
+            "required": true
+          },
+          {
+            "key": "message",
+            "label": "문의 내용",
+            "type": "text",
+            "required": true
+          }
+        ]
+      }
+    },
+    {
+      "id": "n3",
+      "type": "connector",
+      "position": {
+        "x": 320,
+        "y": -140
+      },
+      "data": {
+        "label": "Zendesk 티켓 만들기",
+        "connector": "zendesk",
+        "credential_id": "{{credential:zendesk}}",
+        "action": "create_ticket",
+        "params": {
+          "subject": "{{n1.name}}님 문의",
+          "body": "{{n1.message}}",
+          "requester_name": "{{n1.name}}",
+          "requester_email": "{{n1.email}}"
+        }
+      }
+    },
+    {
+      "id": "n4",
+      "type": "connector",
+      "position": {
+        "x": 320,
+        "y": 140
+      },
+      "data": {
+        "label": "슬랙에 알리기",
+        "connector": "slack",
+        "credential_id": "{{credential:slack}}",
+        "action": "post_message",
+        "params": {
+          "channel": "#cs",
+          "text": "새 문의 — {{n1.name}}: {{n1.message}}"
+        }
+      }
+    },
+    {
+      "id": "n5",
+      "type": "output",
+      "position": {
+        "x": 640,
+        "y": 0
+      },
+      "data": {
+        "label": "결과",
+        "template": "문의를 접수했어요(티켓 번호 {{n3.ticket_id}})."
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "e1",
+      "source": "n1",
+      "target": "n3"
+    },
+    {
+      "id": "e2",
+      "source": "n1",
+      "target": "n4"
+    },
+    {
+      "id": "e3",
+      "source": "n3",
+      "target": "n5"
+    },
+    {
+      "id": "e4",
+      "source": "n4",
+      "target": "n5"
+    }
+  ],
+  "variables": {}
+}

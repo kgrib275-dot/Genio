@@ -17,6 +17,7 @@ if TYPE_CHECKING:
 
 MAX_TOOL_OUTPUT = 4000
 MAX_DEPTH = 2
+MAX_MCP_TOOLS = 20
 
 
 def _safe_name(s: str) -> str:
@@ -81,6 +82,30 @@ def build_tools(
                     action.get("input_schema") or {"type": "object"},
                 )
             )
+        elif kind == "mcp":
+            # MCP 서버 하나의 도구 여러 개를 한 번에 연다(이름을 적으면 그것만, 비우면 앞의 20개)
+            cred = str(t.get("credential_id") or "")
+            if not cred:
+                raise NodeError("에이전트의 MCP 도구에 쓸 연결 정보를 골라 주세요.")
+            wanted = [str(n) for n in (t.get("tools") or []) if str(n).strip()]
+            found = {x["name"]: x for x in services.mcp_tools(credential_id=cred)}
+            missing = [n for n in wanted if n not in found]
+            if missing:
+                raise NodeError(
+                    f"MCP 서버에서 도구 '{', '.join(missing)}'을(를) 찾지 못했어요. 연결 정보의 연결 테스트로 도구 이름을 확인하세요."
+                )
+            chosen = [found[n] for n in wanted] if wanted else list(found.values())
+            for j, tool in enumerate(chosen[:MAX_MCP_TOOLS]):
+                name = _safe_name(f"mcp{i}_{j}_{tool['name']}")
+                defs.append(
+                    ToolDef(
+                        name,
+                        str(tool.get("description") or tool["name"]),
+                        tool.get("input_schema") or {"type": "object"},
+                    )
+                )
+                table[name] = {"type": "mcp", "credential_id": cred, "tool": tool["name"]}
+            continue
         elif kind == "app":
             app = services.db.get(App, str(t.get("app_id") or ""))
             if app is None or app.workspace_id != services.workspace_id:
@@ -129,6 +154,15 @@ def call_tool(services: "RunServices", spec: dict[str, Any], args: dict[str, Any
             params=args,
         )
         return json.dumps(out, ensure_ascii=False)[:MAX_TOOL_OUTPUT]
+    if kind == "mcp":
+        out = services.mcp_call(
+            credential_id=str(spec.get("credential_id") or ""),
+            tool=str(spec.get("tool") or ""),
+            arguments=args,
+        )
+        text = str(out.get("text") or "") or json.dumps(out.get("content"), ensure_ascii=False)
+        prefix = "(도구가 오류를 알려 줬어요) " if out.get("is_error") else ""
+        return (prefix + text)[:MAX_TOOL_OUTPUT]
     if kind == "app":
         return run_child_app(services, str(spec.get("app_id")), dict(args.get("inputs") or {}))
     raise NodeError("알 수 없는 도구예요.")

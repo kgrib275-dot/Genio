@@ -657,7 +657,7 @@ AGENT = NodeSpec(
     type="agent",
     label="에이전트",
     category="AI",
-    description="AI가 목표를 이루기 위해 필요한 도구(서비스 연결, 웹 페이지 읽기, 지식 검색, 다른 앱)를 스스로 골라 써요.",
+    description="AI가 목표를 이루기 위해 필요한 도구(서비스 연결, 웹 페이지 읽기, 지식 검색, 다른 앱, 외부 MCP 서버)를 스스로 골라 써요.",
     input_schema={
         "type": "object",
         "properties": {
@@ -674,13 +674,18 @@ AGENT = NodeSpec(
                         "type": {
                             "type": "string",
                             "title": "종류",
-                            "enum": ["web", "knowledge", "connector", "app"],
+                            "enum": ["web", "knowledge", "connector", "app", "mcp"],
                         },
                         "kb_id": {"type": "string", "title": "지식베이스 id(knowledge)"},
                         "connector": {"type": "string", "title": "서비스(connector)"},
                         "action": {"type": "string", "title": "동작(connector)"},
                         "credential_id": {"type": "string", "title": "연결 정보(connector)"},
                         "app_id": {"type": "string", "title": "앱 id(app)"},
+                        "tools": {
+                            "type": "array",
+                            "title": "쓸 도구 이름(mcp, 비우면 앞의 20개)",
+                            "items": {"type": "string"},
+                        },
                         "description": {"type": "string", "title": "언제 쓰는지 설명"},
                     },
                     "required": ["type"],

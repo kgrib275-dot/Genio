@@ -1,0 +1,35 @@
+{
+  "key": "tpl_inquiry_zendesk_slack",
+  "type": "template",
+  "name": "고객 문의를 Zendesk 티켓과 슬랙에 동시에",
+  "summary": "고객 문의를 받으면 Zendesk 티켓을 만들고 슬랙에도 동시에 알려요(병렬 갈래).",
+  "version": "1.0.0",
+  "publisher": "platform",
+  "price": 0,
+  "category": "고객지원",
+  "app_type": "workflow",
+  "tags": [
+    "병렬",
+    "zendesk",
+    "슬랙",
+    "문의",
+    "티켓",
+    "고객지원"
+  ],
+  "requires": {
+    "items": [
+      "zendesk",
+      "slack"
+    ]
+  },
+  "blanks": [
+    {
+      "key": "channel",
+      "label": "알림을 받을 슬랙 채널",
+      "node_id": "n4",
+      "field": "params.channel",
+      "example": "#cs"
+    }
+  ],
+  "permissions": []
+}

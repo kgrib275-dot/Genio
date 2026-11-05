@@ -1,0 +1,96 @@
+{
+  "key": "naver_sens",
+  "type": "connector",
+  "name": "네이버 클라우드 SENS",
+  "summary": "네이버 클라우드 SENS로 문자(SMS·LMS)를 보내요.",
+  "version": "1.0.0",
+  "publisher": "platform",
+  "price": 0,
+  "category": "문자·이메일",
+  "tags": [
+    "네이버",
+    "sens",
+    "네이버 클라우드",
+    "문자",
+    "sms",
+    "lms",
+    "알림"
+  ],
+  "requires": {
+    "credentials": [
+      {
+        "key": "access_key",
+        "label": "Access Key ID",
+        "secret": true,
+        "required": true
+      },
+      {
+        "key": "secret_key",
+        "label": "Secret Key",
+        "secret": true,
+        "required": true
+      },
+      {
+        "key": "service_id",
+        "label": "SENS 서비스 ID(ncp:sms:kr:…)",
+        "secret": false,
+        "required": true
+      },
+      {
+        "key": "sender",
+        "label": "발신번호(SENS에 등록한 번호)",
+        "secret": false,
+        "required": true
+      }
+    ]
+  },
+  "actions": [
+    {
+      "key": "send_sms",
+      "label": "문자 보내기",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "to": {
+            "type": "string",
+            "title": "받는 번호(01012345678)"
+          },
+          "content": {
+            "type": "string",
+            "title": "내용(길면 자동으로 LMS)"
+          },
+          "subject": {
+            "type": "string",
+            "title": "제목(LMS일 때, 선택)"
+          },
+          "from": {
+            "type": "string",
+            "title": "보내는 번호(비우면 연결 정보 값)"
+          }
+        },
+        "required": [
+          "to",
+          "content"
+        ]
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "request_id": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          }
+        },
+        "required": []
+      }
+    }
+  ],
+  "permissions": [
+    "network:sens.apigw.ntruss.com"
+  ]
+}

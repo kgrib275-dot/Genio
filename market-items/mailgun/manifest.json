@@ -1,0 +1,93 @@
+{
+  "key": "mailgun",
+  "type": "connector",
+  "name": "Mailgun",
+  "summary": "Mailgun으로 메일을 보내요(미국·유럽 지역 모두 지원).",
+  "version": "1.0.0",
+  "publisher": "platform",
+  "price": 0,
+  "category": "문자·이메일",
+  "tags": [
+    "mailgun",
+    "메일",
+    "이메일",
+    "알림",
+    "발송"
+  ],
+  "requires": {
+    "credentials": [
+      {
+        "key": "api_key",
+        "label": "Private API 키",
+        "secret": true,
+        "required": true
+      },
+      {
+        "key": "domain",
+        "label": "보내는 도메인(예: mg.example.com)",
+        "secret": false,
+        "required": true
+      },
+      {
+        "key": "region",
+        "label": "지역(us 또는 eu, 비우면 us)",
+        "secret": false,
+        "required": false
+      },
+      {
+        "key": "from_email",
+        "label": "보내는 주소(예: 알림 <noreply@mg.example.com>)",
+        "secret": false,
+        "required": true
+      }
+    ]
+  },
+  "actions": [
+    {
+      "key": "send_mail",
+      "label": "메일 보내기",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "to": {
+            "type": "string",
+            "title": "받는 사람(여러 명은 쉼표)"
+          },
+          "subject": {
+            "type": "string",
+            "title": "제목"
+          },
+          "text": {
+            "type": "string",
+            "title": "본문(글)"
+          },
+          "html": {
+            "type": "string",
+            "title": "본문(HTML, 선택)"
+          }
+        },
+        "required": [
+          "to",
+          "subject",
+          "text"
+        ]
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "sent": {
+            "type": "boolean"
+          },
+          "message_id": {
+            "type": "string"
+          }
+        },
+        "required": []
+      }
+    }
+  ],
+  "permissions": [
+    "network:api.mailgun.net",
+    "network:api.eu.mailgun.net"
+  ]
+}

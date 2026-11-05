@@ -1,0 +1,35 @@
+{
+  "key": "tpl_order_sms_notify",
+  "type": "template",
+  "name": "주문 접수를 고객 문자와 팀 채팅에 동시에",
+  "summary": "주문이 들어오면 고객에게 솔라피 문자를 보내고 구글 챗 팀 스페이스에도 알려요(병렬 갈래).",
+  "version": "1.0.0",
+  "publisher": "platform",
+  "price": 0,
+  "category": "주문·물류",
+  "app_type": "workflow",
+  "tags": [
+    "병렬",
+    "주문",
+    "문자",
+    "솔라피",
+    "구글 챗",
+    "알림"
+  ],
+  "requires": {
+    "items": [
+      "solapi",
+      "google_chat"
+    ]
+  },
+  "blanks": [
+    {
+      "key": "thread_key",
+      "label": "구글 챗 스레드 이름",
+      "node_id": "n3",
+      "field": "params.thread_key",
+      "example": "주문 알림"
+    }
+  ],
+  "permissions": []
+}

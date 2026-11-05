@@ -1,0 +1,36 @@
+{
+  "key": "mcp_server",
+  "type": "connector",
+  "name": "MCP 서버",
+  "summary": "외부 MCP 서버를 연결해 그 서버의 도구를 흐름과 에이전트에서 쓰게 해요.",
+  "version": "1.0.0",
+  "publisher": "platform",
+  "price": 0,
+  "category": "기본",
+  "tags": ["mcp", "도구", "에이전트", "연동", "model context protocol"],
+  "credential_only": true,
+  "requires": {
+    "credentials": [
+      {
+        "key": "url",
+        "label": "MCP 서버 주소(https://…)",
+        "secret": true,
+        "required": true
+      },
+      {
+        "key": "token",
+        "label": "접속 토큰(없으면 비워 두세요)",
+        "secret": true,
+        "required": false
+      },
+      {
+        "key": "header_name",
+        "label": "토큰을 보낼 헤더 이름(비우면 Authorization: Bearer)",
+        "secret": false,
+        "required": false
+      }
+    ]
+  },
+  "actions": [],
+  "permissions": []
+}

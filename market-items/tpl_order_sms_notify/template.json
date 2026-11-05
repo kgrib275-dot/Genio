@@ -1,0 +1,113 @@
+{
+  "version": 1,
+  "nodes": [
+    {
+      "id": "n1",
+      "type": "input",
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "data": {
+        "label": "주문 정보",
+        "fields": [
+          {
+            "key": "order_no",
+            "label": "주문번호",
+            "type": "text",
+            "required": true
+          },
+          {
+            "key": "customer_name",
+            "label": "고객 이름",
+            "type": "text",
+            "required": true
+          },
+          {
+            "key": "phone",
+            "label": "고객 전화번호",
+            "type": "text",
+            "required": true
+          },
+          {
+            "key": "product",
+            "label": "상품",
+            "type": "text",
+            "required": true
+          }
+        ]
+      }
+    },
+    {
+      "id": "n2",
+      "type": "connector",
+      "position": {
+        "x": 320,
+        "y": -140
+      },
+      "data": {
+        "label": "고객에게 문자",
+        "connector": "solapi",
+        "credential_id": "{{credential:solapi}}",
+        "action": "send_sms",
+        "params": {
+          "to": "{{n1.phone}}",
+          "text": "{{n1.customer_name}}님, 주문({{n1.order_no}})이 접수됐어요. 상품: {{n1.product}}"
+        }
+      }
+    },
+    {
+      "id": "n3",
+      "type": "connector",
+      "position": {
+        "x": 320,
+        "y": 140
+      },
+      "data": {
+        "label": "팀 채팅에 알리기",
+        "connector": "google_chat",
+        "credential_id": "{{credential:google_chat}}",
+        "action": "send_message",
+        "params": {
+          "text": "새 주문 {{n1.order_no}} — {{n1.customer_name}} / {{n1.product}}",
+          "thread_key": "주문 알림"
+        }
+      }
+    },
+    {
+      "id": "n4",
+      "type": "output",
+      "position": {
+        "x": 640,
+        "y": 0
+      },
+      "data": {
+        "label": "결과",
+        "template": "고객 문자와 팀 알림을 보냈어요."
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "e1",
+      "source": "n1",
+      "target": "n2"
+    },
+    {
+      "id": "e2",
+      "source": "n1",
+      "target": "n3"
+    },
+    {
+      "id": "e3",
+      "source": "n2",
+      "target": "n4"
+    },
+    {
+      "id": "e4",
+      "source": "n3",
+      "target": "n4"
+    }
+  ],
+  "variables": {}
+}
