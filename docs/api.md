@@ -561,3 +561,52 @@ Project = {id, workspace_id, name, description, color: indigo|sky|emerald|amber|
 | POST /workspaces/{ws}/members/{id}/reset-2fa | 소유자·관리자(소유자·관리자 대상은 소유자만) | 휴대폰 분실 시 2단계 인증 끄기 |
 
 토큰: JWT에 `sid`(user_sessions.id)를 넣고, 요청마다 기기가 끊겼는지와 `users.tokens_valid_after`(비밀번호 재설정·모든 기기 로그아웃·탈퇴 시각)를 확인한다. 마이그레이션 0010.
+
+
+## v0.8 지식 데이터 소스·외부 지식베이스·검색 튜닝 (ADR 0012)
+DB 변경 없음: 지식베이스 설정(`knowledge_bases.settings` JSON)과 문서 꼬리표(`documents.doc_metadata`)만 쓴다. `kind`·`external`·`sources`·`tuning` 키는 아래 전용 API로만 바꾸고, `PATCH /knowledge-bases/{id}`의 `settings`로는 바꿀 수 없다(무시).
+
+### 가져오기 소스
+소스 한 개 = `{id, type: web|notion|google, name, config, schedule: none|daily, last_sync_at, last_status: new|ok|partial|failed, last_summary{added, updated, unchanged, missing, failed, notes[], failures[]}, last_error, running, progress{done,total}}`.
+
+| 메서드·경로 | 권한 | 설명 |
+|---|---|---|
+| GET `/knowledge-bases/{kb}/sources` | 소유자·관리자·제작자·운영자 | 소유 소스 목록(가져오는 중이면 진행 상황) |
+| POST `/knowledge-bases/{kb}/sources` `{type, name?, config, schedule?, sync_now?=true}` | 소유자·관리자·제작자 | 만들고 바로 가져오기 시작 |
+| PATCH `/knowledge-bases/{kb}/sources/{sid}` `{name?, config?, schedule?}` | 소유자·관리자·제작자 | 이름·설정·매일 동기화 |
+| DELETE `/knowledge-bases/{kb}/sources/{sid}?delete_documents=false` | 소유자·관리자·제작자 | `true`면 이 소스로 가져온 문서도 삭제 |
+| POST `/knowledge-bases/{kb}/sources/{sid}/sync` | 소유자·관리자·제작자 | 지금 동기화(202). 이미 도는 중이면 409(20분 넘게 멈춘 것은 다시 시작 가능) |
+
+`config`:
+- **web**: `{url, depth 0~2, max_pages 1~50, include[], exclude[]}`. 같은 도메인만, `robots.txt` 준수(없으면 전체 허용, `Crawl-delay` 최대 5초), 정규 주소(조각·`utm_*`·꼬리 슬래시 정리, `<link rel=canonical>`)로 중복 제거, 쪽당 글 20만 자·응답 1MB 제한, 쪽 사이 0.3초(`GENIO_CRAWL_DELAY_SECONDS`). 모든 요청은 `safe_http`(사설 IP·localhost 차단, 리다이렉트 재검사).
+- **notion**: `{credential_id(커넥터 'notion'의 내부 통합 토큰), targets[주소 또는 32자리 id], include_children}`. `api.notion.com`만 호출(`Notion-Version: 2022-06-28`), 블록(깊이 3·500개까지)을 마크다운으로 변환, 데이터베이스는 안의 페이지를 모두 가져옴(최대 100쪽). `last_edited_time`이 같으면 블록을 다시 읽지 않는다. 토큰은 응답·기록에 나오지 않는다.
+- **google**: `{urls[], name?}`. `docs.google.com`의 문서(txt)·시트(csv → `머리글: 값` 줄)·슬라이드(txt), `drive.google.com` 파일(PDF·텍스트). 로그인 화면(HTML)이나 401·403·404면 "링크가 있는 모든 사용자로 공유" 안내와 함께 실패. 개인 드라이브(OAuth)는 범위 밖.
+
+동기화는 Celery(`genio.sync_kb_source`)에서 돌고, 같은 쪽은 문서를 늘리지 않으며 내용 해시가 바뀐 쪽만 다시 임베딩한다. 가져오기 기록은 `doc_metadata`의 밑줄 키(`_source_id`·`_source_key`·`_content_hash`·`_edited`)에 두며 화면·검색 결과·꼬리표 수정에서 숨기고 보존한다. `schedule=daily`는 beat(`genio.sync_due_sources`, 1시간마다)가 23시간 지난 소스를 다시 동기화한다. 문서의 `source`는 `web`·`notion`·`google`.
+
+### 외부 지식베이스
+| 메서드·경로 | 권한 | 설명 |
+|---|---|---|
+| POST `/workspaces/{ws}/knowledge-bases` `{name, kind:"external", external:{endpoint, knowledge_id, credential_id?}}` | 소유자·관리자·제작자 | 외부 지식베이스 만들기. `credential_id`는 이 워크스페이스의 'HTTP 인증 정보'(Bearer 토큰). 목록·상세에 `kind`가 나온다 |
+| POST `/workspaces/{ws}/knowledge-bases/external/test` `{endpoint, knowledge_id, credential_id?, query?}` | 소유자·관리자·제작자 | 저장 전 연결 시험 `{ok, message, hint, records, ms, sample[]}` |
+| POST `/knowledge-bases/{kb}/external/test` | 소유자·관리자·제작자 | 저장된 연결 시험(일반 지식베이스면 409) |
+| PUT `/knowledge-bases/{kb}/external` `{endpoint, knowledge_id, credential_id?}` | 소유자·관리자·제작자 | 연결 고치기 |
+
+검색은 Dify External Knowledge API 모양이다. `POST {endpoint}/retrieval`(끝의 `/retrieval`은 겹치지 않게 정리) · `Authorization: Bearer <토큰>` · 본문 `{"knowledge_id", "query", "retrieval_setting": {"top_k", "score_threshold"}}` → `{"records": [{"content", "score", "title", "metadata"}]}`. 결과는 일반 검색과 같은 모양(`content`·`matched`·`score`·`filename`(=title)·`metadata`, `external: true`)이라 `knowledge_search` 단계(`results`·`context`)와 검색 시험·에이전트가 그대로 쓴다. 외부 지식베이스에는 문서 올리기·URL 가져오기·질문답 표·소스·다시 나누기·미리 보기·튜닝이 409로 막힌다. 호출은 `safe_http`를 거치므로 사설망 주소는 `GENIO_ALLOW_PRIVATE_NETWORK` 없이는 막힌다.
+
+### 검색 튜닝
+| 메서드·경로 | 권한 | 설명 |
+|---|---|---|
+| GET `/knowledge-bases/{kb}/tuning` | 소유자·관리자·제작자·운영자 | `{questions[], last_run, estimate, current(검색 설정), max_questions}` |
+| PUT `/knowledge-bases/{kb}/tuning/questions` `{questions:[{id?, question, expect_keyword, expect_document_id}]}` | 소유자·관리자·제작자 | 최대 30개. 질문마다 `expect_keyword`나 `expect_document_id`가 하나 이상 있어야 하고, 문서는 이 지식베이스의 것이어야 한다 |
+| POST `/knowledge-bases/{kb}/tuning/run` `{include_rerank?, confirm_rerank?}` | 소유자·관리자·제작자 | 조합 비교. 재정렬은 `confirm_rerank=true`가 있어야 한다(없으면 422 비용 안내) |
+
+조합: 검색 방식 3(vector·keyword·hybrid) × 개수 3(3·5·8) = 9, 재정렬을 켜면 방식마다 5개 재정렬 조합 3개를 더해 12. 방식마다 검색을 한 번(8개)만 하고 3·5·8개 자르기는 같은 결과로 계산한다(점수 기준은 지금 설정). 응답 `{at, questions, include_rerank, threshold, rows[{method, top_k, rerank, hit_rate, hits, avg_top_score, avg_ms, is_best, is_current}], best, current_row, suggested_threshold, errors, truncated}`. 적중률 = 정답(낱말 포함 또는 지정 문서)이 상위 k개 안에 있는 질문 비율, 가장 좋음 = 적중률 → 평균 최고 점수 → 평균 시간 순. `current_row`는 지금 설정(개수가 8 넘으면 8로)을 같은 결과로 계산한 비교 기준. 적용은 기존 `PATCH /knowledge-bases/{kb}`의 `settings.retrieval`을 쓴다. 150초가 넘으면 `truncated`.
+
+### 지식 사용 한도
+| 메서드·경로 | 권한 | 설명 |
+|---|---|---|
+| GET `/workspaces/{ws}/knowledge/usage` | 소유자·관리자·제작자·운영자 | `{usage{documents, bytes}, limits{max_documents, max_total_mb, max_writes_per_min}, can_edit, labels}` |
+| PUT `/workspaces/{ws}/knowledge/limits` `{max_documents?, max_total_mb?, max_writes_per_min?}` | 소유자·관리자 | 0 = 제한 없음. `workspace.settings.knowledge_limits`에 저장 |
+
+기본 한도는 문서 2,000개·전체 2,048MB·분당 120번. 파일 올리기·웹 주소·질문답 표·소스 만들기·소스 동기화(문서마다)가 한도를 지키며, 넘는 새 문서만 막는다(문서·크기 409, 분당 429, 두 줄 안내). 이미 있는 문서는 그대로 둔다.

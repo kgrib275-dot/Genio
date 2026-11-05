@@ -38,6 +38,8 @@ class Settings(BaseSettings):
     genio_code_node_timeout_seconds: float = 10.0
     genio_node_timeout_seconds: float = 60.0
     genio_run_timeout_seconds: float = 600.0
+    # v0.8: 웹사이트 가져오기에서 쪽과 쪽 사이에 쉬는 시간(초). 상대 서버를 배려한다
+    genio_crawl_delay_seconds: float = 0.3
     # 운영 준비: 화면에 보일 버전(빌드할 때 커밋 짧은 해시를 넣음), 백업 폴더(status.json을 읽음)
     genio_version: str = "dev"
     genio_backup_dir: str = "/backups"

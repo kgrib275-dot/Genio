@@ -12,6 +12,19 @@ from api.config import get_settings
 EXECUTE_RUN = "genio.execute_run"
 PROCESS_DOCUMENT = "genio.process_document"
 SUMMARIZE_CONVERSATION = "genio.summarize_conversation"
+SYNC_KB_SOURCE = "genio.sync_kb_source"
+
+
+def enqueue_source_sync(kb_id: str, source_id: str) -> None:
+    """v0.8 지식 가져오기 소스를 워커에서 동기화한다(시험에서는 바로 실행)."""
+    if get_settings().genio_run_inline:
+        from api.db import SessionLocal
+        from api.services.kb_sources import sync_source
+
+        with SessionLocal() as db:
+            sync_source(db, kb_id, source_id)
+        return
+    _client().send_task(SYNC_KB_SOURCE, args=[kb_id, source_id])
 
 
 def enqueue_summary(conversation_id: str) -> None:

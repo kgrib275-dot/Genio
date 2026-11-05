@@ -1,8 +1,14 @@
 import {
   BookOpen,
+  ChevronDown,
+  CloudDownload,
   Eye,
   EyeOff,
+  FileSpreadsheet,
   FileText,
+  FlaskConical,
+  NotebookText,
+  PlugZap,
   Globe,
   Layers,
   ListOrdered,
@@ -53,6 +59,11 @@ import { useProjects } from "@/lib/api/v3";
 import { useCreateKnowledgeBaseV5, useEmbeddingModels, useToggleDocument } from "@/lib/api/v5b";
 import { canEdit, useSession } from "@/store/session";
 import { EmptyState } from "@/components/EmptyState";
+import { isExternalKb, type SourceType } from "@/lib/api/v8kb";
+import { ExternalKbCard, ExternalKbDialog } from "@/pages/knowledge/KbExternal";
+import { SourcesCard } from "@/pages/knowledge/KbSourcesPanel";
+import { TuningCard } from "@/pages/knowledge/KbTuning";
+import { UsageBar } from "@/pages/knowledge/KbUsage";
 
 const METHOD_LABEL: Record<RetrievalMethod, string> = {
   vector: "의미",
@@ -89,6 +100,8 @@ function DocRow({
   reprocessing: boolean;
 }) {
   const enabled = (d as KbDocumentV2 & { enabled?: boolean }).enabled !== false;
+  // v0.8: 가져오기 소스(web·notion·google)도 있어 넓은 글자로 비교한다
+  const src: string = d.source ?? "upload";
   return (
     <li
       className={`flex flex-wrap items-center gap-x-3 gap-y-1.5 px-4 py-3 text-sm sm:px-5 ${
@@ -96,8 +109,12 @@ function DocRow({
       }`}
     >
       <span className="flex min-w-0 flex-1 basis-48 items-center gap-1.5">
-        {d.source === "url" ? (
+        {src === "url" || src === "web" ? (
           <Globe className="h-3.5 w-3.5 shrink-0 text-slate-400" />
+        ) : src === "notion" ? (
+          <NotebookText className="h-3.5 w-3.5 shrink-0 text-slate-400" />
+        ) : src === "google" ? (
+          <FileSpreadsheet className="h-3.5 w-3.5 shrink-0 text-slate-400" />
         ) : (
           <FileText className="h-3.5 w-3.5 shrink-0 text-slate-400" />
         )}
@@ -288,6 +305,10 @@ function KbDetail({ ws, kb, editable }: { ws: string; kb: KnowledgeBaseV2; edita
   const fileRef = useRef<HTMLInputElement>(null);
   const settings = normalizeKbSettings(kb.settings);
   const [dialog, setDialog] = useState<"settings" | "url" | "pipeline" | "qa" | null>(null);
+  const [tab, setTab] = useState<"docs" | "search" | "tune">("docs");
+  const [adding, setAdding] = useState<SourceType | null>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const external = isExternalKb(kb);
   const [metaDoc, setMetaDoc] = useState<KbDocumentV2 | null>(null);
   const [chunkDoc, setChunkDoc] = useState<KbDocumentV2 | null>(null);
   const docList = (docs.data ?? []) as KbDocumentV2[];
@@ -314,7 +335,10 @@ function KbDetail({ ws, kb, editable }: { ws: string; kb: KnowledgeBaseV2; edita
         label: "가져온 곳",
         options: [
           { value: "upload", label: "파일" },
-          { value: "url", label: "웹 페이지" },
+          { value: "url", label: "웹 페이지 1쪽" },
+          { value: "web", label: "웹사이트" },
+          { value: "notion", label: "Notion" },
+          { value: "google", label: "Google 문서" },
           { value: "qa_table", label: "질문·답 표" },
         ],
         match: (d, v) => (d.source ?? "upload") === v,
@@ -322,122 +346,253 @@ function KbDetail({ ws, kb, editable }: { ws: string; kb: KnowledgeBaseV2; edita
     ],
   });
 
+  if (external) {
+    return (
+      <div className="min-w-0 space-y-6">
+        <ExternalKbCard ws={ws} kb={kb} editable={editable} />
+        {editable && <SearchCard key={kb.id} kb={kb} />}
+      </div>
+    );
+  }
+
+  const tabs: { id: "docs" | "search" | "tune"; label: string; icon: typeof Globe }[] = [
+    { id: "docs", label: "문서·가져오기", icon: FileText },
+    ...(editable
+      ? [
+          { id: "search" as const, label: "검색 시험", icon: Search },
+          { id: "tune" as const, label: "검색 튜닝", icon: FlaskConical },
+        ]
+      : []),
+  ];
+
   return (
     <div className="min-w-0 space-y-6">
-      <Card>
-        <CardHeader
-          title={kb.name}
-          description={`${{ general: "일반", parent_child: "부모-자식", qa: "질문·답" }[settings.chunk_mode]} 조각 ${settings.chunk_size}자 · ${METHOD_LABEL[settings.retrieval.method]} 검색 · 임베딩 ${kb.embedding_model}`}
-          action={
-            editable && (
-              <div className="flex flex-wrap gap-2">
-                <Button size="sm" variant="outline" onClick={() => setDialog("settings")}>
-                  <Settings2 className="h-3.5 w-3.5" /> 설정
-                </Button>
-                <Button size="sm" variant="outline" onClick={() => setDialog("pipeline")}>
-                  <ListOrdered className="h-3.5 w-3.5" /> 처리 순서
-                </Button>
-                <Button size="sm" variant="outline" onClick={() => setDialog("url")}>
-                  <Globe className="h-3.5 w-3.5" /> 웹 페이지
-                </Button>
-                <Button size="sm" variant="outline" onClick={() => setDialog("qa")}>
-                  <MessagesSquare className="h-3.5 w-3.5" /> 질문·답 표
-                </Button>
-                <input
-                  ref={fileRef}
-                  type="file"
-                  accept=".pdf,.txt,.md,.docx,.pptx,.xlsx,.html,.htm,application/pdf,text/plain,text/markdown,text/html,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.presentationml.presentation,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                  multiple
-                  className="hidden"
-                  aria-label="문서 파일"
-                  onChange={(e) => {
-                    const files = Array.from(e.target.files ?? []);
-                    e.target.value = "";
-                    if (!files.length) return;
-                    // 여러 파일을 차례로 올리고 진행 상황을 보여 준다
-                    void (async () => {
-                      let ok = 0;
-                      for (let i = 0; i < files.length; i++) {
-                        setProgress({ done: i, total: files.length });
-                        try {
-                          await upload.mutateAsync(files[i] as File);
-                          ok += 1;
-                        } catch (err) {
-                          toast.error(err);
-                        }
-                      }
-                      setProgress(null);
-                      if (ok)
-                        toast.success(`${ok}개를 올렸어요. 처리가 끝나면 '준비됨'으로 바뀌어요.`);
-                    })();
-                  }}
-                />
-                <Button
-                  size="sm"
-                  disabled={Boolean(progress) || upload.isPending}
-                  onClick={() => fileRef.current?.click()}
-                >
-                  <Upload className="h-3.5 w-3.5" />
-                  {progress ? `올리는 중 ${progress.done + 1}/${progress.total}` : "문서 올리기"}
-                </Button>
-              </div>
-            )
-          }
-        />
-        <CardBody className="p-0">
-          {docs.isLoading && <Loading />}
-          <ErrorBox error={docs.error} />
-          {docs.data?.length === 0 && (
-            <p className="px-5 py-6 text-sm text-slate-500">
-              PDF·DOCX·PPTX·XLSX·HTML·TXT·MD 파일을 올리거나 웹 페이지를 가져오면 질문에 답할 때
-              써요. 여러 파일을 한 번에 고를 수 있어요.
-            </p>
-          )}
-          {docList.length > 0 && (
-            <ListToolbar
-              c={dc}
-              placeholder="파일 이름·주소·정보로 찾기"
-              className="border-t border-slate-100 px-4 py-3 sm:px-5"
+      {tabs.length > 1 && (
+        <div
+          role="tablist"
+          aria-label="지식베이스 화면"
+          className="flex gap-1 border-b border-slate-200"
+        >
+          {tabs.map((t) => (
+            <button
+              key={t.id}
+              type="button"
+              role="tab"
+              aria-selected={tab === t.id}
+              onClick={() => setTab(t.id)}
+              className={cn(
+                "-mb-px inline-flex items-center gap-1.5 border-b-2 px-3 py-2 text-sm",
+                tab === t.id
+                  ? "border-indigo-600 font-semibold text-indigo-700"
+                  : "border-transparent text-slate-500 hover:text-slate-800",
+              )}
+            >
+              <t.icon className="h-3.5 w-3.5" /> {t.label}
+            </button>
+          ))}
+        </div>
+      )}
+      {tab === "docs" && (
+        <>
+          <Card>
+            <CardHeader
+              title={kb.name}
+              description={`${{ general: "일반", parent_child: "부모-자식", qa: "질문·답" }[settings.chunk_mode]} 조각 ${settings.chunk_size}자 · ${METHOD_LABEL[settings.retrieval.method]} 검색 · 임베딩 ${kb.embedding_model}`}
+              action={
+                editable && (
+                  <div className="flex flex-wrap gap-2">
+                    <Button size="sm" variant="outline" onClick={() => setDialog("settings")}>
+                      <Settings2 className="h-3.5 w-3.5" /> 설정
+                    </Button>
+                    <Button size="sm" variant="outline" onClick={() => setDialog("pipeline")}>
+                      <ListOrdered className="h-3.5 w-3.5" /> 처리 순서
+                    </Button>
+                    <div className="relative">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        aria-haspopup="menu"
+                        aria-expanded={menuOpen}
+                        onClick={() => setMenuOpen((v) => !v)}
+                      >
+                        <CloudDownload className="h-3.5 w-3.5" /> 자료 추가{" "}
+                        <ChevronDown className="h-3 w-3" />
+                      </Button>
+                      {menuOpen && (
+                        <>
+                          <button
+                            type="button"
+                            aria-label="메뉴 닫기"
+                            className="fixed inset-0 z-10 cursor-default"
+                            onClick={() => setMenuOpen(false)}
+                          />
+                          <ul
+                            role="menu"
+                            className="absolute right-0 z-20 mt-1 w-60 overflow-hidden rounded-xl border border-slate-200 bg-white py-1 text-sm shadow-lg"
+                          >
+                            {(
+                              [
+                                [
+                                  "파일 올리기",
+                                  "PDF·DOCX·PPTX·XLSX·TXT…",
+                                  FileText,
+                                  () => fileRef.current?.click(),
+                                ],
+                                ["웹 페이지 1쪽", "주소 하나의 글", Globe, () => setDialog("url")],
+                                [
+                                  "웹사이트 가져오기",
+                                  "여러 쪽을 따라가며",
+                                  CloudDownload,
+                                  () => setAdding("web"),
+                                ],
+                                [
+                                  "Notion",
+                                  "페이지·데이터베이스 동기화",
+                                  NotebookText,
+                                  () => setAdding("notion"),
+                                ],
+                                [
+                                  "공개 Google 문서",
+                                  "문서·시트·슬라이드",
+                                  FileSpreadsheet,
+                                  () => setAdding("google"),
+                                ],
+                                ["질문·답 표", "CSV·XLSX", MessagesSquare, () => setDialog("qa")],
+                              ] as const
+                            ).map(([label, sub, Icon, run]) => (
+                              <li key={label} role="none">
+                                <button
+                                  type="button"
+                                  role="menuitem"
+                                  className="flex w-full items-start gap-2 px-3 py-2 text-left hover:bg-slate-50"
+                                  onClick={() => {
+                                    setMenuOpen(false);
+                                    run();
+                                  }}
+                                >
+                                  <Icon className="mt-0.5 h-3.5 w-3.5 shrink-0 text-slate-400" />
+                                  <span>
+                                    <span className="block font-medium text-slate-800">
+                                      {label}
+                                    </span>
+                                    <span className="block text-xs text-slate-500">{sub}</span>
+                                  </span>
+                                </button>
+                              </li>
+                            ))}
+                          </ul>
+                        </>
+                      )}
+                    </div>
+                    <input
+                      ref={fileRef}
+                      type="file"
+                      accept=".pdf,.txt,.md,.docx,.pptx,.xlsx,.html,.htm,application/pdf,text/plain,text/markdown,text/html,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.presentationml.presentation,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                      multiple
+                      className="hidden"
+                      aria-label="문서 파일"
+                      onChange={(e) => {
+                        const files = Array.from(e.target.files ?? []);
+                        e.target.value = "";
+                        if (!files.length) return;
+                        // 여러 파일을 차례로 올리고 진행 상황을 보여 준다
+                        void (async () => {
+                          let ok = 0;
+                          for (let i = 0; i < files.length; i++) {
+                            setProgress({ done: i, total: files.length });
+                            try {
+                              await upload.mutateAsync(files[i] as File);
+                              ok += 1;
+                            } catch (err) {
+                              toast.error(err);
+                            }
+                          }
+                          setProgress(null);
+                          if (ok)
+                            toast.success(
+                              `${ok}개를 올렸어요. 처리가 끝나면 '준비됨'으로 바뀌어요.`,
+                            );
+                        })();
+                      }}
+                    />
+                    <Button
+                      size="sm"
+                      disabled={Boolean(progress) || upload.isPending}
+                      onClick={() => fileRef.current?.click()}
+                    >
+                      <Upload className="h-3.5 w-3.5" />
+                      {progress
+                        ? `올리는 중 ${progress.done + 1}/${progress.total}`
+                        : "문서 올리기"}
+                    </Button>
+                  </div>
+                )
+              }
             />
-          )}
-          <NoMatch c={dc} />
-          <ul className="divide-y divide-slate-100 border-t border-slate-100">
-            {dc.pageItems.map((d) => (
-              <DocRow
-                key={d.id}
-                d={d}
-                editable={editable}
-                reprocessing={reprocess.isPending}
-                onChunks={() => setChunkDoc(d)}
-                onMeta={() => setMetaDoc(d)}
-                onReprocess={() =>
-                  reprocess.mutate(d.id, {
-                    onSuccess: () => toast.success("다시 나누는 중이에요."),
-                    onError: (err) => toast.error(err),
-                  })
-                }
-                onDelete={() => {
-                  if (window.confirm(`'${d.filename}'을(를) 지울까요?`)) delDoc.mutate(d.id);
-                }}
-                onToggle={(on) =>
-                  toggle.mutate(
-                    { id: d.id, enabled: on },
-                    {
-                      onSuccess: () =>
-                        toast.success(on ? "검색에 다시 써요." : "이 문서는 검색에서 빠져요."),
-                      onError: (err) => toast.error(err),
-                    },
-                  )
-                }
-              />
-            ))}
-          </ul>
-          {docList.length > 0 && (
-            <ListPager c={dc} className="border-t border-slate-100 px-4 py-2.5 sm:px-5" />
-          )}
-        </CardBody>
-      </Card>
-      {editable && <SearchCard key={kb.id} kb={kb} />}
+            <CardBody className="p-0">
+              {docs.isLoading && <Loading />}
+              <ErrorBox error={docs.error} />
+              {docs.data?.length === 0 && (
+                <p className="px-5 py-6 text-sm text-slate-500">
+                  PDF·DOCX·PPTX·XLSX·HTML·TXT·MD 파일을 올리거나 웹 페이지를 가져오면 질문에 답할 때
+                  써요. 여러 파일을 한 번에 고를 수 있어요.
+                </p>
+              )}
+              {docList.length > 0 && (
+                <ListToolbar
+                  c={dc}
+                  placeholder="파일 이름·주소·정보로 찾기"
+                  className="border-t border-slate-100 px-4 py-3 sm:px-5"
+                />
+              )}
+              <NoMatch c={dc} />
+              <ul className="divide-y divide-slate-100 border-t border-slate-100">
+                {dc.pageItems.map((d) => (
+                  <DocRow
+                    key={d.id}
+                    d={d}
+                    editable={editable}
+                    reprocessing={reprocess.isPending}
+                    onChunks={() => setChunkDoc(d)}
+                    onMeta={() => setMetaDoc(d)}
+                    onReprocess={() =>
+                      reprocess.mutate(d.id, {
+                        onSuccess: () => toast.success("다시 나누는 중이에요."),
+                        onError: (err) => toast.error(err),
+                      })
+                    }
+                    onDelete={() => {
+                      if (window.confirm(`'${d.filename}'을(를) 지울까요?`)) delDoc.mutate(d.id);
+                    }}
+                    onToggle={(on) =>
+                      toggle.mutate(
+                        { id: d.id, enabled: on },
+                        {
+                          onSuccess: () =>
+                            toast.success(on ? "검색에 다시 써요." : "이 문서는 검색에서 빠져요."),
+                          onError: (err) => toast.error(err),
+                        },
+                      )
+                    }
+                  />
+                ))}
+              </ul>
+              {docList.length > 0 && (
+                <ListPager c={dc} className="border-t border-slate-100 px-4 py-2.5 sm:px-5" />
+              )}
+            </CardBody>
+          </Card>
+          <SourcesCard
+            ws={ws}
+            kbId={kb.id}
+            editable={editable}
+            adding={adding}
+            onCloseAdd={() => setAdding(null)}
+          />
+        </>
+      )}
+      {tab === "search" && editable && <SearchCard key={kb.id} kb={kb} />}
+      {tab === "tune" && editable && <TuningCard kbId={kb.id} docs={docList} editable={editable} />}
       {dialog === "settings" && (
         <KbSettingsDialog ws={ws} kb={kb} open onClose={() => setDialog(null)} />
       )}
@@ -467,6 +622,7 @@ export default function KnowledgePage() {
   const [selected, setSelected] = useState<string>("");
   const [name, setName] = useState("");
   const [newProject, setNewProject] = useState("");
+  const [connecting, setConnecting] = useState(false);
   const projectById = new Map(projectList.map((p) => [p.id, p]));
   // 프로젝트로 걸러 보는 중이면 새 지식베이스도 그 프로젝트에 만든다
   useEffect(() => {
@@ -494,6 +650,7 @@ export default function KnowledgePage() {
         help={<HelpButton page="knowledge" />}
       />
       <ErrorBox error={kbs.error} />
+      <UsageBar ws={ws} />
       <div className="grid gap-6 md:grid-cols-[240px_1fr]">
         <div className="space-y-3">
           {editable && (
@@ -563,7 +720,21 @@ export default function KnowledgePage() {
                 </Select>
               )}
               <ErrorBox error={create.error} />
+              <Button variant="outline" className="w-full" onClick={() => setConnecting(true)}>
+                <PlugZap className="h-4 w-4" /> 외부 지식베이스 연결
+              </Button>
             </form>
+          )}
+          {connecting && (
+            <ExternalKbDialog
+              ws={ws}
+              projectId={newProject || undefined}
+              onClose={() => setConnecting(false)}
+              onCreated={(id) => {
+                setConnecting(false);
+                setSelected(id);
+              }}
+            />
           )}
           {(projectList.length > 0 || projectFilter) && (
             <Field label="프로젝트로 보기" htmlFor="kb-project-filter">
@@ -605,7 +776,11 @@ export default function KnowledgePage() {
                     />
                   )}
                   {k.name}
-                  <span className="ml-1 text-xs text-slate-400">({k.document_count})</span>
+                  {isExternalKb(k as KnowledgeBaseV2) ? (
+                    <span className="ml-1 text-[11px] text-indigo-500">외부</span>
+                  ) : (
+                    <span className="ml-1 text-xs text-slate-400">({k.document_count})</span>
+                  )}
                   <span className="hidden text-[11px] text-slate-400 md:block">
                     {formatDate(k.created_at)}
                   </span>

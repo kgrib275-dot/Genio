@@ -203,6 +203,12 @@ KB_DEFAULTS: dict[str, Any] = {
     # v0.6: 질문·답 형식에서 AI가 조각마다 만들 쌍 수, 문서 처리 순서(kb_pipeline)
     "qa_pairs_per_chunk": 3,
     "pipeline": None,
+    # v0.8: 지식베이스 종류(internal | external), 외부 지식베이스 연결, 가져오기 소스, 검색 튜닝.
+    # 이 네 가지는 전용 API로만 바꾼다(PATCH 설정에서는 무시).
+    "kind": "internal",
+    "external": None,
+    "sources": [],
+    "tuning": {"questions": [], "last_run": None},
     "retrieval": {
         "method": "vector",
         "top_k": 4,
@@ -238,10 +244,16 @@ def patch_kb_settings(kb: KnowledgeBase, patch: dict[str, Any]) -> dict[str, Any
     return cur
 
 
+# 전용 API로만 바꾸는 설정(일반 설정 저장으로는 바꿀 수 없다)
+PROTECTED_KEYS = ("kind", "external", "sources", "tuning")
+
+
 def merged_settings(kb: KnowledgeBase, patch: dict[str, Any]) -> dict[str, Any]:
     """저장하지 않고 patch를 더한 설정(미리 보기에도 쓴다). 잘못된 정규식은 PipelineError."""
     cur = kb_settings(kb)
     for k, v in patch.items():
+        if k in PROTECTED_KEYS:
+            continue
         if k == "retrieval" and isinstance(v, dict):
             cur["retrieval"].update({kk: vv for kk, vv in v.items() if kk in cur["retrieval"]})
         elif k in cur:
@@ -444,16 +456,28 @@ def search(
     method: str | None = None,
     score_threshold: float | None = None,
     metadata_filter: dict[str, Any] | None = None,
+    rerank: bool | None = None,
 ) -> list[dict[str, Any]]:
     kb = db.get(KnowledgeBase, kb_id)
     if kb is None or kb.workspace_id != workspace_id:
         raise NodeError("지식베이스를 찾을 수 없어요. 단계 설정에서 다시 골라 주세요.")
     if not query.strip():
         return []
-    cfg = kb_settings(kb)["retrieval"]
+    full = kb_settings(kb)
+    cfg = full["retrieval"]
     method = method or str(cfg["method"])
     k = int(top_k or cfg["top_k"])
     threshold = float(cfg["score_threshold"] if score_threshold is None else score_threshold)
+    if full["kind"] == "external":
+        from api.services.kb_external import retrieve
+
+        ext = full["external"]
+        if not isinstance(ext, dict):
+            raise NodeError(
+                "외부 지식베이스 연결 정보가 없어요. 지식베이스 설정을 다시 확인하세요."
+            )
+        return retrieve(db, workspace_id, ext, query, k, threshold)
+    use_rerank = bool(cfg["rerank"]) if rerank is None else bool(rerank)
     weight = float(cfg["vector_weight"])
     docs = _allowed_docs(db, kb_id, metadata_filter)
     if not docs:
@@ -525,8 +549,8 @@ def search(
         ((chunk_by_id[c], s) for c, s in scores.items() if s >= threshold),
         key=lambda x: x[1],
         reverse=True,
-    )[: max(k, 1) * (3 if cfg["rerank"] else 1)]
-    if cfg["rerank"]:
+    )[: max(k, 1) * (3 if use_rerank else 1)]
+    if use_rerank:
         ranked = _rerank(db, workspace_id, query, ranked)
     ranked = ranked[:k]
     out = []
@@ -540,7 +564,11 @@ def search(
                 "content": c.parent_content or c.content,
                 "matched": c.content,
                 "score": round(score, 4),
-                "metadata": (d.doc_metadata if d else {}) or {},
+                "metadata": {
+                    k: v
+                    for k, v in ((d.doc_metadata if d else {}) or {}).items()
+                    if not str(k).startswith("_")
+                },
                 **(
                     {"question": c.metadata_.get("question"), "answer": c.metadata_.get("answer")}
                     if (c.metadata_ or {}).get("qa")

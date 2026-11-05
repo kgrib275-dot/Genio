@@ -16,6 +16,7 @@ from api.engine import safe_http
 from api.llm.catalog import catalog
 from api.models import Chunk, Document, KnowledgeBase
 from api.routers.projects import check_project_target
+from api.services import kb_limits
 from api.services import kb_pipeline as pipe
 from api.services import knowledge as svc
 from api.services.projects import hidden_project_ids
@@ -31,8 +32,10 @@ DocBuilders = Annotated[Ctx, Depends(require_role(EDIT_APPS, via="document"))]
 
 
 def _kb(kb: KnowledgeBase, count: int) -> dict[str, Any]:
+    settings = svc.kb_settings(kb)
     return {
-        "settings": svc.kb_settings(kb),
+        "kind": settings["kind"],
+        "settings": settings,
         "project_id": kb.project_id,
         "id": kb.id,
         "name": kb.name,
@@ -61,12 +64,23 @@ def list_kbs(ws: str, ctx: WsViewers, project: str | None = None) -> list[dict[s
     return [_kb(kb, n) for kb, n in rows if kb.project_id not in hidden]
 
 
+class ExternalIn(BaseModel):
+    """외부 지식베이스 연결(주소·지식 id·API 키가 든 연결 정보 id)."""
+
+    endpoint: str = Field(min_length=8, max_length=500)
+    knowledge_id: str = Field(min_length=1, max_length=200)
+    credential_id: str | None = Field(default=None, max_length=64)
+
+
 class KbIn(BaseModel):
     name: str = Field(min_length=1, max_length=100)
     chunk_size: int = Field(default=800, ge=200, le=4000)
     project_id: str | None = None
     # 지식베이스마다 고정(만든 뒤에는 바꿀 수 없음 — 바꾸면 이미 만든 조각과 비교할 수 없다)
     embedding_model: str | None = Field(default=None, max_length=100)
+    # v0.8: 외부 지식베이스(고객의 검색 서비스 연결). 문서를 올리지 않는다
+    kind: Literal["internal", "external"] = "internal"
+    external: ExternalIn | None = None
 
 
 def _embedding_model(name: str | None) -> str:
@@ -90,12 +104,24 @@ def embedding_models(user: CurrentUser) -> list[dict[str, Any]]:
 @router.post("/workspaces/{ws}/knowledge-bases")
 def create_kb(ws: str, body: KbIn, ctx: WsBuilders) -> dict[str, Any]:
     check_project_target(ctx, ws, body.project_id)
+    settings: dict[str, Any] = {}
+    if body.kind == "external":
+        if body.external is None:
+            raise AppError(
+                422,
+                "외부 지식베이스는 서비스 주소와 지식 id가 필요해요.",
+                "주소·지식 id·API 키(연결 정보)를 채워 주세요.",
+            )
+        from api.routers.knowledge_v08 import clean_external
+
+        settings = {"kind": "external", "external": clean_external(ctx.db, ws, body.external)}
     kb = KnowledgeBase(
         project_id=body.project_id or None,
         workspace_id=ws,
         name=body.name,
         embedding_model=_embedding_model(body.embedding_model),
         chunk_size=body.chunk_size,
+        settings=settings,
     )
     ctx.db.add(kb)
     audit(
@@ -130,6 +156,17 @@ def delete_kb(kb_id: str, ctx: KbBuilders) -> Response:
     return Response(status_code=204)
 
 
+def visible_meta(meta: dict[str, Any] | None) -> dict[str, Any]:
+    """화면·검색에 보일 꼬리표(밑줄로 시작하는 가져오기 기록은 숨긴다)."""
+    return {k: v for k, v in (meta or {}).items() if not str(k).startswith("_")}
+
+
+def _internal_only(ctx: Ctx, kb_id: str) -> KnowledgeBase:
+    from api.routers.knowledge_v08 import internal_kb
+
+    return internal_kb(ctx, kb_id)
+
+
 def _doc(d: Document, chunks: int) -> dict[str, Any]:
     return {
         "id": d.id,
@@ -141,7 +178,7 @@ def _doc(d: Document, chunks: int) -> dict[str, Any]:
         "error": d.error,
         "created_at": d.created_at,
         "chunk_count": chunks,
-        "metadata": d.doc_metadata or {},
+        "metadata": visible_meta(d.doc_metadata),
         "source": d.source,
         "url": d.url,
         "enabled": d.enabled,
@@ -163,6 +200,8 @@ async def upload_document(
     content = await file.read(svc.MAX_UPLOAD_BYTES + 1)
     if len(content) > svc.MAX_UPLOAD_BYTES:
         raise AppError(413, "파일이 너무 커요(최대 20MB).", "파일을 나눠서 올려 주세요.")
+    _internal_only(ctx, kb_id)
+    kb_limits.check_write(ctx.db, ctx.workspace_id, docs=1, size=len(content))
     doc = Document(
         kb_id=kb_id,
         filename=filename,
@@ -288,6 +327,7 @@ class UrlIn(BaseModel):
 
 @router.post("/knowledge-bases/{kb_id}/documents/url")
 def import_url(kb_id: str, body: UrlIn, ctx: KbBuilders) -> dict[str, Any]:
+    _internal_only(ctx, kb_id)
     try:
         res = safe_http.request("GET", body.url.strip())
     except NodeError as exc:
@@ -306,6 +346,7 @@ def import_url(kb_id: str, body: UrlIn, ctx: KbBuilders) -> dict[str, Any]:
             422, "페이지에서 글을 거의 찾지 못했어요.", "글이 많은 다른 페이지를 써 보세요."
         )
     name = (title or body.url)[:200]
+    kb_limits.check_write(ctx.db, ctx.workspace_id, docs=1, size=len(body_text.encode("utf-8")))
     doc = Document(
         kb_id=kb_id,
         filename=f"{name}.txt" if not name.endswith(".txt") else name,
@@ -346,8 +387,15 @@ def update_document(document_id: str, body: DocPatch, ctx: DocBuilders) -> dict[
     if doc is None:
         raise not_found("문서")
     if body.metadata is not None:
+        # 가져오기 기록(밑줄 키)은 사용자가 고친 꼬리표 목록에 없어도 남긴다
+        keep = {k: v for k, v in (doc.doc_metadata or {}).items() if str(k).startswith("_")}
         doc.doc_metadata = {
-            str(k)[:50]: str(v)[:200] for k, v in list(body.metadata.items())[:30] if str(k).strip()
+            **{
+                str(k)[:50]: str(v)[:200]
+                for k, v in list(body.metadata.items())[:30]
+                if str(k).strip() and not str(k).startswith("_")
+            },
+            **keep,
         }
     if body.enabled is not None:
         doc.enabled = body.enabled
@@ -465,6 +513,8 @@ async def import_qa_table(
 ) -> dict[str, Any]:
     """질문·답 표 가져오기: 한 줄이 조각 하나(질문으로 찾고 답을 돌려줌)."""
     filename, content = await _read_table_file(file)
+    _internal_only(ctx, kb_id)
+    kb_limits.check_write(ctx.db, ctx.workspace_id, docs=1, size=len(content))
     try:
         pairs = pipe.qa_pairs_from_table(content, filename, question_column, answer_column)
         header = pipe.read_table(content, filename)[0]
@@ -517,6 +567,7 @@ async def preview_pipeline(
     kb = ctx.db.get(KnowledgeBase, kb_id)
     if kb is None:
         raise not_found("지식베이스")
+    _internal_only(ctx, kb_id)
     try:
         patch = json.loads(settings) if settings else {}
     except ValueError as exc:
@@ -585,6 +636,7 @@ async def preview_pipeline(
 @router.post("/knowledge-bases/{kb_id}/reprocess")
 def reprocess_kb(kb_id: str, ctx: KbBuilders) -> dict[str, Any]:
     """모든 문서를 지금 처리 순서로 다시 나눈다(워커에서)."""
+    _internal_only(ctx, kb_id)
     docs = list(ctx.db.scalars(select(Document).where(Document.kb_id == kb_id)))
     for d in docs:
         d.status = "uploaded"
