@@ -1,9 +1,10 @@
-"""v0.6 외부 추적 설정(소유자·관리자): Langfuse·LangSmith 키 저장(암호화·마스킹), 연결 시험."""
+"""외부 추적 설정(소유자·관리자, v0.6 → v0.9 확대): 여러 추적 서비스(Langfuse·LangSmith·OpenTelemetry·
+Phoenix·Arize·Opik·Weave) 키 저장(암호화·마스킹), 표본·실패만·내용 포함 설정, 연결 시험."""
 
-from typing import Annotated, Any, Literal
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from api.core.audit import audit
 from api.core.errors import not_found
@@ -28,6 +29,10 @@ def get_tracing(ws: str, ctx: Managers) -> dict[str, Any]:
 
 
 class TracingIn(BaseModel):
+    # v0.9: 서비스 목록(통째로 바꾼다. 빠진 서비스는 지운다)과 내용 포함 여부
+    include_content: bool | None = None
+    providers: list[dict[str, Any]] | None = Field(default=None, max_length=20)
+    # v0.6 모양(옛 화면·스크립트용): 목록을 보내지 않으면 이 값으로 Langfuse·LangSmith만 고친다
     langfuse: dict[str, Any] | None = None
     langsmith: dict[str, Any] | None = None
 
@@ -44,8 +49,8 @@ def put_tracing(ws: str, body: TracingIn, ctx: Managers) -> dict[str, Any]:
         target_type="workspace",
         target_id=ws,
         meta={
-            "langfuse": out["langfuse"]["enabled"],
-            "langsmith": out["langsmith"]["enabled"],
+            "enabled": [p["kind"] for p in out["providers"] if p["enabled"]],
+            "include_content": out["include_content"],
         },
     )
     ctx.db.commit()
@@ -53,7 +58,8 @@ def put_tracing(ws: str, body: TracingIn, ctx: Managers) -> dict[str, Any]:
 
 
 class TestIn(BaseModel):
-    target: Literal["langfuse", "langsmith"]
+    # 서비스 id. 옛 화면은 "langfuse"·"langsmith"를 보낸다
+    target: str = Field(min_length=1, max_length=64)
 
 
 @router.post("/workspaces/{ws}/tracing/test")
