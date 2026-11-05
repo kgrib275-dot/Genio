@@ -8,6 +8,8 @@ export const TRIGGER: Record<string, string> = {
   api: "API",
   schedule: "예약",
   batch: "일괄",
+  service: "서비스 이벤트",
+  webhook: "외부에서 받기",
 };
 
 /** 실행·단계 상태 이름(필터 선택지용) */

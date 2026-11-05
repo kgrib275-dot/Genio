@@ -841,3 +841,65 @@ python scripts/genio_cli.py run gk-xxxxxxxx -i name=김    # 키를 첫 인자�
 ### 공통 화면 부품
 - 모든 대화상자(`components/ui/dialog.tsx`)는 Tab 키를 창 안에 가두고, 열릴 때 본문 첫 입력으로 포커스를 옮기며, 닫으면 열기 전 자리로 돌려준다(`lib/useFocusTrap.ts`).
 - 단축키는 `lib/shortcuts.ts`가 한곳에서 관리한다. 단축키 보기(Shift+?)와 캔버스 도움말이 같은 목록을 쓴다.
+
+## v0.9 서비스 이벤트 트리거·사람 단계 전달·시간 초과
+
+### 서비스 이벤트로 시작(ADR 0013)
+자동 실행(트리거)의 새 종류 `kind: "service"`. 서비스가 보내는 알림을 받아 흐름을 시작한다. 만들기·고치기·지우기·주소 다시 만들기·받은 값 보기는 기존 `/apps/{id}/triggers`, `/triggers/{id}` 경로를 그대로 쓴다(제작자 이상).
+
+| 요청 | 권한 | 설명 |
+|---|---|---|
+| GET /apps/{id}/service-presets | 제작자 이상 | 서비스 6개의 설정 안내·이벤트 칩·비밀값 종류(`key_origin`·`key_label`)·샘플 받은 값 `[{key, name, key_origin, key_label, events[{id,label}], instructions[], sample{headers,body}}]` |
+| POST /apps/{id}/triggers `{kind:"service", name?, config:{service, events?, mapping?, include_bot?, version?}, secret?}` | 제작자 이상 | `key_origin=generated`(GitHub·Telegram·Jira·Typeform)는 제니오가 비밀값을 만들어 **응답에서 한 번만** `secret`으로 준다. `provider`(Slack 서명 비밀값·Shopify 앱 비밀 키)는 `secret`을 꼭 보내야 하고(8자 이상) 응답에 되돌려 주지 않는다. 응답 `url`은 `/api/v1/events/{token}` |
+| POST /triggers/{id}/secret `{secret?}` | 제작자 이상 | generated는 새로 만들어 한 번 보여 준다(예전 값은 바로 거절). provider는 `secret`으로 바꿔 넣는다(없으면 422) |
+| POST /triggers/{id}/test-sample | 제작자 이상 | 서비스의 샘플 받은 값으로 실행한다(서명 확인만 건너뜀, 이벤트 읽기·값 연결은 그대로). `201 {run, input}`. 받은 값 목록에 '샘플로 시험'으로 남는다 |
+| POST /events/{token} | 로그인 불필요, 서명이 권한 | 서비스가 부르는 주소. 성공 `202 {run_id, status}`, 걸러냄·재전송 `200 {ignored: 이유}`, Slack 주소 확인 `200 {challenge}`, 서명 틀림 `401`, JSON 아님 `400`, 256KB 초과 `413`, 모르는·꺼진 주소 `404`, 트리거당 분당 120번 초과 `429` |
+
+- `config`: `service`(slack·github·shopify·telegram·jira·typeform), `events`(이벤트 칩 id 목록, 비우면 모두 받음), `mapping`(`{입력 칸 이름: 받은 값 위치}`, 위치는 `issue.title`·`answers[0].text` 같은 점·대괄호 표기, 30개까지), `include_bot`(Slack 봇 메시지도 받기), `version`.
+- 실행 입력: `message`(한 줄 요약), `service`, `event`, 그리고 `mapping`으로 고른 값(없는 위치는 빈 글, 목록·묶음은 JSON 글, 8,000자까지). 실행의 방식(`trigger`)은 `service`.
+- 서명 방식과 이벤트 칩:
+
+| 서비스 | 서명 | 이벤트 칩 | 재전송 구분 |
+|---|---|---|---|
+| Slack | `X-Slack-Signature` = `v0=` + HMAC-SHA256(`v0:{X-Slack-Request-Timestamp}:{본문}`), 시각 차이 5분 안 | message · app_mention · reaction_added | `event_id` |
+| GitHub | `X-Hub-Signature-256` = `sha256=` + HMAC-SHA256(본문) | issues:opened · issues:closed · pull_request:opened · pull_request:closed · issue_comment:created · push · release:published (`ping`은 건너뜀) | `X-GitHub-Delivery` |
+| Shopify | `X-Shopify-Hmac-Sha256` = base64(HMAC-SHA256(본문)) | orders/create · orders/paid · orders/cancelled · customers/create · refunds/create | `X-Shopify-Webhook-Id` |
+| Telegram | `X-Telegram-Bot-Api-Secret-Token` = 비밀값(setWebhook의 secret_token) | message | `update_id` |
+| Jira | `X-Hub-Signature`(`sha256=`+HMAC) 또는 `X-Genio-Secret` 헤더 또는 주소 뒤 `?secret=` | jira:issue_created · jira:issue_updated · comment_created | `X-Atlassian-Webhook-Identifier` |
+| Typeform | `Typeform-Signature` = `sha256=` + base64(HMAC-SHA256(본문)) | form_response | `event_id` |
+
+- 모든 비교는 일정 시간 비교(`hmac.compare_digest`)이고, 비밀값은 암호화해 저장하며 로그·오류·받은 값 목록에 남기지 않는다(서명·비밀 헤더는 받은 값 목록에서 뺀다).
+- 같은 서비스 알림(재전송)은 10분 안에 한 번만 실행한다. 고르지 않은 이벤트·봇 메시지·ping·재전송은 실행을 만들지 않고, 받은 값 목록에 `걸러냄: 이유`로 남는다.
+- Slack 주소 확인(`url_verification`): 비밀값이 있으면 서명을 확인한 뒤 `challenge`를 돌려준다. 비밀값을 아직 안 넣었으면 확인 응답만 하고 실행은 만들지 않는다.
+
+### 사람 단계: 전달
+| 요청 | 권한 | 설명 |
+|---|---|---|
+| GET /workspaces/{ws}/tasks/forward-targets | 운영자 이상 | 전달할 수 있는 `{users[{id,name,role}], roles[{id,name}]}`(이메일은 없음) |
+| POST /workspaces/{ws}/tasks/{id}/forward `{to_user_id? , to_role?, comment?}` | 지금 처리할 수 있는 사람(담당자·소유자·관리자) | 사람(워크스페이스 멤버) **또는** 역할 하나로 담당을 바꾼다. 처리된 일은 409, 멤버가 아닌 사람·잘못된 역할·둘 다/둘 다 없음은 422 |
+
+- 전달하면 담당이 바뀌어 보낸 사람은 더 처리할 수 없다(소유자·관리자는 계속 가능). 승인 일을 역할로 전달하면 그 역할이 승인할 수 있게 된다.
+- 이력(`history`)에 `{at, via(forward|timeout), by_name, to_name, to_user_id, to_role, comment, notified}`가 쌓이고(최대 50개), 활동 기록에 `task.forward`가 남는다. 링크 화면(`/public/tasks/{token}`)에는 이력·내부 값이 나오지 않는다.
+- 알림: 일을 만들 때 정한 알림 설정(이메일 연결 정보·슬랙 채널)이 있으면 전달받은 사람에게 보낸다. 이메일은 받는 사람이 그 사람(또는 그 역할 멤버, 20명까지) 메일로 바뀐다. 알림 설정이 없으면 받은 쪽 작업함에만 나타난다.
+- 작업함 응답에 `timeout_mode`, `escalated`, `overdue`, `history`가 더해졌다.
+
+### 사람 단계: 시간 초과·다시 알리기
+승인·사람에게 묻기·할 일 맡기기 단계의 새 설정:
+
+| 설정 | 설명 |
+|---|---|
+| `due_hours` | 기한(시간). 승인 단계에도 생겼다 |
+| `on_timeout` | 기한이 지나면: `none`(계속 기다림, 기본) · `reject`(자동 반려) · `approve`(자동 승인) · `escalate`(올리기) · `continue`(정해 둔 값으로 계속) · `branch`('시간 초과' 길) |
+| `timeout_escalate_to` | 올릴 곳: 역할 이름(owner·admin·builder·operator·member) 또는 사용자 id |
+| `timeout_default` | `continue`일 때 답 대신 쓸 값 `{받을 칸 이름: 값}` |
+| `remind_before_hours` | 기한 몇 시간 전에 한 번 다시 알림(기한보다 짧아야 함) |
+
+- 처리는 워커 beat 작업 `genio.sweep_human_tasks`가 **5분마다** 한다(`services/tasks.sweep`). 기한이 지난 열린 일 중 `on_timeout`이 있고 실행이 승인 대기 중인 것만 처리한다.
+  - `reject`: 승인 단계는 `approved=false`로 끝내고(반려 길이 있으면 그 길, 없으면 실행 실패 "정해 둔 시간 안에 승인되지 않아 자동으로 반려되어…"). 묻기·맡기기 단계는 실행을 실패로 끝낸다.
+  - `approve`·`continue`: 승인은 `approved=true`. 묻기는 `timeout_default` 값(없는 칸은 빈 값)으로, 맡기기는 완료로 이어 간다.
+  - `escalate`: 올릴 곳으로 전달하고 기한을 **같은 만큼 한 번** 늘린다(`via: timeout`, 이력). 올릴 곳이 없거나 올린 뒤에도 기한이 또 지나면 `reject`와 같이 처리한다.
+  - `branch`: 단계의 `timeout` 출구로 이어 간다. 출구가 이어져 있지 않으면 실행이 실패한다.
+- 시간 초과로 끝난 일은 사람이 처리한 것과 똑같이 `run.approval`에 결정(`decided_by_name: 시스템`, `decided_via: timeout`, `timed_out: true`, `timeout_mode`)을 적고 실행을 이어 가므로, 병렬 갈래·일괄 실행 안에서도 그대로 동작한다. 단계 출력에 `timed_out: true`가 들어간다.
+- 검증: `on_timeout`·`remind_before_hours`는 `due_hours`가 있어야 하고, `escalate`는 `timeout_escalate_to`가 있어야 하며, `timeout` 출구는 `on_timeout: "branch"`인 사람 단계에서만 쓸 수 있다(한 곳으로만 이을 수 있음). 캔버스 카드에 "⏱ 기한 …" 한 줄과 노란 '시간 초과' 출구가 보인다. 빌더의 `connect`·`add_node`는 `handle: "timeout"`을 쓸 수 있다.
+- 다시 알리기는 일마다 한 번만 보낸다(`rules.reminded`). 알림 설정이 없으면 보내지 않는다.
+- DB: 마이그레이션 `0017`이 `human_tasks.rules`(JSON)·`human_tasks.history`(JSON)를 더한다(추가만, downgrade 있음).

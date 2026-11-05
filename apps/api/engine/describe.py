@@ -145,6 +145,14 @@ def describe_step(node: dict[str, Any] | None, step: dict[str, Any], label: str)
     took = _duration(step)
     name = label or "이름 없는"
 
+    if out.get("timed_out") and ntype in (
+        "approval",
+        "ask_person",
+        "assign_task",
+        "question",
+        "assignment",
+    ):
+        return f"{name} 단계는 {_timeout_outcome(ntype, data, out)}"
     if status == "failed":
         problem, fix = failure_lines(step)
         return f"{name} 단계에서 문제가 생겼어요: {problem}\n{fix}"
@@ -300,6 +308,22 @@ def describe_step(node: dict[str, Any] | None, step: dict[str, Any], label: str)
             return f'{name} 단계에서 결과를 냈어요: "{_short(text)}".'
         return f"{name} 단계에서 결과를 냈어요."
     return f"{name} 단계를 마쳤어요{took}."
+
+
+def _timeout_outcome(ntype: str, data: dict[str, Any], out: dict[str, Any]) -> str:
+    """정해 둔 시간이 지나 시스템이 처리한 결과를 한 문장으로."""
+    mode = str(data.get("on_timeout") or "")
+    hours = data.get("due_hours")
+    waited = f"기한({hours}시간)이 지나" if hours else "정해 둔 시간이 지나"
+    if mode == "branch":
+        return f"{waited} '시간 초과' 길로 이어졌어요."
+    if ntype == "approval":
+        if out.get("approved") is True:
+            return f"{waited} 자동으로 승인됐어요."
+        return f"{waited} 자동으로 반려됐어요."
+    if mode == "reject":
+        return f"{waited} 처리되지 않아 흐름이 멈췄어요."
+    return f"{waited} 정해 둔 값으로 이어 갔어요."
 
 
 def describe_run(run: dict[str, Any], steps: list[dict[str, Any]]) -> list[str]:

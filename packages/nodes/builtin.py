@@ -639,6 +639,64 @@ NOTIFY_UI: dict[str, Any] = {
 }
 
 
+ON_TIMEOUT = ["none", "reject", "approve", "escalate", "continue", "branch"]
+ON_TIMEOUT_NAMES = [
+    "아무것도 안 함(계속 기다림)",
+    "자동 반려(멈춤)",
+    "자동 승인",
+    "다른 사람·역할에게 올리기",
+    "정해 둔 값으로 계속",
+    "'시간 초과' 길로 보내기",
+]
+TIMEOUT_PROPS: dict[str, Any] = {
+    "due_hours": {"type": "number", "title": "기한(시간)", "minimum": 0},
+    "on_timeout": {
+        "type": "string",
+        "title": "기한이 지나면",
+        "enum": ON_TIMEOUT,
+        "enumNames": ON_TIMEOUT_NAMES,
+        "default": "none",
+    },
+    "timeout_escalate_to": {
+        "type": "string",
+        "title": "올릴 곳(역할 이름 또는 사용자 id)",
+        "description": "owner·admin·builder·operator 중 하나, 또는 사용자 id",
+    },
+    "timeout_default": {
+        "type": "object",
+        "title": "정해 둔 값(받을 칸 이름: 값)",
+        "description": "'정해 둔 값으로 계속'을 골랐을 때 대신 쓰는 답",
+    },
+    "remind_before_hours": {
+        "type": "number",
+        "title": "기한 몇 시간 전에 다시 알릴까요",
+        "minimum": 0,
+    },
+}
+TIMEOUT_UI: dict[str, Any] = {"timeout_default": {"ui:widget": "json"}}
+
+
+def _hours(v: Any) -> float | None:
+    try:
+        n = float(v or 0)
+    except (TypeError, ValueError):
+        return None
+    return n if n > 0 else None
+
+
+def timing(data: dict[str, Any]) -> dict[str, Any]:
+    """사람 단계의 기한·시간 초과 설정(작업함이 쓴다). 안 정했으면 모두 비어 있다."""
+    mode = str(data.get("on_timeout") or "none")
+    default = data.get("timeout_default")
+    return {
+        "due_hours": _hours(data.get("due_hours")),
+        "on_timeout": mode if mode in ON_TIMEOUT else "none",
+        "timeout_escalate_to": str(data.get("timeout_escalate_to") or "").strip() or None,
+        "timeout_default": default if isinstance(default, dict) else {},
+        "remind_before_hours": _hours(data.get("remind_before_hours")),
+    }
+
+
 def _run_approval(data: dict[str, Any], ctx: NodeContext) -> NodeResult:
     message = ctx.render(str(data.get("message") or "승인이 필요해요."))
     return NodeResult(
@@ -647,6 +705,7 @@ def _run_approval(data: dict[str, Any], ctx: NodeContext) -> NodeResult:
             "kind": "approval",
             "message": message,
             "approver_roles": data.get("approver_roles") or [],
+            **timing(data),
             "notify": notify_config(data, ctx),
         },
     )
@@ -676,6 +735,7 @@ APPROVAL = NodeSpec(
                 "default": True,
             },
             notify=NOTIFY_SCHEMA,
+            **TIMEOUT_PROPS,
         ),
         "required": ["message"],
     },
@@ -685,11 +745,12 @@ APPROVAL = NodeSpec(
             "approved": {"type": "boolean"},
             "comment": {"type": "string"},
             "approver": {"type": "string"},
+            "timed_out": {"type": "boolean"},
         },
     },
-    ui_schema={"message": {"ui:widget": "textarea"}, "notify": NOTIFY_UI},
+    ui_schema={"message": {"ui:widget": "textarea"}, "notify": NOTIFY_UI, **TIMEOUT_UI},
     run=_run_approval,
-    outputs=lambda d: ["approved", "comment", "approver"],
+    outputs=lambda d: ["approved", "comment", "approver", "timed_out"],
 )
 
 

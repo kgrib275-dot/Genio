@@ -794,31 +794,62 @@ def _decide_person(
     who = str(approval.get("decided_by_name") or "")
     comment = str(approval.get("comment") or "")
     handle: str | None = None
+    # v0.9: 정해 둔 시간이 지나 시스템이 처리한 결정(timeout_mode: reject·approve·continue·branch)
+    timed_out = bool(approval.get("timed_out"))
+    t_mode = str(approval.get("timeout_mode") or "") if timed_out else ""
+    use_branch = t_mode == "branch"
     if kind == "approval":
         ok = bool(approval["approved"])
         result_out: dict[str, Any] = {"approved": ok, "comment": comment, "approver": who}
+        if timed_out:
+            result_out["timed_out"] = True
         branch = bool((node.data if node else {}).get("branch"))
-        if branch:
+        if use_branch:
+            handle = "timeout"
+        elif branch:
             handle = "approved" if ok else "rejected"
+        passes = ok or branch or use_branch
         if step is not None:
             step.output = result_out
             step.finished_at = now()
-            step.status = "succeeded" if ok or branch else "failed"
-            step.logs = "\n".join(
-                x for x in [step.logs or "", f"{who}님이 {'승인' if ok else '반려'}했어요."] if x
+            step.status = "succeeded" if passes else "failed"
+            line = comment if timed_out else f"{who}님이 {'승인' if ok else '반려'}했어요."
+            step.logs = "\n".join(x for x in [step.logs or "", line] if x)
+        if not passes:
+            msg = (
+                "정해 둔 시간 안에 승인되지 않아 자동으로 반려되어 흐름을 멈췄어요."
+                if timed_out
+                else "승인이 거절되어 흐름을 멈췄어요."
             )
-        if not ok and not branch:
-            _finish(db, run, services, "failed", "승인이 거절되어 흐름을 멈췄어요.")
+            _finish(db, run, services, "failed", msg)
             return None
     else:
         response = dict(approval.get("response") or {})
         result_out = {**response, "comment": comment, "completed_by": who}
+        if timed_out:
+            result_out["timed_out"] = True
+        if use_branch:
+            handle = "timeout"
         if step is not None:
             step.output = result_out
             step.finished_at = now()
-            step.status = "succeeded"
-            done = "답했어요" if kind == "question" else "할 일을 마쳤어요"
-            step.logs = "\n".join(x for x in [step.logs or "", f"{who}님이 {done}."] if x)
+            fails = t_mode == "reject"
+            step.status = "failed" if fails else "succeeded"
+            if timed_out:
+                line = comment
+            else:
+                done = "답했어요" if kind == "question" else "할 일을 마쳤어요"
+                line = f"{who}님이 {done}."
+            step.logs = "\n".join(x for x in [step.logs or "", line] if x)
+        if t_mode == "reject":
+            _finish(
+                db,
+                run,
+                services,
+                "failed",
+                "정해 둔 시간 안에 처리되지 않아 흐름을 멈췄어요.",
+            )
+            return None
     outputs[node_id] = result_out
     run.status = "running"
     db.commit()
@@ -1000,6 +1031,15 @@ def _execute(db: Session, run_id: str) -> None:
                 services,
                 "failed",
                 "반려되어 흐름을 멈췄어요(반려 길이 이어져 있지 않아요).",
+            )
+            return
+        if not routed and handle == "timeout":
+            _finish(
+                db,
+                run,
+                services,
+                "failed",
+                "정해 둔 시간이 지났지만 '시간 초과' 길이 이어져 있지 않아 흐름을 멈췄어요.",
             )
             return
     else:

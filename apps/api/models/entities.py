@@ -670,6 +670,11 @@ class HumanTask(Base):
     # 로그인 없이 여는 링크(이메일·슬랙으로 보냄)
     token: Mapped[str] = mapped_column(String(64), unique=True)
     due_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # v0.9: 시간 초과 처리 규칙과 전달·올리기 이력
+    rules: Mapped[dict[str, Any]] = mapped_column(JsonType, default=dict, server_default="{}")
+    history: Mapped[list[dict[str, Any]]] = mapped_column(
+        JsonType, default=list, server_default="[]"
+    )
     created_at: Mapped[datetime] = _created()
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     completed_by: Mapped[str | None] = mapped_column(

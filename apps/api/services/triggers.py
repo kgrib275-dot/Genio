@@ -1,4 +1,4 @@
-"""자동 실행(ADR 0008): 웹훅·예약. 웹훅 토큰은 비밀값처럼 다룬다(로그·오류에 남기지 않음)."""
+"""자동 실행(ADR 0008): 웹훅·예약, 서비스 이벤트(v0.9). 토큰은 비밀값처럼 다룬다(로그·오류에 남기지 않음)."""
 
 import hashlib
 import hmac
@@ -21,7 +21,7 @@ from api.models import App, AppTrigger, Run, WorkflowVersion
 log = logging.getLogger("genio.triggers")
 
 DEFAULT_TZ = "Asia/Seoul"
-KINDS = ("webhook", "schedule")
+KINDS = ("webhook", "schedule", "service")
 MIN_INTERVAL_SECONDS = 60
 MAX_INPUT_BYTES = 64 * 1024
 
@@ -45,6 +45,8 @@ def trigger_dict(t: AppTrigger, origin: str | None) -> dict[str, Any]:
     url = None
     if t.kind == "webhook" and t.token and origin is not None:
         url = f"{origin.rstrip('/')}/api/v1/hooks/{t.token}"
+    elif t.kind == "service" and t.token and origin is not None:
+        url = f"{origin.rstrip('/')}/api/v1/events/{t.token}"
     return {
         "id": t.id,
         "app_id": t.app_id,
@@ -149,6 +151,10 @@ def _version_number(v: Any) -> int:
 def clean_config(kind: str, config: dict[str, Any] | None) -> dict[str, Any]:
     if kind == "schedule":
         return clean_schedule(config or {})
+    if kind == "service":
+        from api.services.service_events import clean_service
+
+        return clean_service(config or {})
     return clean_webhook(config or {})
 
 
@@ -272,8 +278,16 @@ _HIDDEN_HEADERS = {
     "authorization",
     "cookie",
     "x-genio-signature",
+    "x-genio-secret",
     "proxy-authorization",
     "x-api-key",
+    # 서비스 이벤트(v0.9)가 보내는 서명·비밀 헤더
+    "x-slack-signature",
+    "x-hub-signature",
+    "x-hub-signature-256",
+    "x-shopify-hmac-sha256",
+    "typeform-signature",
+    "x-telegram-bot-api-secret-token",
 }
 
 

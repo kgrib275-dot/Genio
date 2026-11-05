@@ -2,6 +2,7 @@ import { Handle, Position, type Node, type NodeProps } from "@xyflow/react";
 import { StatusBadge } from "@/components/ui/badge";
 import { NodeIcon } from "@/components/canvas/NodeIcon";
 import { toneOf } from "@/components/canvas/nodeStyle";
+import { describeTiming, hasTimeoutHandle } from "@/components/canvas/humanTiming";
 import { branchHandles, hasFailHandle } from "@/components/canvas/nodeUtils";
 import type { GraphNode, NodeType, RunStep } from "@/lib/api/types";
 import { cn } from "@/lib/cn";
@@ -68,6 +69,8 @@ export function NodeView({ data, selected }: NodeProps<GenioFlowNode>) {
   const handles = branchHandles(node.type, node.data);
   const isBranching = handles.length > 0 || node.type === "condition";
   const fail = hasFailHandle(node.data);
+  const timeoutHandle = hasTimeoutHandle(node.type, node.data);
+  const timing = describeTiming(node.type, node.data);
   const hasErrors = Boolean(errors && errors.length);
   const label = (node.data.label as string | undefined) || spec?.label || node.type;
   const off = Boolean(node.disabled);
@@ -131,6 +134,11 @@ export function NodeView({ data, selected }: NodeProps<GenioFlowNode>) {
             {summary(node)}
           </p>
         )}
+        {timing && (
+          <p className="mt-1.5 truncate text-[11px] text-amber-700" title={timing}>
+            ⏱ {timing}
+          </p>
+        )}
         {hasErrors && (
           <ul className="mt-2 space-y-0.5">
             {errors?.map((e, i) => (
@@ -157,6 +165,18 @@ export function NodeView({ data, selected }: NodeProps<GenioFlowNode>) {
                 />
               </div>
             ))}
+          </div>
+        )}
+        {timeoutHandle && (
+          <div className="relative mt-1 rounded-md bg-amber-50 px-2 py-0.5 text-right text-[11px] font-medium text-amber-800">
+            시간 초과
+            <Handle
+              type="source"
+              id="timeout"
+              position={Position.Right}
+              className="!h-2.5 !w-2.5 !border-2 !border-white !bg-amber-500"
+              style={{ top: "50%", right: -14 }}
+            />
           </div>
         )}
         {fail && (

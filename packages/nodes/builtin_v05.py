@@ -5,7 +5,14 @@
 
 from typing import Any
 
-from nodes.builtin import NOTIFY_SCHEMA, NOTIFY_UI, notify_config
+from nodes.builtin import (
+    NOTIFY_SCHEMA,
+    NOTIFY_UI,
+    TIMEOUT_PROPS,
+    TIMEOUT_UI,
+    notify_config,
+    timing,
+)
 from nodes.spec import NodeContext, NodeError, NodeRegistry, NodeResult, NodeSpec
 
 LABEL = {"type": "string", "title": "이름"}
@@ -19,14 +26,6 @@ def _assignee(data: dict[str, Any], ctx: NodeContext) -> dict[str, Any]:
     if role and role not in ROLES:
         raise NodeError("담당 역할이 올바르지 않아요.")
     return {"assignee_user_id": user or None, "assignee_role": role or None}
-
-
-def _due(data: dict[str, Any]) -> float | None:
-    try:
-        v = float(data.get("due_hours") or 0)
-    except (TypeError, ValueError):
-        return None
-    return v if v > 0 else None
 
 
 # ---------------- 사람에게 묻기 ----------------
@@ -58,7 +57,7 @@ def _run_ask(data: dict[str, Any], ctx: NodeContext) -> NodeResult:
             "title": question[:300],
             "detail": ctx.render(str(data.get("detail") or "")),
             "fields": fields,
-            "due_hours": _due(data),
+            **timing(data),
             **_assignee(data, ctx),
             "notify": notify_config(data, ctx),
         },
@@ -67,7 +66,7 @@ def _run_ask(data: dict[str, Any], ctx: NodeContext) -> NodeResult:
 
 def _ask_outputs(data: dict[str, Any]) -> list[str]:
     keys = [str(f.get("key")) for f in data.get("fields") or [] if f.get("key")]
-    return [*(keys or ["answer"]), "comment", "completed_by"]
+    return [*(keys or ["answer"]), "comment", "completed_by", "timed_out"]
 
 
 ASK_PERSON = NodeSpec(
@@ -116,7 +115,7 @@ ASK_PERSON = NodeSpec(
                 "enum": ROLES,
                 "enumNames": ["소유자", "관리자", "제작자", "운영자", "사용자"],
             },
-            "due_hours": {"type": "number", "title": "기한(시간)", "minimum": 0},
+            **TIMEOUT_PROPS,
             "notify": NOTIFY_SCHEMA,
         },
         "required": ["question"],
@@ -126,6 +125,7 @@ ASK_PERSON = NodeSpec(
         "question": {"ui:widget": "textarea"},
         "detail": {"ui:widget": "textarea"},
         "notify": NOTIFY_UI,
+        **TIMEOUT_UI,
     },
     run=_run_ask,
     outputs=_ask_outputs,
@@ -148,7 +148,7 @@ def _run_assign(data: dict[str, Any], ctx: NodeContext) -> NodeResult:
             "title": title[:300],
             "detail": ctx.render(str(data.get("detail") or "")),
             "fields": [],
-            "due_hours": _due(data),
+            **timing(data),
             **who,
             "notify": notify_config(data, ctx),
         },
@@ -176,18 +176,22 @@ ASSIGN_TASK = NodeSpec(
                 "enum": ROLES,
                 "enumNames": ["소유자", "관리자", "제작자", "운영자", "사용자"],
             },
-            "due_hours": {"type": "number", "title": "기한(시간)", "minimum": 0},
+            **TIMEOUT_PROPS,
             "notify": NOTIFY_SCHEMA,
         },
         "required": ["title"],
     },
     output_schema={
         "type": "object",
-        "properties": {"comment": {"type": "string"}, "completed_by": {"type": "string"}},
+        "properties": {
+            "comment": {"type": "string"},
+            "completed_by": {"type": "string"},
+            "timed_out": {"type": "boolean"},
+        },
     },
-    ui_schema={"detail": {"ui:widget": "textarea"}, "notify": NOTIFY_UI},
+    ui_schema={"detail": {"ui:widget": "textarea"}, "notify": NOTIFY_UI, **TIMEOUT_UI},
     run=_run_assign,
-    outputs=lambda d: ["comment", "completed_by"],
+    outputs=lambda d: ["comment", "completed_by", "timed_out"],
 )
 
 

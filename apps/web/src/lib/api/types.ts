@@ -880,7 +880,7 @@ export interface ProjectsOverview {
 }
 
 // ---------------- v0.4 자동 실행(트리거)·데이터 표 ----------------
-export type TriggerKind = "webhook" | "schedule";
+export type TriggerKind = "webhook" | "schedule" | "service";
 
 export interface WebhookConfig {
   mode: "async" | "sync";

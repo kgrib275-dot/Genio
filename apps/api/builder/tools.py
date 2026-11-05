@@ -355,6 +355,12 @@ class BuilderToolbox:
                         "'fail' 출구를 쓰려면 먼저 그 단계의 _on_error를 'branch'로 바꾸세요."
                     )
                 branch_offset = 200.0
+            elif handle == "timeout":
+                if prev.data.get("on_timeout") != "branch":
+                    raise ToolError(
+                        "'timeout' 출구를 쓰려면 먼저 그 단계의 on_timeout을 'branch'로 바꾸세요."
+                    )
+                branch_offset = 200.0
             elif cases is not None:
                 if not handle:
                     raise ToolError(
@@ -474,6 +480,12 @@ class BuilderToolbox:
                     "'fail' 출구를 쓰려면 먼저 그 단계의 _on_error를 'branch'로 바꾸세요."
                 )
             old = [e for e in g.edges if e.source == source and e.source_handle == "fail"]
+        elif handle == "timeout":
+            if src.data.get("on_timeout") != "branch":
+                raise ToolError(
+                    "'timeout' 출구를 쓰려면 먼저 그 단계의 on_timeout을 'branch'로 바꾸세요."
+                )
+            old = [e for e in g.edges if e.source == source and e.source_handle == "timeout"]
         elif cases is not None:
             if not handle or handle not in cases:
                 raise ToolError(

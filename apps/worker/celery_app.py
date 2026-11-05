@@ -30,6 +30,8 @@ celery.conf.update(
         # v0.5: 실패·비용 알림(5분), 보관 기간이 지난 기록 지우기(하루 한 번)
         "check-alerts": {"task": "genio.check_alerts", "schedule": 300.0},
         "apply-retention": {"task": "genio.apply_retention", "schedule": 24 * 3600.0},
+        # v0.9: 기한이 지난 사람 단계 처리(자동 반려·승인·올리기·시간 초과 길)와 기한 전 다시 알림
+        "sweep-human-tasks": {"task": "genio.sweep_human_tasks", "schedule": 300.0},
         # v0.8: '매일 동기화'로 정해 둔 지식 가져오기 소스(웹사이트·노션·Google 문서)
         "sync-due-kb-sources": {"task": "genio.sync_due_sources", "schedule": 3600.0},
     },

@@ -6,6 +6,7 @@ import { CurlImport } from "@/components/canvas/CurlImport";
 import { HttpPreview } from "@/components/canvas/HttpPreview";
 import { FailureSettings } from "@/components/canvas/FailureSettings";
 import { nodeFields, nodeTemplates, nodeWidgets } from "@/components/canvas/formRegistry";
+import { withTimingVisibility } from "@/components/canvas/humanTiming";
 import { toRjsfUiSchema } from "@/components/canvas/uiSchema";
 import type { NodeFormContext } from "@/components/canvas/widgets";
 import { NodeTestPanel } from "@/components/canvas/NodeTestPanel";
@@ -24,7 +25,10 @@ export interface NodeSettingsFormProps {
 
 /** NodeType.input_schema + ui_schema로 설정 폼을 자동으로 만든다. */
 export function NodeSettingsForm({ node, spec, wsId, onChange, readOnly }: NodeSettingsFormProps) {
-  const uiSchema = useMemo(() => toRjsfUiSchema(spec), [spec]);
+  const uiSchema = useMemo(
+    () => withTimingVisibility(toRjsfUiSchema(spec), spec.type, node.data),
+    [spec, node.data],
+  );
   const formContext: NodeFormContext = { wsId, formData: node.data };
   return (
     <Form

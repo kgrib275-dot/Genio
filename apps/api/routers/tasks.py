@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 from api.core import ratelimit
 from api.core.errors import AppError, forbidden, not_found
 from api.deps import ANY_MEMBER, Ctx, DbDep, require_role
-from api.models import App, HumanTask, Run
+from api.models import App, HumanTask, Membership, Run, User
 from api.routers.common import client_ip
 from api.services import tasks as svc
 from api.services.projects import hidden_project_ids
@@ -97,6 +97,24 @@ def open_count(ws: str, ctx: Members) -> dict[str, int]:
     return {"open": n}
 
 
+@router.get("/workspaces/{ws}/tasks/forward-targets")
+def forward_targets(ws: str, ctx: Members) -> dict[str, Any]:
+    """전달할 수 있는 사람·역할 목록(이름과 역할만, 이메일은 보이지 않는다)."""
+    if ctx.role not in ("owner", "admin", "builder", "operator"):
+        raise forbidden()
+    rows = ctx.db.execute(
+        select(User.id, User.name, Membership.role)
+        .join(Membership, Membership.user_id == User.id)
+        .where(Membership.workspace_id == ws)
+        .order_by(User.name)
+        .limit(500)
+    ).all()
+    return {
+        "users": [{"id": uid, "name": name, "role": role} for uid, name, role in rows],
+        "roles": [{"id": r, "name": svc.ROLE_KO[r]} for r in svc.ROLES],
+    }
+
+
 @router.get("/workspaces/{ws}/tasks/{task_id}")
 def get_task(ws: str, task_id: str, ctx: Members) -> dict[str, Any]:
     task = _get(ctx, ws, task_id)
@@ -134,6 +152,33 @@ def complete_task(ws: str, task_id: str, body: CompleteIn, ctx: Members) -> dict
     return svc.task_dict(task, app.name if app else "")
 
 
+class ForwardIn(BaseModel):
+    to_user_id: str | None = Field(default=None, max_length=64)
+    to_role: Literal["owner", "admin", "builder", "operator", "member"] | None = None
+    comment: str = Field(default="", max_length=500)
+
+
+@router.post("/workspaces/{ws}/tasks/{task_id}/forward")
+def forward_task(ws: str, task_id: str, body: ForwardIn, ctx: Members) -> dict[str, Any]:
+    """일을 다른 사람·역할에게 넘긴다. 지금 처리할 수 있는 사람(담당자·소유자·관리자)만 할 수 있다."""
+    task = _get(ctx, ws, task_id)
+    run = ctx.db.get(Run, task.run_id) if task.run_id else None
+    if not svc.can_act(task, run, ctx.user.id, ctx.role):
+        raise forbidden()
+    svc.forward(
+        ctx.db,
+        task,
+        by=ctx.user,
+        to_user_id=body.to_user_id,
+        to_role=body.to_role,
+        comment=body.comment,
+    )
+    app = ctx.db.get(App, task.app_id)
+    d = svc.task_dict(task, app.name if app else "")
+    d["can_act"] = task.status == "open" and svc.can_act(task, run, ctx.user.id, ctx.role)
+    return d
+
+
 @router.post("/workspaces/{ws}/tasks/{task_id}/cancel")
 def cancel_task(ws: str, task_id: str, ctx: Members) -> dict[str, Any]:
     task = _get(ctx, ws, task_id)
@@ -164,7 +209,7 @@ def public_task(token: str, request: Request, db: DbDep) -> dict[str, Any]:
     app = db.get(App, task.app_id)
     d = svc.task_dict(task, app.name if app else "")
     # 링크 화면에는 담당자 id 같은 내부 값을 보이지 않는다
-    for k in ("assignee_user_id", "run_id", "node_id", "app_id"):
+    for k in ("assignee_user_id", "run_id", "node_id", "app_id", "history"):
         d.pop(k, None)
     return d
 
@@ -186,6 +231,6 @@ def public_complete(token: str, body: CompleteIn, request: Request, db: DbDep) -
         enqueue_run(resumed.id)
     app = db.get(App, task.app_id)
     d = svc.task_dict(task, app.name if app else "")
-    for k in ("assignee_user_id", "run_id", "node_id", "app_id"):
+    for k in ("assignee_user_id", "run_id", "node_id", "app_id", "history"):
         d.pop(k, None)
     return d

@@ -14,6 +14,9 @@ from nodes import NodeRegistry, NodeSpec
 
 # 단계 설정에 담기지만 검증 대상에서 빼는 키(캔버스 UI용)
 _UI_KEYS = {"label", "note", "_retry", "_on_error", "_default", "_timeout"}
+# 사람 단계(승인·사람에게 묻기·할 일 맡기기): 기한이 지났을 때 '시간 초과' 길로 보낼 수 있다(v0.9)
+HUMAN_TYPES = ("approval", "ask_person", "assign_task")
+TIMEOUT_HANDLE = "timeout"
 # 그래프 바깥에서 쓸 수 있는 예약 이름
 RESERVED_SCOPES = {"input", "vars", "env", "conv", "item", "index", "loop"}
 
@@ -95,6 +98,53 @@ def _schema_errors(spec: NodeSpec, node_id: str, data: dict[str, Any]) -> list[G
     return uniq
 
 
+def _human_timing_errors(node_id: str, data: dict[str, Any]) -> list[GraphError]:
+    """기한·시간 초과 설정이 서로 맞는지(기한이 없는데 처리 방식만 있는 경우 등)."""
+    mode = str(data.get("on_timeout") or "none")
+    try:
+        due = float(data.get("due_hours") or 0)
+    except (TypeError, ValueError):
+        due = 0.0
+    errs: list[GraphError] = []
+    if mode != "none" and due <= 0:
+        errs.append(
+            GraphError(
+                node_id=node_id,
+                field="due_hours",
+                message="'기한이 지나면' 처리를 쓰려면 '기한(시간)'을 먼저 정해 주세요.",
+            )
+        )
+    try:
+        remind = float(data.get("remind_before_hours") or 0)
+    except (TypeError, ValueError):
+        remind = 0.0
+    if remind > 0 and due <= 0:
+        errs.append(
+            GraphError(
+                node_id=node_id,
+                field="remind_before_hours",
+                message="다시 알리려면 '기한(시간)'을 먼저 정해 주세요.",
+            )
+        )
+    if remind > 0 and due > 0 and remind >= due:
+        errs.append(
+            GraphError(
+                node_id=node_id,
+                field="remind_before_hours",
+                message="다시 알리는 시간은 기한보다 짧아야 해요.",
+            )
+        )
+    if mode == "escalate" and not str(data.get("timeout_escalate_to") or "").strip():
+        errs.append(
+            GraphError(
+                node_id=node_id,
+                field="timeout_escalate_to",
+                message="올릴 곳(역할 이름 또는 사용자 id)을 정해 주세요.",
+            )
+        )
+    return errs
+
+
 def validate_graph(raw: dict[str, Any], env: ValidationEnv) -> ValidationResult:
     try:
         graph = Graph.model_validate(raw)
@@ -173,6 +223,22 @@ def validate_graph(raw: dict[str, Any], env: ValidationEnv) -> ValidationResult:
         used: set[str] = set()
         for e in edges:
             h = e.source_handle or ""
+            if h == TIMEOUT_HANDLE:
+                if node.type not in HUMAN_TYPES or node.data.get("on_timeout") != "branch":
+                    errors.append(
+                        GraphError(
+                            node_id=nid,
+                            message="'시간 초과' 길을 쓰려면 이 단계의 '기한이 지나면'을 \"'시간 초과' 길로 보내기\"로 바꿔 주세요.",
+                        )
+                    )
+                elif TIMEOUT_HANDLE in used:
+                    errors.append(
+                        GraphError(
+                            node_id=nid, message="'시간 초과' 길은 한 곳으로만 이을 수 있어요."
+                        )
+                    )
+                used.add(TIMEOUT_HANDLE)
+                continue
             if h == "fail":
                 if not can_fail:
                     errors.append(
@@ -294,6 +360,8 @@ def validate_graph(raw: dict[str, Any], env: ValidationEnv) -> ValidationResult:
     for node in graph.nodes:
         if node.disabled:
             continue
+        if node.type in HUMAN_TYPES:
+            errors.extend(_human_timing_errors(node.id, node.data))
         if node.type == "data_table":
             op = str(node.data.get("operation") or "")
             if op in ("upsert", "get") and not str(node.data.get("row_key") or "").strip():

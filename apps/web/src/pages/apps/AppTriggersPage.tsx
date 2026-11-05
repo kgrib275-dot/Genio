@@ -1,7 +1,6 @@
 // 자동 실행(n8n Webhook·Schedule): 바깥 서비스가 부르는 주소, 정해진 시간에 실행.
 import {
   CalendarClock,
-  Copy,
   Pencil,
   Play,
   Plus,
@@ -9,6 +8,7 @@ import {
   Trash2,
   Webhook,
   X,
+  Zap,
 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
@@ -31,7 +31,7 @@ import {
   useUpdateTrigger,
   type NewTrigger,
 } from "@/lib/api/v4";
-import { cn, copyText, timeAgo } from "@/lib/cn";
+import { cn, timeAgo } from "@/lib/cn";
 import {
   cronFromForm,
   cronProblem,
@@ -45,7 +45,10 @@ import {
 import { useListControls } from "@/lib/useListControls";
 import { DataView } from "@/components/DataView";
 import { useRotateTriggerSecret, useTriggerPayloads, type TriggerWithSecret } from "@/lib/api/v5b";
+import { CopyBox, SecretOnce, Toggle } from "@/components/triggers/parts";
+import { serviceConfigOf, useServicePresets } from "@/lib/api/v9events";
 import { AppNav } from "@/pages/apps/AppNav";
+import { ServiceTriggerDialog, ServiceTriggerItem } from "@/pages/apps/ServiceTriggers";
 import { canEdit, canViewRuns, useSession } from "@/store/session";
 
 const TIMEZONES = [
@@ -133,22 +136,6 @@ function signedCurlExample(url: string, fields: string[]): string {
 }
 
 /** 서명 비밀값: 이번 한 번만 보여 준다 */
-function SecretOnce({ secret, onDone }: { secret: string; onDone?: () => void }) {
-  return (
-    <div className="space-y-2 rounded-lg border border-amber-300 bg-amber-50 p-3">
-      <p className="text-xs font-medium text-amber-900">
-        서명 비밀값이에요. 이 창을 닫으면 다시 볼 수 없어요. 보내는 쪽 서비스에 저장해 두세요.
-      </p>
-      <CopyBox text={secret} label="비밀값" />
-      {onDone && (
-        <Button size="sm" onClick={onDone}>
-          저장해 뒀어요
-        </Button>
-      )}
-    </div>
-  );
-}
-
 /** 최근 받은 값(최대 5개). 인증·서명 헤더는 저장하지 않아요. */
 function Payloads({ triggerId }: { triggerId: string }) {
   const q = useTriggerPayloads(triggerId);
@@ -180,61 +167,6 @@ function Payloads({ triggerId }: { triggerId: string }) {
         </li>
       ))}
     </ul>
-  );
-}
-
-function Toggle({
-  checked,
-  onChange,
-  disabled,
-  label,
-}: {
-  checked: boolean;
-  onChange: (v: boolean) => void;
-  disabled?: boolean;
-  label: string;
-}) {
-  return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={checked}
-      aria-label={label}
-      disabled={disabled}
-      onClick={() => onChange(!checked)}
-      className={cn(
-        "relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors disabled:opacity-50",
-        checked ? "bg-indigo-600" : "bg-slate-300",
-      )}
-    >
-      <span
-        className={cn(
-          "inline-block h-4 w-4 rounded-full bg-white shadow transition-transform",
-          checked ? "translate-x-4" : "translate-x-0.5",
-        )}
-      />
-    </button>
-  );
-}
-
-function CopyBox({ text, label }: { text: string; label: string }) {
-  return (
-    <div className="flex items-start gap-2 rounded-lg border border-slate-200 bg-slate-50 p-2">
-      <code className="min-w-0 flex-1 whitespace-pre-wrap break-all font-mono text-[11px] text-slate-700">
-        {text}
-      </code>
-      <Button
-        size="sm"
-        variant="ghost"
-        aria-label={`${label} 복사`}
-        title={`${label} 복사`}
-        onClick={async () => {
-          if (await copyText(text)) toast.success(`${label}를 복사했어요.`);
-        }}
-      >
-        <Copy className="h-3.5 w-3.5" />
-      </Button>
-    </div>
   );
 }
 
@@ -782,12 +714,19 @@ function TriggerItem({
   );
 }
 
+const KIND_LABEL: Record<TriggerKind, string> = {
+  webhook: "외부에서 받기",
+  schedule: "예약",
+  service: "서비스 이벤트",
+};
+
 export default function AppTriggersPage() {
   const { id: appId = "" } = useParams();
   const role = useSession((s) => s.role);
   const app = useApp(appId);
   const triggers = useTriggers(appId, canViewRuns(role));
   const editable = canEdit(role);
+  const presets = useServicePresets(appId, editable);
   const [dialog, setDialog] = useState<{ kind: TriggerKind; editing: Trigger | null } | null>(null);
 
   // 흐름의 입력 칸 이름(예시·예약 입력에 미리 채움)
@@ -804,13 +743,14 @@ export default function AppTriggersPage() {
     key: "triggers",
     defaultSize: 10,
     search: (t) =>
-      `${t.name} ${t.kind === "webhook" ? "외부에서 받기" : "예약"} ${t.config.cron ? describeCron(t.config.cron) : ""}`,
+      `${t.name} ${KIND_LABEL[t.kind]} ${t.config.cron ? describeCron(t.config.cron) : ""}`,
     filters: [
       {
         id: "kind",
         label: "종류",
         options: [
           { value: "webhook", label: "외부에서 받기" },
+          { value: "service", label: "서비스 이벤트" },
           { value: "schedule", label: "예약" },
         ],
         match: (t, v) => t.kind === v,
@@ -835,12 +775,18 @@ export default function AppTriggersPage() {
           <div>
             <h2 className="text-lg font-bold text-slate-900">자동 실행</h2>
             <p className="text-sm text-slate-500">
-              바깥 서비스가 주소로 부르거나(외부에서 받기), 정해진 시간마다(예약) 이 흐름을
-              실행해요.
+              바깥 서비스가 주소로 부르거나(외부에서 받기), Slack·GitHub 같은 서비스에 일이 생기면
+              (서비스 이벤트), 정해진 시간마다(예약) 이 흐름을 실행해요.
             </p>
           </div>
           {editable && (
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2">
+              <Button
+                variant="outline"
+                onClick={() => setDialog({ kind: "service", editing: null })}
+              >
+                <Zap className="h-4 w-4" /> 서비스 이벤트로 시작
+              </Button>
               <Button
                 variant="outline"
                 onClick={() => setDialog({ kind: "webhook", editing: null })}
@@ -862,7 +808,8 @@ export default function AppTriggersPage() {
             <p className="font-medium text-slate-700">아직 자동 실행이 없어요</p>
             <p className="max-w-md">
               <b>외부에서 받기</b>는 쇼핑몰·설문·다른 자동화 도구가 주소로 부르면 흐름을 실행해요.{" "}
-              <b>예약</b>은 &quot;평일 아침 9시&quot;처럼 정한 시간에 실행해요.
+              <b>서비스 이벤트</b>는 Slack 메시지·GitHub 이슈·Shopify 주문 같은 일이 생기면
+              시작해요. <b>예약</b>은 &quot;평일 아침 9시&quot;처럼 정한 시간에 실행해요.
             </p>
           </Empty>
         )}
@@ -872,16 +819,27 @@ export default function AppTriggersPage() {
             <ListToolbar c={c} placeholder="이름·일정 검색" />
             <Card className="overflow-hidden">
               <ul className="divide-y divide-slate-100">
-                {c.pageItems.map((t) => (
-                  <TriggerItem
-                    key={t.id}
-                    t={t}
-                    appId={appId}
-                    editable={editable}
-                    inputKeys={inputKeys}
-                    onEdit={() => setDialog({ kind: t.kind, editing: t })}
-                  />
-                ))}
+                {c.pageItems.map((t) =>
+                  t.kind === "service" ? (
+                    <ServiceTriggerItem
+                      key={t.id}
+                      t={t}
+                      appId={appId}
+                      editable={editable}
+                      preset={presets.data?.find((p) => p.key === serviceConfigOf(t).service)}
+                      onEdit={() => setDialog({ kind: t.kind, editing: t })}
+                    />
+                  ) : (
+                    <TriggerItem
+                      key={t.id}
+                      t={t}
+                      appId={appId}
+                      editable={editable}
+                      inputKeys={inputKeys}
+                      onEdit={() => setDialog({ kind: t.kind, editing: t })}
+                    />
+                  ),
+                )}
               </ul>
               <NoMatch c={c} />
             </Card>
@@ -889,7 +847,17 @@ export default function AppTriggersPage() {
           </div>
         )}
       </div>
-      {dialog && (
+      {dialog && dialog.kind === "service" && (
+        <ServiceTriggerDialog
+          key={dialog.editing?.id ?? "service-new"}
+          appId={appId}
+          editing={dialog.editing}
+          presets={presets.data ?? []}
+          inputKeys={inputKeys}
+          onClose={() => setDialog(null)}
+        />
+      )}
+      {dialog && dialog.kind !== "service" && (
         <TriggerDialog
           key={dialog.editing?.id ?? dialog.kind}
           appId={appId}

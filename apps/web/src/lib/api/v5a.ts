@@ -33,7 +33,30 @@ export interface HumanTask {
   created_at: string;
   completed_at: string | null;
   can_act?: boolean;
+  /** v0.9: 기한이 지났을 때 처리 방식·올렸는지·기한 지남·전달 이력 */
+  timeout_mode?: string;
+  escalated?: boolean;
+  overdue?: boolean;
+  history?: TaskHistoryEntry[];
 }
+
+export interface TaskHistoryEntry {
+  at: string;
+  /** forward: 사람이 전달 / timeout: 기한이 지나 시스템이 올림 */
+  via: "forward" | "timeout";
+  by_name: string;
+  to_name: string;
+  to_role?: string | null;
+  comment: string;
+}
+
+export const TIMEOUT_MODE_LABEL: Record<string, string> = {
+  reject: "기한이 지나면 자동 반려",
+  approve: "기한이 지나면 자동 승인",
+  escalate: "기한이 지나면 위로 올림",
+  continue: "기한이 지나면 정해 둔 값으로 계속",
+  branch: "기한이 지나면 '시간 초과' 길로",
+};
 
 export interface CompleteTaskBody {
   approved?: boolean;

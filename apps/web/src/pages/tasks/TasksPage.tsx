@@ -1,5 +1,5 @@
 // 작업함: 흐름이 나에게(또는 내 역할에) 맡긴 승인·질문·할 일을 모아 보고 처리한다.
-import { ClipboardList, Clock, ExternalLink, X } from "lucide-react";
+import { ClipboardList, Clock, ExternalLink, Forward, History, X } from "lucide-react";
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { PageContainer } from "@/app/Layout";
@@ -18,6 +18,7 @@ import { optionsFrom, useListControls } from "@/lib/useListControls";
 import {
   TASK_KIND_LABEL,
   TASK_STATUS_LABEL,
+  TIMEOUT_MODE_LABEL,
   useCancelTask,
   useCompleteTask,
   useTasks,
@@ -25,6 +26,8 @@ import {
   type TaskStatus,
 } from "@/lib/api/v5a";
 import { canEdit, canViewRuns, useSession } from "@/store/session";
+import { useMe } from "@/lib/api/auth";
+import { ForwardDialog } from "@/pages/tasks/ForwardDialog";
 import { TaskForm } from "@/pages/tasks/TaskForm";
 import { EmptyState } from "@/components/EmptyState";
 
@@ -39,7 +42,34 @@ const VIEWS: { value: View; label: string }[] = [
 const KIND_TONE = { approval: "indigo", question: "blue", assignment: "amber" } as const;
 
 function overdue(t: HumanTask) {
-  return t.status === "open" && t.due_at && new Date(t.due_at).getTime() < Date.now();
+  return Boolean(
+    t.status === "open" && t.due_at && (t.overdue || new Date(t.due_at).getTime() < Date.now()),
+  );
+}
+
+/** 전달·올리기 이력을 시간 순서로 보여 준다. */
+function HistoryList({ task }: { task: HumanTask }) {
+  const list = task.history ?? [];
+  if (list.length === 0) return null;
+  return (
+    <div className="rounded-lg border border-slate-200 p-3">
+      <p className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold text-slate-600">
+        <History className="h-3.5 w-3.5" /> 전달 기록
+      </p>
+      <ol className="space-y-1.5">
+        {list.map((h, i) => (
+          <li key={`${h.at}-${i}`} className="text-xs text-slate-600">
+            <span className="font-medium text-slate-800">{h.by_name}</span>
+            {h.via === "timeout" ? "이(가) 기한이 지나 " : "이(가) "}
+            <span className="font-medium text-slate-800">{h.to_name}</span>
+            {h.via === "timeout" ? "에게 올렸어요" : "에게 전달했어요"}
+            <span className="text-slate-400"> · {timeAgo(h.at)}</span>
+            {h.comment && <p className="mt-0.5 text-slate-500">&ldquo;{h.comment}&rdquo;</p>}
+          </li>
+        ))}
+      </ol>
+    </div>
+  );
 }
 
 export default function TasksPage() {
@@ -52,6 +82,8 @@ export default function TasksPage() {
   const complete = useCompleteTask(ws);
   const cancel = useCancelTask(ws);
   const current = items.find((t) => t.id === openId) ?? null;
+  const me = useMe().data?.id;
+  const [forwarding, setForwarding] = useState(false);
 
   const lc = useListControls(items, {
     key: `tasks-${view}`,
@@ -142,6 +174,7 @@ export default function TasksPage() {
                       >
                         <Clock className="h-3 w-3" />
                         {t.due_at ? `기한 ${formatDate(t.due_at)}` : timeAgo(t.created_at)}
+                        {overdue(t) && " · 기한 지남"}
                       </span>
                     ) : (
                       <Badge tone={t.status === "done" ? "green" : "gray"}>
@@ -172,6 +205,14 @@ export default function TasksPage() {
                   <Markdown text={current.detail} />
                 </div>
               )}
+              {current.status === "open" &&
+                current.timeout_mode &&
+                current.timeout_mode !== "none" && (
+                  <p className="mt-2 rounded-md bg-amber-50 px-2 py-1 text-xs text-amber-800">
+                    {TIMEOUT_MODE_LABEL[current.timeout_mode] ?? "기한이 지나면 정해 둔 대로 처리"}
+                    {current.escalated && " (이미 한 번 올렸어요)"}
+                  </p>
+                )}
               <p className="mt-2 text-xs text-slate-400">
                 요청 {timeAgo(current.created_at)}
                 {current.due_at && ` · 기한 ${formatDate(current.due_at)}`}
@@ -188,6 +229,7 @@ export default function TasksPage() {
                 )}
               </p>
             </div>
+            <HistoryList task={current} />
             {current.status === "open" && current.can_act ? (
               <TaskForm
                 task={current}
@@ -212,6 +254,11 @@ export default function TasksPage() {
             ) : (
               <div className="rounded-lg bg-slate-50 p-3 text-sm text-slate-700">
                 <p className="font-medium">{TASK_STATUS_LABEL[current.status]}</p>
+                {current.response?.timed_out === true && (
+                  <p className="text-xs text-amber-700">
+                    {String(current.response.comment ?? "정해 둔 시간이 지나 자동으로 처리했어요.")}
+                  </p>
+                )}
                 {Object.entries(current.response ?? {})
                   .filter(([, v]) => v !== "" && v !== null && v !== undefined)
                   .map(([k, v]) => (
@@ -220,6 +267,11 @@ export default function TasksPage() {
                     </p>
                   ))}
               </div>
+            )}
+            {current.status === "open" && current.can_act && role !== "member" && (
+              <Button variant="outline" className="w-full" onClick={() => setForwarding(true)}>
+                <Forward className="h-4 w-4" /> 다른 사람·역할에게 전달
+              </Button>
             )}
             {current.status === "open" && canEdit(role) && (
               <button
@@ -248,6 +300,18 @@ export default function TasksPage() {
           </div>
         )}
       </Dialog>
+      {current && forwarding && (
+        <ForwardDialog
+          ws={ws}
+          task={current}
+          meId={me}
+          onClose={() => setForwarding(false)}
+          onDone={() => {
+            setForwarding(false);
+            setOpenId(null);
+          }}
+        />
+      )}
     </PageContainer>
   );
 }

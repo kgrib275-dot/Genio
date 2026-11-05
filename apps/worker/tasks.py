@@ -8,6 +8,7 @@ from api.services.kb_sources import begin_sync, due_sources, sync_source
 from api.services.knowledge import process_document
 from api.services.limits import apply_retention, check_alerts
 from api.services.memory import summarize_conversation
+from api.services.tasks import sweep as sweep_human_tasks
 from api.services.tracing import send_run
 from api.services.triggers import dispatch_schedules
 from worker.celery_app import celery
@@ -39,6 +40,18 @@ def sync_due_sources_task() -> int:
             enqueue_source_sync(kb_id, sid)
             queued += 1
     return queued
+
+
+@celery.task(name="genio.sweep_human_tasks")  # type: ignore[untyped-decorator]
+def sweep_human_tasks_task() -> dict[str, int]:
+    """v0.9: 기한이 지난 사람 단계를 정해 둔 대로 처리하고, 기한 직전 일은 한 번 다시 알린다."""
+    from api.services.queue import enqueue_run
+
+    with SessionLocal() as db:
+        res = sweep_human_tasks(db)
+    for run_id in res["resume"]:
+        enqueue_run(run_id)
+    return {k: len(v) for k, v in res.items()}
 
 
 @celery.task(name="genio.summarize_conversation")  # type: ignore[untyped-decorator]
