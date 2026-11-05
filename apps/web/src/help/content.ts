@@ -1,6 +1,10 @@
 // 사용설명서 내용. 화면마다 '?' 버튼이 이 중 한 단락을 팝업으로 보여 준다.
 // 글 안에서 **굵게**, `코드` 표기를 쓸 수 있다.
 
+import { BATCH_HELP_SECTIONS } from "@/help/content_batch";
+import { KB_HELP_SECTIONS } from "@/help/content_kb";
+import { HELP_SECTIONS_TOOLS } from "@/help/content_mcp";
+
 export type HelpBlock =
   | { type: "p"; text: string }
   | { type: "list"; items: string[] }
@@ -483,6 +487,9 @@ export const HELP_SECTIONS: HelpSection[] = [
       },
     ],
   },
+  ...BATCH_HELP_SECTIONS,
+  ...HELP_SECTIONS_TOOLS,
+  ...KB_HELP_SECTIONS,
   {
     id: "faq",
     title: "자주 묻는 질문",
