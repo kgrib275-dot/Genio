@@ -221,12 +221,15 @@ def _agent(
 
     stop = False
     changed_since_validate = False
+    # 이 차례 안에서는 시스템 프롬프트를 바꾸지 않는다. Anthropic은 '생각 블록'을 만든 때와 시스템
+    # 프롬프트가 다르면 그 블록을 거절(400)한다. 흐름이 바뀐 내용은 툴 결과에 붙여 AI에게 알린다.
+    system_for_turn = _turn_system(app)
     for _ in range(MAX_STEPS):
         db.refresh(app)
         try:
             turn: ChatTurn = llm.adapter.chat(
                 model=llm.model,
-                system=_turn_system(app),
+                system=system_for_turn,
                 messages=messages,
                 tools=TOOL_DEFS,
                 on_text=on_text,
@@ -249,6 +252,7 @@ def _agent(
         if not turn.tool_calls:
             break
         results: list[Message] = []
+        round_changed = False
         for call in turn.tool_calls:
             emit("tool_call", {"id": call.id, "name": call.name, "input": call.input})
             if call.invalid_input is not None or turn.stop_reason == "max_tokens":
@@ -282,6 +286,7 @@ def _agent(
                 {"id": call.id, "name": call.name, "ok": outcome_ok, "summary": summary},
             )
             if ops:
+                round_changed = True
                 record["ops"].extend(ops)
                 metrics.on_builder_ops(sess, len(ops))
                 changed_since_validate = True
@@ -308,6 +313,10 @@ def _agent(
                     "is_error": not outcome_ok,
                 }
             )
+        if round_changed and results:
+            db.refresh(app)
+            snapshot = summarize(Graph.model_validate(app.draft_graph or empty_graph()))
+            results[-1]["content"] += "\n\n[지금 흐름 요약(방금 바뀐 내용 반영)]\n" + snapshot
         messages.extend(results)
         if stop:
             break

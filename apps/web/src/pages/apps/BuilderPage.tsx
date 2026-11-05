@@ -130,6 +130,21 @@ export default function BuilderPage() {
 
   useEffect(() => () => abortRef.current?.abort(), []);
 
+  // 붉은 오류 표시가 남아 있는 동안 흐름이 바뀌면 잠시 뒤 다시 검사해 해결된 오류를 지운다
+  // (빌더가 단계를 더하거나 내가 고친 뒤에도 예전 오류가 남아 있지 않게)
+  const hasErrors = generalErrors.length > 0 || Object.keys(nodeErrors).length > 0;
+  useEffect(() => {
+    if (!hasErrors || !appId) return;
+    const timer = window.setTimeout(() => {
+      validateGraph(appId, useCanvas.getState().graph)
+        .then((res) => useCanvas.getState().setErrors(res.errors))
+        .catch(() => {
+          // 다시 검사하지 못해도 화면 동작에는 문제없다(검사 버튼으로 직접 확인할 수 있다)
+        });
+    }, 800);
+    return () => window.clearTimeout(timer);
+  }, [graph, hasErrors, appId]);
+
   if (app.isLoading) return <Loading />;
   if (app.error)
     return (
@@ -184,6 +199,7 @@ export default function BuilderPage() {
     try {
       await flush();
       const r = await startRun(appId, input);
+      useCanvas.getState().setErrors([]);
       setTestOpen(false);
       setLogOpen(true);
       setRun(r);

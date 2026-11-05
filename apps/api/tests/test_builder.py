@@ -646,3 +646,53 @@ def test_done_claim_without_validation_gets_note(
     events = send(client, team, sid, "AI 단계 하나 넣어 줘")
     done = next(d for n, d in events if n == "done")
     assert "아직 검증을 통과하지 못했어요" in done["content"]
+
+
+def test_system_prompt_is_stable_within_one_turn(
+    client: TestClient, team: Team, fake_llm: FakeAdapter
+) -> None:
+    """한 차례 안에서 툴을 여러 번 불러도 시스템 프롬프트는 그대로다(생각 블록 서명이 깨지지 않게).
+    바뀐 흐름은 툴 결과로 알려 준다. 다음 차례에서는 새 흐름 요약이 들어간다."""
+    add_llm(client, team)
+    _app_id, sid = new_session(client, team, "시스템 고정")
+    fake_llm.script = [
+        tool_turn(
+            "단계를 넣을게요.",
+            (
+                "add_node",
+                {"type": "template", "after": "n1", "data": {"label": "정리", "template": "A"}},
+            ),
+        ),
+        tool_turn(
+            "하나 더 넣을게요.",
+            (
+                "add_node",
+                {"type": "template", "after": "n3", "data": {"label": "다듬기", "template": "B"}},
+            ),
+        ),
+        text_turn("두 단계를 넣었어요."),
+    ]
+    seen: list[list[Any]] = []
+
+    orig = fake_llm.chat
+
+    def spy(**kw: Any) -> Any:
+        seen.append(kw["messages"])
+        return orig(**kw)
+
+    fake_llm.chat = spy  # type: ignore[method-assign]
+    send(client, team, sid, "정리와 다듬기 단계를 넣어 줘")
+    systems = [c["system"] for c in fake_llm.calls if c["kind"] == "chat"]
+    assert len(systems) == 3 and len(set(systems)) == 1
+    # 두 번째 요청에는 방금 바뀐 흐름 요약이 툴 결과에 붙어 있다
+    tool_msgs = [m for m in seen[1] if m["role"] == "tool"]
+    assert (
+        tool_msgs
+        and "지금 흐름 요약" in tool_msgs[-1]["content"]
+        and "정리" in tool_msgs[-1]["content"]
+    )
+    # 다음 차례의 시스템 프롬프트에는 바뀐 흐름이 반영된다
+    fake_llm.script = [text_turn("확인했어요.")]
+    send(client, team, sid, "지금 흐름 알려 줘")
+    systems = [c["system"] for c in fake_llm.calls if c["kind"] == "chat"]
+    assert systems[-1] != systems[0] and "다듬기" in systems[-1]

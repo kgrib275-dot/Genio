@@ -6,6 +6,7 @@
 """
 
 import json
+import logging
 import re
 from typing import Any
 
@@ -30,6 +31,7 @@ from api.llm.base import (
 from api.llm.vision import ImageInput, anthropic_user_content
 from nodes import LlmResult
 
+log = logging.getLogger("genio.llm.anthropic")
 FALLBACK_BETA = "server-side-fallback-2026-07-01"
 _FALLBACK_MODELS = {"claude-sonnet-5-5", "claude-opus-5-5", "claude-opus-5", "claude-fable-5-1"}
 _EFFORT_MODEL = re.compile(r"^claude-(opus|sonnet|haiku|fable)-5")
@@ -58,6 +60,8 @@ def _map_error(exc: Exception) -> LlmError:
             kind=KIND_RATE_LIMIT,
         )
     if isinstance(exc, anthropic.BadRequestError):
+        # 거절 사유(요청 본문·키 제외)를 기록해 둔다. 화면에는 두 줄 안내만 나간다.
+        log.warning("Anthropic 400: %s", str(exc)[:600])
         text = str(exc).lower()
         too_long = "prompt is too long" in text or ("context" in text and "exceed" in text)
         return LlmError(
