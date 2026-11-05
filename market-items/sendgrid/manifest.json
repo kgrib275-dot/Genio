@@ -1,0 +1,77 @@
+{
+  "key": "sendgrid",
+  "type": "connector",
+  "name": "SendGrid",
+  "summary": "SendGrid로 메일을 보내요(대량·알림 메일에 알맞아요).",
+  "version": "1.0.0",
+  "publisher": "platform",
+  "price": 0,
+  "category": "문자·이메일",
+  "tags": [
+    "sendgrid",
+    "메일",
+    "이메일",
+    "알림",
+    "발송"
+  ],
+  "requires": {
+    "credentials": [
+      {
+        "key": "api_key",
+        "label": "API 키(SG.로 시작, Mail Send 권한)",
+        "secret": true,
+        "required": true
+      },
+      {
+        "key": "from_email",
+        "label": "보내는 주소(SendGrid에서 인증한 주소)",
+        "secret": false,
+        "required": true
+      }
+    ]
+  },
+  "actions": [
+    {
+      "key": "send_mail",
+      "label": "메일 보내기",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "to": {
+            "type": "string",
+            "title": "받는 사람(여러 명은 쉼표)"
+          },
+          "subject": {
+            "type": "string",
+            "title": "제목"
+          },
+          "text": {
+            "type": "string",
+            "title": "본문(글)"
+          },
+          "html": {
+            "type": "string",
+            "title": "본문(HTML, 선택)"
+          }
+        },
+        "required": [
+          "to",
+          "subject",
+          "text"
+        ]
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "sent": {
+            "type": "boolean"
+          }
+        },
+        "required": []
+      }
+    }
+  ],
+  "permissions": [
+    "network:api.sendgrid.com"
+  ]
+}

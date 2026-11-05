@@ -26,8 +26,8 @@ def test_catalog_has_design_items(client: TestClient, team: Team) -> None:
     assert {"database", "http_credentials", "jandi", "naverworks", "kakao_alimtalk"} <= set(
         by_type["connector"]
     )
-    # 템플릿 5 + 업무 단위 템플릿 5(S10) + v0.6 템플릿 11
-    assert len(by_type["template"]) == 21
+    # 템플릿 5 + 업무 단위 템플릿 5(S10) + v0.6 템플릿 11 + v0.8 템플릿 3
+    assert len(by_type["template"]) == 24
     assert len(by_type["prompt_pack"]) == 9
     assert by_type["node"] == ["node_text_tools"]
     found = client.get("/api/v1/market/items?q=슬랙", headers=team.h("member")).json()

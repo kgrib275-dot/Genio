@@ -122,6 +122,19 @@ class NodeServices(Protocol):
 
     def wait(self, *, seconds: float) -> None: ...
 
+    # v0.8
+    def mcp_call(
+        self, *, credential_id: str, tool: str, arguments: dict[str, Any]
+    ) -> dict[str, Any]:
+        """외부 MCP 서버의 도구를 부른다. 출력: {text, content, structured, is_error}"""
+        ...
+
+    def api_tool_call(
+        self, *, tool_set_id: str, operation: str, params: dict[str, Any], body: Any
+    ) -> dict[str, Any]:
+        """OpenAPI로 가져온 API 도구를 부른다. 출력: {status, ok, body, text}"""
+        ...
+
 
 @dataclass
 class NodeContext:

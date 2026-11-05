@@ -116,7 +116,8 @@ def request(
                         "headers": {
                             k: v
                             for k, v in resp.headers.items()
-                            if k.lower() in ("content-type", "location", "retry-after")
+                            if k.lower()
+                            in ("content-type", "location", "retry-after", "mcp-session-id")
                         },
                     }
             except httpx.TimeoutException as exc:

@@ -6,7 +6,13 @@
 비밀값은 함수에만 넘기고, 로그·오류에서는 지운다.
 """
 
+import base64
+import hashlib
+import hmac
+import secrets as _secrets
 import smtplib
+import time
+from datetime import UTC, datetime
 from email.message import EmailMessage
 from typing import Any
 
@@ -32,6 +38,23 @@ class ConnectorNet:
         self.database_allowed = bool(manifest.get("database"))
         # 워크스페이스 관리자가 허용한 내부 호스트(사내 DB 등)
         self.allow_hosts = list(allow_hosts or [])
+
+    # ---- v0.8: 서명이 필요한 서비스(솔라피·네이버 클라우드 등)를 위한 도우미 ----
+    # 커넥터 코드는 hmac·time 모듈을 직접 쓸 수 없어서(허용 목록), 플랫폼이 대신 해 준다.
+    def sign_hmac_sha256(self, key: str, message: str, *, encoding: str = "hex") -> str:
+        digest = hmac.new(key.encode("utf-8"), message.encode("utf-8"), hashlib.sha256).digest()
+        if encoding == "base64":
+            return base64.b64encode(digest).decode("ascii")
+        return digest.hex()
+
+    def now_ms(self) -> int:
+        return int(time.time() * 1000)
+
+    def now_iso(self) -> str:
+        return datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%S.000Z")
+
+    def random_hex(self, n: int = 16) -> str:
+        return _secrets.token_hex(max(1, min(int(n), 64)))
 
     def _sql(self, mode: str, secrets: dict[str, Any], sql: str, params: Any) -> dict[str, Any]:
         if not self.database_allowed:
@@ -231,6 +254,31 @@ def allowed_private_hosts(db: Session, workspace_id: str) -> list[str]:
     return [str(h) for h in hosts] if isinstance(hosts, list) else []
 
 
+def _test_mcp(
+    db: Session, workspace_id: str, credential_id: str, secret_values: list[str]
+) -> dict[str, Any]:
+    """MCP 서버에 붙어 도구 목록을 읽어 본다(연결 테스트)."""
+    from api.connectors import mcp_runtime
+
+    try:
+        tools = mcp_runtime.list_tools(db, workspace_id, credential_id, use_cache=False)
+    except NodeError as exc:
+        return {"ok": False, "checked": True, "message": redact(exc.message, secret_values)}
+    names = ", ".join(t["name"] for t in tools[:5])
+    more = f" 외 {len(tools) - 5}개" if len(tools) > 5 else ""
+    if not tools:
+        return {
+            "ok": True,
+            "checked": True,
+            "message": "서버에는 연결됐지만 쓸 수 있는 도구가 하나도 없어요.",
+        }
+    return {
+        "ok": True,
+        "checked": True,
+        "message": f"연결됐어요. 도구 {len(tools)}개: {names}{more}",
+    }
+
+
 def test_credential(db: Session, workspace_id: str, credential_id: str) -> dict[str, Any]:
     """연결 정보가 실제로 되는지 확인한다. 커넥터 코드의 test(secrets, net) 함수를 부른다.
 
@@ -245,6 +293,8 @@ def test_credential(db: Session, workspace_id: str, credential_id: str) -> dict[
     _, manifest = _definition(db, workspace_id, cred_def.key)
     secrets = decrypt_json(cred.secret_encrypted)
     secret_values = [str(v) for v in secrets.values() if str(v)]
+    if cred_def.key == "mcp_server":
+        return _test_mcp(db, workspace_id, credential_id, secret_values)
     try:
         module = load_module(
             bundle_path(_item_for(db, workspace_id, cred_def.key)) / "connector.py",

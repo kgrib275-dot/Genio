@@ -30,6 +30,12 @@ class ValidationEnv:
     errors: list[GraphError] = field(default_factory=list)
 
 
+# v0.8 외부 도구 단계: 고르는 칸 이름, 연결 정보 종류(connector key), 화면에 보일 이름
+TOOL_CREDENTIAL_FIELDS = {
+    "mcp_tool": ("credential_id", "mcp_server", "MCP 서버 연결 정보"),
+    "api_tool": ("tool_set", "api_tool_set", "API 도구 묶음"),
+}
+
 # 승인 단계의 갈림길(branch를 켰을 때): 승인 / 반려
 APPROVAL_HANDLES = ("approved", "rejected")
 
@@ -344,6 +350,25 @@ def validate_graph(raw: dict[str, Any], env: ValidationEnv) -> ValidationResult:
                             message="다른 서비스의 연결 정보가 선택돼 있어요.",
                         )
                     )
+        if node.type in TOOL_CREDENTIAL_FIELDS and env.credentials is not None:
+            field_name, kind, label = TOOL_CREDENTIAL_FIELDS[node.type]
+            picked = str(node.data.get(field_name) or "")
+            if picked and picked not in env.credentials:
+                errors.append(
+                    GraphError(
+                        node_id=node.id,
+                        field=field_name,
+                        message=f"선택한 {label}이(가) 없어요. 연결 정보 화면에서 다시 골라 주세요.",
+                    )
+                )
+            elif picked and env.credentials[picked] != kind:
+                errors.append(
+                    GraphError(
+                        node_id=node.id,
+                        field=field_name,
+                        message=f"{label}이(가) 아닌 연결 정보가 선택돼 있어요. 알맞은 것을 골라 주세요.",
+                    )
+                )
         if node.type == "knowledge_search" and env.knowledge_bases is not None:
             kb = str(node.data.get("kb_id") or "")
             if kb and kb not in env.knowledge_bases:

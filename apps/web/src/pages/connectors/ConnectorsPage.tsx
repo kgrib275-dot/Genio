@@ -26,6 +26,8 @@ import {
 import { optionsFrom, useListControls } from "@/lib/useListControls";
 import { canEdit, canManage, useSession } from "@/store/session";
 import { EmptyState } from "@/components/EmptyState";
+import { ApiToolImportCard } from "@/pages/connectors/ApiToolImportCard";
+import { McpServerCard, McpToolsButton } from "@/pages/connectors/McpServerCard";
 
 function NewCredentialForm({ ws }: { ws: string }) {
   const defs = useConnectorDefinitions(ws);
@@ -281,6 +283,7 @@ export default function ConnectorsPage() {
                       삭제
                     </Button>
                   )}
+                  {c.connector_key === "mcp_server" && <McpToolsButton ws={ws} id={c.id} />}
                   {results[c.id] && <TestResult r={results[c.id] as CredentialTestResult} />}
                 </li>
               ))}
@@ -301,6 +304,8 @@ export default function ConnectorsPage() {
               )}
             </CardBody>
           </Card>
+          {manage && <McpServerCard ws={ws} />}
+          {manage && <ApiToolImportCard ws={ws} />}
           {manage && <PrivateHostsCard ws={ws} />}
         </div>
       </div>

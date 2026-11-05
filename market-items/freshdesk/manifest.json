@@ -1,0 +1,110 @@
+{
+  "key": "freshdesk",
+  "type": "connector",
+  "name": "Freshdesk",
+  "summary": "Freshdesk에 티켓을 만들거나 목록을 가져와요.",
+  "version": "1.0.0",
+  "publisher": "platform",
+  "price": 0,
+  "category": "고객지원",
+  "tags": [
+    "freshdesk",
+    "프레시데스크",
+    "티켓",
+    "고객지원",
+    "문의",
+    "cs"
+  ],
+  "requires": {
+    "credentials": [
+      {
+        "key": "domain",
+        "label": "도메인(acme.freshdesk.com의 acme)",
+        "secret": false,
+        "required": true
+      },
+      {
+        "key": "api_key",
+        "label": "API 키",
+        "secret": true,
+        "required": true
+      }
+    ]
+  },
+  "actions": [
+    {
+      "key": "create_ticket",
+      "label": "티켓 만들기",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "subject": {
+            "type": "string",
+            "title": "제목"
+          },
+          "description": {
+            "type": "string",
+            "title": "내용"
+          },
+          "email": {
+            "type": "string",
+            "title": "요청한 사람 이메일"
+          },
+          "priority": {
+            "type": "integer",
+            "title": "우선순위(1 낮음 ~ 4 긴급)"
+          }
+        },
+        "required": [
+          "subject",
+          "description",
+          "email"
+        ]
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "ticket_id": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          }
+        },
+        "required": []
+      }
+    },
+    {
+      "key": "list_tickets",
+      "label": "티켓 목록",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "limit": {
+            "type": "integer",
+            "title": "가져올 개수(최대 100)"
+          }
+        },
+        "required": []
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "count": {
+            "type": "integer"
+          },
+          "text": {
+            "type": "string"
+          },
+          "results": {
+            "type": "array"
+          }
+        },
+        "required": []
+      }
+    }
+  ],
+  "permissions": [
+    "network:freshdesk.com"
+  ]
+}

@@ -198,6 +198,16 @@ def describe_step(node: dict[str, Any] | None, step: dict[str, Any], label: str)
         code = out.get("status")
         tail = f" → {code} 응답" if code is not None else ""
         return f"{name} 단계(외부 호출)가 {_host(data.get('url'))}에 {method} 요청{tail}{took}."
+    if ntype == "mcp_tool":
+        tool = str(data.get("tool") or "도구")
+        if out.get("is_error"):
+            return f"{name} 단계가 외부 도구 '{tool}'를 불렀지만 도구가 오류를 알려 줬어요{took}."
+        return f"{name} 단계가 외부 도구(MCP) '{tool}'를 불러 결과를 받았어요{took}."
+    if ntype == "api_tool":
+        op = str(data.get("operation") or "도구")
+        code = out.get("status")
+        tail = f" → {code} 응답" if code is not None else ""
+        return f"{name} 단계가 API 도구 '{op}'를 불렀어요{tail}{took}."
     if ntype == "connector":
         service = str(data.get("connector") or "서비스")
         action = str(data.get("action") or "")

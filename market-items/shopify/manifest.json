@@ -1,0 +1,75 @@
+{
+  "key": "shopify",
+  "type": "connector",
+  "name": "Shopify",
+  "summary": "Shopify 상점의 주문 목록을 읽어 와요(읽기 전용).",
+  "version": "1.0.0",
+  "publisher": "platform",
+  "price": 0,
+  "category": "주문·물류",
+  "tags": [
+    "shopify",
+    "쇼핑몰",
+    "주문",
+    "이커머스",
+    "커머스"
+  ],
+  "requires": {
+    "credentials": [
+      {
+        "key": "shop",
+        "label": "상점 주소(my-shop.myshopify.com의 my-shop)",
+        "secret": false,
+        "required": true
+      },
+      {
+        "key": "access_token",
+        "label": "Admin API 액세스 토큰(shpat_…, read_orders 권한)",
+        "secret": true,
+        "required": true
+      }
+    ]
+  },
+  "actions": [
+    {
+      "key": "list_orders",
+      "label": "주문 목록 읽기",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "title": "상태(any·open·closed·cancelled)"
+          },
+          "limit": {
+            "type": "integer",
+            "title": "가져올 개수(최대 50)"
+          },
+          "created_at_min": {
+            "type": "string",
+            "title": "이 시각 이후 주문만(예: 2026-11-01T00:00:00+09:00)"
+          }
+        },
+        "required": []
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "count": {
+            "type": "integer"
+          },
+          "text": {
+            "type": "string"
+          },
+          "orders": {
+            "type": "array"
+          }
+        },
+        "required": []
+      }
+    }
+  ],
+  "permissions": [
+    "network:myshopify.com"
+  ]
+}

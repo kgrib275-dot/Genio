@@ -287,6 +287,34 @@ class RunServices:
                 merged.update(v)
         return {**merged, "text": str(out.get("text", "")), "run_id": child.id}
 
+    # ---- v0.8: 외부 도구 ----
+    def mcp_call(
+        self, *, credential_id: str, tool: str, arguments: dict[str, Any]
+    ) -> dict[str, Any]:
+        from api.connectors import mcp_runtime
+
+        return mcp_runtime.call_tool(self.db, self.workspace_id, credential_id, tool, arguments)
+
+    def mcp_tools(self, *, credential_id: str) -> list[dict[str, Any]]:
+        """연결한 MCP 서버의 도구 목록(에이전트가 도구로 쓸 때)."""
+        from api.connectors import mcp_runtime
+
+        return mcp_runtime.list_tools(self.db, self.workspace_id, credential_id)
+
+    def api_tool_call(
+        self, *, tool_set_id: str, operation: str, params: dict[str, Any], body: Any
+    ) -> dict[str, Any]:
+        from api.connectors import api_tools
+
+        return api_tools.call(
+            self.db,
+            self.workspace_id,
+            tool_set_id=tool_set_id,
+            operation=operation,
+            params=params,
+            body=body,
+        )
+
     def data_table(
         self,
         *,
