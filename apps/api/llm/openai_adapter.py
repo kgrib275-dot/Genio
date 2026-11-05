@@ -15,6 +15,13 @@ from api.llm.base import (
     json_instruction,
     parse_json_object,
 )
+from api.llm.image import (
+    RawImageResult,
+    map_image_error,
+    native_size,
+    one_image_per_call,
+    parse_images_response,
+)
 from api.llm.vision import ImageInput, openai_user_content
 from nodes import LlmResult
 
@@ -88,6 +95,28 @@ class OpenAIAdapter:
         if base_url:
             kwargs["base_url"] = base_url
         self.client = openai.OpenAI(**kwargs)
+
+    def generate_images(self, *, model: str, prompt: str, size: str, count: int) -> RawImageResult:
+        """이미지 만들기(v0.9). 그림은 가공 없이(b64·주소) 돌려준다. 받기·검사·저장은 서비스 몫."""
+        n_each = 1 if one_image_per_call(model) else count
+        calls = count if n_each == 1 else 1
+        result = RawImageResult(model=model)
+        try:
+            for _ in range(calls):
+                resp = self.client.images.generate(
+                    model=model,
+                    prompt=prompt,
+                    size=native_size(model, size),
+                    n=n_each,
+                )
+                result.images.extend(parse_images_response(resp))
+                usage = getattr(resp, "usage", None)
+                if usage is not None:
+                    result.input_tokens += int(getattr(usage, "input_tokens", 0) or 0)
+                    result.output_tokens += int(getattr(usage, "output_tokens", 0) or 0)
+        except openai.OpenAIError as exc:
+            raise map_image_error(exc) from exc
+        return result
 
     def complete(
         self,

@@ -951,3 +951,44 @@ ADR 0013. 마이그레이션 0015(`apps.draft_rev`·`updated_by`, `draft_snapsho
 
 - 멘션: `mentions`는 사용자 id 목록. 이 워크스페이스에서 빌더를 열 수 있는 사람만 인정하고(중복 제거, 최대 10명) 나 자신은 알리지 않는다. 불린 사람마다 활동 기록 `comment.mention`(`target_id`=불린 사람, `meta`={app_id, comment_id})이 남고, **시스템 메일이 설정돼 있으면** 앱 빌더 링크가 든 메일을 보낸다(1분에 10통까지, 보내기에 실패해도 댓글은 저장되고 비밀값은 어디에도 남기지 않는다).
 - 다른 워크스페이스의 앱·댓글은 404. 다른 앱 주소로 이 댓글을 건드릴 수 없다.
+
+## v0.9 이미지 만들기·파일 만들기·파일 내려받기
+
+### 단계
+| 단계 | 설정 | 출력 |
+|---|---|---|
+| `image_generate`(이미지 만들기, 분류 AI) | `prompt`(설명), `style`(스타일·피할 것, 설명 뒤에 붙임), `size`(`1024x1024`·`1536x1024`·`1024x1536`), `count`(1~4), `provider`(기본 `default`), `model`(비우면 연결의 대표 이미지 모델) | `files[{id, filename, mime, size, kind}]`, `first_file_id`, `count`, `revised_prompt` |
+| `file_export`(파일 만들기, 분류 데이터) | `format`(`txt`·`md`·`csv`·`json`·`xlsx`·`docx`), `filename`, `source`(`text`·`table`), `text`, `rows`(표: 목록 값 또는 JSON 글), `columns`(쉼표), `sheet`, `bom`(CSV) | `file{id, filename, mime, size}`, `file_id`, `filename` |
+
+- **이미지**: OpenAI 호환(`POST {base}/images/generations`, Azure 포함)만 지원한다. Google Imagen은 요청 형식을 문서로 확인하지 못해 넣지 않았다. 연결은 단계에서 고른 것, 아니면 기본 연결(이미지를 못 만들면 만들 수 있는 연결 중 첫 번째). 모델을 비우면 `llm/presets.py`의 `IMAGE_PROVIDERS`에 적힌 대표 모델을 쓴다(OpenAI `gpt-image-1`, xAI `grok-2-image`, Together `black-forest-labs/FLUX.1-schnell`; Azure·호환 서버는 직접 적어야 함). `GET /llm/providers`의 각 공급자에 `image`(지원 여부)·`image_models`가 붙는다.
+  - 그림은 b64나 주소로 오고, 주소는 `safe_http`(사설망 차단)로 받는다. 한 장 10MB 이하, 내용을 읽어 png·jpg·webp가 아니면 거절한다.
+  - 크기는 모델에 맞게 바꾼다(dall-e-3는 `1792x1024`·`1024x1792`, 한 번에 한 장씩 여러 번 호출).
+  - 비용: 공급자가 장당 비용을 알려 주지 않아 `engine/pricing.py`의 `IMAGE_PRICES`(정사각 1024 기준 **참고용 추정**, 정사각이 아니면 ×1.5)로 어림해 실행 비용에 더한다. 공급자가 토큰 사용량을 알려 주면 토큰으로도 올린다. 월 비용 한도(실행 시작 때 확인)에 포함된다.
+  - 단계 제한 시간 기본 120초(`_timeout`으로 바꿈). 오류는 두 줄 한국어(안전 규칙·크기·모델·한도·권한·연결).
+- **파일**: 엑셀·워드·CSV는 이미 설치된 openpyxl·python-docx로 만든다(PDF는 쓸 수 있는 라이브러리가 없어 제외). CSV/엑셀은 `=`·`+`·`-`·`@`·탭으로 시작하는 칸이 수식이 되지 않게 CSV는 앞에 `'`, 엑셀은 글 형식으로 저장한다. 파일 이름은 경로·제어 문자를 지우고 100자 안으로 줄여 확장자를 붙인다. 파일은 최대 10MB, 표는 5만 줄·50열.
+- 만든 파일은 워크스페이스 파일(`files`)로 저장되고(`app_id` 설정, 저장소 설정을 따름) 단계 출력에 `{id, filename, mime, size}`가 담긴다. **마이그레이션은 없다.**
+- 단계 시험(`POST /apps/{id}/nodes/{node_id}/test`)은 두 단계를 `risky`(비용·저장이 생김)로 표시해 화면이 먼저 확인을 받는다.
+
+### 실행이 만든 파일 판정
+단계 출력의 `files`(목록)·`file`(하나)에 든 `{id, ...}` 중, 같은 앱·워크스페이스의 파일만 그 실행의 결과로 친다(입력으로 올린 파일은 id 글자만 들어 있어 섞이지 않는다).
+
+### 내려받기
+| 경로 | 권한 | 내용 |
+|---|---|---|
+| GET /runs/{run_id}/files | 운영자 이상 | `{files:[{id, filename, mime, size, kind, node_id}]}` |
+| GET /runs/{run_id}/files/{file_id}[?inline=1] | 운영자 이상 | 파일 내용. 그 실행의 결과 파일만(아니면 404). `inline=1`은 이미지만 화면에 바로 보이게 한다 |
+| GET /public/apps/{token}/files/{file_id}?sig=&exp=[&inline=1] | 접근 권한 확인 + 서명 | 공유 링크용. 서명이 맞고 만료 전이며 그 파일이 이 앱의 것일 때만. 멤버 전용 앱은 로그인 필요(401). IP 제한 대상이고 앱·IP당 분당 120번 |
+
+- 서명: `HMAC-SHA256(서버 비밀 키, "app_id:file_id:exp")`(40자), 유효 24시간. 변조·만료·다른 앱·다른 파일은 403(두 줄 오류), 파일이 없거나 다른 앱의 것이면 404.
+- 응답 머리글: `Content-Disposition`(한글 파일 이름은 RFC 5987), `X-Content-Type-Options: nosniff`, `Cache-Control: private`, `Content-Security-Policy: default-src 'none'; sandbox`. 알려진 형식(이미지·txt·md·csv·json·xlsx·docx)이 아니면 `application/octet-stream`으로 내려준다.
+- 실행 상세(`GET /runs/{id}`)에 `files`가 함께 온다.
+
+### 챗·입력 폼·지난 대화·일괄 실행
+- 챗 `answer` 이벤트: `{text, message_id, files?:[{id, filename, mime, size, kind, run_id, sig, exp}]}`. 파일을 만든 흐름에서만 `files`가 붙는다(검열된 답에는 안 붙임). 화면은 공유 토큰과 `sig`·`exp`로 받고, 앱 안 시험(토큰 없음)은 `run_id`로 `/runs/{run_id}/files/{id}`를 받는다.
+- `GET /public/apps/{token}/sessions/{id}/messages`: 파일이 있는 답에는 새로 서명한 `files`가 붙는다(지난 대화를 다시 열 때).
+- `GET /public/apps/{token}/runs/{run_id}`(입력 폼 결과): 성공하면 `files`가 붙는다.
+- 일괄 실행 결과: 파일을 만드는 흐름이면 줄마다 `files[{id, filename, kind, url}]`가 붙는다. 로그인한 화면의 `url`은 실행 기록 화면(`{origin}/runs/{run_id}`), 공유 링크는 서명된 내려받기 주소다. 결과 CSV에는 `파일` 열이 **파일이 있을 때만** 더해진다(파일 없는 흐름의 CSV는 그대로).
+
+### 마켓
+템플릿 2개 추가: `tpl_product_image`(제품 사진 만들기, 챗, 이미지 생성 연결 필요), `tpl_weekly_report_xlsx`(주간 보고 엑셀 파일로 받기, AI 없이 동작). 마켓 항목은 71개.
+

@@ -1,0 +1,19 @@
+{
+  "key": "tpl_weekly_report_xlsx",
+  "type": "template",
+  "name": "주간 보고 엑셀 파일로 받기",
+  "summary": "이번 주 한 일을 줄마다 적으면 번호를 붙인 표를 엑셀(.xlsx) 파일로 만들어 내려받게 해요(AI 없이 동작).",
+  "version": "1.0.0",
+  "publisher": "platform",
+  "price": 0,
+  "category": "업무 자동화",
+  "app_type": "workflow",
+  "tags": [
+    "엑셀",
+    "파일",
+    "주간 보고",
+    "표",
+    "내려받기"
+  ],
+  "permissions": []
+}

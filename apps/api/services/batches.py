@@ -392,8 +392,33 @@ def _nudge_stuck(db: Session, runs: list[Run]) -> None:
             enqueue_run(r.id)
 
 
-def batch_status(db: Session, app_id: str, batch_id: str, *, public: bool) -> dict[str, Any]:
-    """진행 상황과 줄별 결과. 공개 화면에는 내부 값(실행 번호·원문 오류)을 빼고 보낸다."""
+def _makes_files(db: Session, run: Run) -> bool:
+    """이 일괄 실행의 흐름에 파일을 만드는 단계(이미지·파일 만들기)가 있는지."""
+    from api.engine.executor import load_graph
+
+    try:
+        return any(
+            n.type in ("image_generate", "file_export") and not n.disabled
+            for n in load_graph(db, run).nodes
+        )
+    except Exception:
+        return False
+
+
+def batch_status(
+    db: Session,
+    app_id: str,
+    batch_id: str,
+    *,
+    public: bool,
+    origin: str = "",
+    token: str = "",
+) -> dict[str, Any]:
+    """진행 상황과 줄별 결과. 공개 화면에는 내부 값(실행 번호·원문 오류)을 빼고 보낸다.
+
+    파일을 만드는 흐름이면 줄마다 `files`를 붙인다. 로그인한 화면은 실행 기록 주소를, 공유 링크는
+    서명된 내려받기 주소(24시간)를 쓴다.
+    """
     runs = _runs(db, app_id, batch_id)
     if not runs:
         raise AppError(
@@ -404,6 +429,8 @@ def batch_status(db: Session, app_id: str, batch_id: str, *, public: bool) -> di
     _nudge_stuck(db, runs)
     counts = {k: 0 for k in STATUS_LABEL}
     rows: list[dict[str, Any]] = []
+    with_files = _makes_files(db, runs[0])
+    app = db.get(App, app_id) if with_files else None
     for r in runs:
         st = row_status(r)
         counts[st] = counts.get(st, 0) + 1
@@ -425,6 +452,25 @@ def batch_status(db: Session, app_id: str, batch_id: str, *, public: bool) -> di
             )
         if not public:
             item["run_id"] = r.id
+        if with_files and app is not None and st == "succeeded":
+            from api.services import run_files
+
+            made = run_files.files_of_run(db, r, app.workspace_id)
+            if made:
+                shown = run_files.with_public_links(made, app_id, r.id) if public else made
+                item["files"] = [
+                    {
+                        "id": f["id"],
+                        "filename": f["filename"],
+                        "kind": f["kind"],
+                        "url": (
+                            run_files.public_url(origin, token, f)
+                            if public and origin and token
+                            else (f"{origin}/runs/{r.id}" if origin and not public else "")
+                        ),
+                    }
+                    for f in shown
+                ]
         rows.append(item)
     settled = sum(counts[k] for k in SETTLED)
     cancelled = any((r.context or {}).get("cancelled") for r in runs)
@@ -509,7 +555,17 @@ def batch_input_fields(db: Session, app_id: str, batch_id: str) -> list[dict[str
 def results_csv(status: dict[str, Any], fields: list[dict[str, Any]]) -> bytes:
     buf = io.StringIO()
     w = csv.writer(buf)
-    w.writerow(["줄", "상태", *[f["label"] or f["key"] for f in fields], "결과", "오류"])
+    has_files = any(r.get("files") for r in status["rows"])
+    w.writerow(
+        [
+            "줄",
+            "상태",
+            *[f["label"] or f["key"] for f in fields],
+            "결과",
+            *(["파일"] if has_files else []),
+            "오류",
+        ]
+    )
     for r in status["rows"]:
         err = ""
         if r.get("error"):
@@ -521,6 +577,17 @@ def results_csv(status: dict[str, Any], fields: list[dict[str, Any]]) -> bytes:
                 STATUS_LABEL.get(r["status"], r["status"]),
                 *[_csv_safe((r["input"] or {}).get(f["key"], "")) for f in fields],
                 _csv_safe(r["text"]),
+                *(
+                    [
+                        _csv_safe(
+                            "\n".join(
+                                f"{f['filename']} {f['url']}".strip() for f in r.get("files") or []
+                            )
+                        )
+                    ]
+                    if has_files
+                    else []
+                ),
                 _csv_safe(err),
             ]
         )

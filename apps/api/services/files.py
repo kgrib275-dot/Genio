@@ -72,3 +72,29 @@ async def save_upload(
     db.add(f)
     db.commit()
     return file_dict(f)
+
+
+def save_generated(
+    db: Session,
+    workspace_id: str,
+    app_id: str | None,
+    *,
+    filename: str,
+    mime: str,
+    data: bytes,
+    user_id: str | None = None,
+) -> StoredFile:
+    """실행 단계(이미지 만들기·파일 만들기)가 만든 파일을 워크스페이스 파일로 저장한다."""
+    f = StoredFile(
+        workspace_id=workspace_id,
+        app_id=app_id,
+        filename=filename[:300],
+        mime=mime,
+        size=len(data),
+        content=b"",
+        created_by=user_id,
+    )
+    storage.write_content(f, data, kind="files", content_type=mime)
+    db.add(f)
+    db.commit()
+    return f

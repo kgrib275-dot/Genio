@@ -1,0 +1,65 @@
+{
+  "version": 1,
+  "nodes": [
+    {
+      "id": "n1",
+      "type": "input",
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "data": {
+        "label": "만들 사진 설명",
+        "fields": [
+          {
+            "key": "message",
+            "label": "어떤 사진을 만들까요?",
+            "type": "text",
+            "required": true
+          }
+        ]
+      }
+    },
+    {
+      "id": "n2",
+      "type": "image_generate",
+      "position": {
+        "x": 300,
+        "y": 0
+      },
+      "data": {
+        "label": "이미지 만들기",
+        "provider": "default",
+        "prompt": "{{n1.message}}",
+        "style": "깔끔한 배경, 자연스러운 조명, 글자는 넣지 않기",
+        "size": "1024x1024",
+        "count": 2
+      }
+    },
+    {
+      "id": "n3",
+      "type": "output",
+      "position": {
+        "x": 600,
+        "y": 0
+      },
+      "data": {
+        "label": "답",
+        "template": "요청하신 사진 {{n2.count}}장을 만들었어요. 마음에 들지 않으면 설명을 바꿔서 다시 말씀해 주세요.\n(AI가 다듬은 설명: {{n2.revised_prompt}})"
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "e1",
+      "source": "n1",
+      "target": "n2"
+    },
+    {
+      "id": "e2",
+      "source": "n2",
+      "target": "n3"
+    }
+  ],
+  "variables": {}
+}

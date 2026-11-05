@@ -5,6 +5,7 @@ import { BATCH_HELP_SECTIONS } from "@/help/content_batch";
 import { COLLAB_HELP_SECTIONS } from "@/help/content_collab";
 import { CONVENIENCE_HELP_SECTIONS } from "@/help/content_convenience";
 import { DIFY_HELP_SECTIONS } from "@/help/content_dify";
+import { FILES_HELP_SECTIONS } from "@/help/content_files";
 import { EVENTS_HELP_SECTIONS } from "@/help/content_events";
 import { KB_HELP_SECTIONS } from "@/help/content_kb";
 import { HELP_SECTIONS_TOOLS } from "@/help/content_mcp";
@@ -498,6 +499,7 @@ export const HELP_SECTIONS: HelpSection[] = [
   ...CONVENIENCE_HELP_SECTIONS,
   ...EVENTS_HELP_SECTIONS,
   ...COLLAB_HELP_SECTIONS,
+  ...FILES_HELP_SECTIONS,
   {
     id: "faq",
     title: "자주 묻는 질문",

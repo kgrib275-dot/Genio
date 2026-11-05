@@ -15,8 +15,10 @@ import {
   type BatchRowStatus,
   type BatchSource,
 } from "@/lib/api/batches";
+import { downloadFile } from "@/lib/api/files";
 import { progressOf } from "@/lib/batchProgress";
 import { cn } from "@/lib/cn";
+import { batchFilePath } from "@/lib/fileKinds";
 
 const PREVIEW_ROWS = 10;
 const RESULT_ROWS = 50;
@@ -178,6 +180,34 @@ export function BatchRunPanel({ source, note }: { source: BatchSource; note?: st
                       </span>
                     ) : (
                       <span className="whitespace-pre-wrap">{clip(r.text, 160)}</span>
+                    )}
+                    {r.files && r.files.length > 0 && (
+                      <span className="mt-1 flex flex-wrap gap-1" data-testid="batch-row-files">
+                        {r.files.map((f) => (
+                          <button
+                            key={f.id}
+                            type="button"
+                            onClick={async () => {
+                              const path = batchFilePath(r, f);
+                              if (!path) {
+                                toast.error(
+                                  "이 파일은 지금 내려받을 수 없어요. 결과 표의 링크를 써 주세요.",
+                                );
+                                return;
+                              }
+                              try {
+                                await downloadFile(path, f.filename);
+                              } catch (err) {
+                                toast.error(err);
+                              }
+                            }}
+                            className="inline-flex max-w-full items-center gap-1 rounded-md border border-slate-200 bg-white px-1.5 py-0.5 text-[11px] text-indigo-700 hover:bg-indigo-50"
+                          >
+                            <Download className="h-3 w-3 shrink-0" />
+                            <span className="truncate">{f.filename}</span>
+                          </button>
+                        ))}
+                      </span>
                     )}
                   </td>
                 </tr>

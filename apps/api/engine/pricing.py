@@ -34,3 +34,24 @@ def cost_of(model: str, input_tokens: int, output_tokens: int) -> Decimal:
     if price is None:
         return Decimal("0")
     return (Decimal(price[0]) * input_tokens + Decimal(price[1]) * output_tokens) / MILLION
+
+
+# 이미지 한 장 예상 비용(USD, 정사각 1024 기준, **참고용 추정**). 공급자는 장당 비용을 알려 주지 않아
+# 표로 어림한다. 표에 없는 모델은 0(비용 미집계)이고, 정사각이 아닌 큰 크기는 1.5배로 본다.
+IMAGE_PRICES: dict[str, str] = {
+    "gpt-image-1": "0.04",
+    "gpt-image-1-mini": "0.01",
+    "dall-e-3": "0.04",
+    "dall-e-2": "0.02",
+    "grok-2-image": "0.07",
+}
+
+
+def image_cost(model: str, count: int, size: str = "1024x1024") -> Decimal:
+    price = IMAGE_PRICES.get(model)
+    if price is None:
+        price = next((p for m, p in IMAGE_PRICES.items() if model.startswith(m + "-")), None)
+    if price is None:
+        return Decimal("0")
+    factor = Decimal("1") if size == "1024x1024" else Decimal("1.5")
+    return Decimal(price) * count * factor

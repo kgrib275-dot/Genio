@@ -543,9 +543,15 @@ def _check_run(
         moderated=was_moderated,
         citations=cites or None,
     )
-    events_out: list[Event] = [
-        ("moderated" if was_moderated else "answer", {"text": answer, "message_id": m.id})
-    ]
+    payload: dict[str, Any] = {"text": answer, "message_id": m.id}
+    if status == "succeeded" and not was_moderated:
+        # v0.9: 이미지·파일 단계가 만든 파일은 서명된 내려받기 링크와 함께 답에 실어 보낸다
+        from api.services import run_files
+
+        made = run_files.files_of_run(db, r, app.workspace_id)
+        if made:
+            payload["files"] = run_files.with_public_links(made, app.id, run_id)
+    events_out: list[Event] = [("moderated" if was_moderated else "answer", payload)]
     if cites:
         events_out.append(("citations", cites))
     if status == "waiting_approval":

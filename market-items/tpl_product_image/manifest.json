@@ -1,0 +1,19 @@
+{
+  "key": "tpl_product_image",
+  "type": "template",
+  "name": "제품 사진 만들기(챗에서 바로 보기)",
+  "summary": "원하는 사진을 말로 설명하면 AI가 이미지를 만들어 챗 답에 바로 보여 주고 내려받게 해요(OpenAI·Azure·OpenAI 호환 연결 필요).",
+  "version": "1.0.0",
+  "publisher": "platform",
+  "price": 0,
+  "category": "마케팅",
+  "app_type": "chat",
+  "tags": [
+    "이미지",
+    "이미지 생성",
+    "제품 사진",
+    "마케팅",
+    "챗"
+  ],
+  "permissions": []
+}

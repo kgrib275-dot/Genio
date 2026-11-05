@@ -49,6 +49,7 @@ import {
 import { errorLines } from "@/lib/api/client";
 import type { FeaturesWithHandoff } from "@/lib/api/v5a";
 import type { Citation, PublicApp, PublicFeatures, Rating, StoredFile } from "@/lib/api/types";
+import { resolveFilePath, type OutputFile } from "@/lib/fileKinds";
 import { cn } from "@/lib/cn";
 import { isSendKey, sendHint, useEnterToSend } from "@/lib/composer";
 
@@ -324,6 +325,8 @@ export function ChatView({
               finishAnswer({
                 text: String(d.text ?? ""),
                 messageId: d.message_id ? String(d.message_id) : undefined,
+                outFiles:
+                  Array.isArray(d.files) && d.files.length ? (d.files as OutputFile[]) : undefined,
                 moderated: ev.event === "moderated",
                 annotated: ev.event === "annotated",
               });
@@ -488,6 +491,10 @@ export function ChatView({
       window.clearInterval(t);
     };
   }, [pending, handoff, sessionId, transport]);
+
+  // 이미지·파일 단계가 만든 파일: 공유 링크면 서명 링크, 앱 안 시험이면 실행 기록 경로
+  const resolveFile = (f: OutputFile, inline: boolean) =>
+    resolveFilePath(f, { token: transport.fileToken }, inline);
 
   const handoffEnabled = Boolean((features as FeaturesWithHandoff).handoff?.enabled);
   const askHuman = async () => {
@@ -757,6 +764,7 @@ export function ChatView({
                     onRetry={regenerate}
                     onSuggest={(q) => void send(q)}
                     onSpeak={speak}
+                    resolveFile={resolveFile}
                   />
                 ))}
                 {busy &&

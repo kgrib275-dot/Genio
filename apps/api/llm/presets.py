@@ -54,6 +54,8 @@ class Preset:
             "native": self.native,
             "needs_base_url": self.needs_base_url,
             "embedding": self.embedding,
+            "image": self.key in IMAGE_PROVIDERS,
+            "image_models": list(IMAGE_PROVIDERS.get(self.key, ())),
             "vision": any(m.vision for m in self.models),
         }
 
@@ -296,6 +298,26 @@ PRESETS: dict[str, Preset] = {p.key: p for p in _LIST}
 NATIVE_KEYS = tuple(p.key for p in _LIST if p.native)
 COMPAT_KEYS = tuple(p.key for p in _LIST if not p.native)
 GROUP_ORDER = ("기본", "국내", "해외", "오픈 모델 호스팅", "직접 입력")
+
+# 이미지 만들기(v0.9)를 지원하는 공급자와 대표 이미지 모델(앞이 기본). 모델 이름은 자주 바뀌므로
+# 단계 설정에서 직접 적을 수 있다. 빈 목록 = 지원하지만 모델 이름(배포 이름 등)을 직접 적어야 한다.
+IMAGE_PROVIDERS: dict[str, tuple[str, ...]] = {
+    "openai": ("gpt-image-1", "dall-e-3"),
+    "azure": (),
+    "openai-compatible": (),
+    "xai": ("grok-2-image",),
+    "together": ("black-forest-labs/FLUX.1-schnell",),
+}
+
+
+def image_capable(provider: str) -> bool:
+    return provider in IMAGE_PROVIDERS
+
+
+def default_image_model(provider: str) -> str:
+    """대표 이미지 모델(없으면 빈 글 — 사용자가 직접 적어야 한다)."""
+    models = IMAGE_PROVIDERS.get(provider, ())
+    return models[0] if models else ""
 
 
 def provider_list() -> list[dict[str, Any]]:

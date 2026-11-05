@@ -75,6 +75,9 @@ class RunServices:
         # v0.4: 답 조각을 받는 곳(node_id, 글 조각)과 지금 실행 중인 단계
         self.on_delta: Callable[[str, str], None] | None = None
         self.current_node: str = ""
+        # v0.9: 이 실행이 속한 앱(만든 파일을 앱에 묶는다)과 토큰으로 안 잡히는 비용(이미지 만들기 추정)
+        self.app_id: str | None = None
+        self.extra_costs: list[Decimal] = []
 
     def llm_complete(
         self,
@@ -291,6 +294,67 @@ class RunServices:
                 merged.update(v)
         return {**merged, "text": str(out.get("text", "")), "run_id": child.id}
 
+    # ---- v0.9: 이미지 만들기·파일 만들기 ----
+    def generate_images(
+        self,
+        *,
+        provider: str,
+        model: str | None,
+        prompt: str,
+        size: str,
+        count: int,
+    ) -> dict[str, Any]:
+        from api.services import image_gen
+
+        res = image_gen.generate(
+            self.db,
+            self.workspace_id,
+            self.app_id,
+            provider=provider,
+            model=model,
+            prompt=prompt,
+            size=image_gen.clean_size(size),
+            count=image_gen.clean_count(count),
+        )
+        if res.input_tokens or res.output_tokens:
+            self.usage.append((res.model, res.input_tokens, res.output_tokens))
+        if res.cost:
+            self.extra_costs.append(res.cost)  # 장당 예상 비용(참고용 추정)
+        return {
+            "files": res.files,
+            "revised_prompt": res.revised_prompt,
+            "cost": float(res.cost),
+        }
+
+    def export_file(
+        self,
+        *,
+        fmt: str,
+        filename: str,
+        source: str,
+        text: str,
+        rows: Any,
+        columns: list[str] | None,
+        bom: bool,
+        sheet: str,
+    ) -> dict[str, Any]:
+        from api.services import file_export, run_files
+        from api.services import files as files_svc
+
+        data = file_export.build_file(
+            fmt, source=source, text=text, rows=rows, columns=columns, bom=bom, sheet=sheet
+        )
+        mime = file_export.FORMATS[fmt][0]
+        f = files_svc.save_generated(
+            self.db,
+            self.workspace_id,
+            self.app_id,
+            filename=file_export.safe_filename(filename, fmt),
+            mime=mime,
+            data=data,
+        )
+        return {"file": run_files.file_item(f)}
+
     # ---- v0.8: 외부 도구 ----
     def mcp_call(
         self, *, credential_id: str, tool: str, arguments: dict[str, Any]
@@ -383,6 +447,8 @@ def _node_timeout(node_type: str, data: dict[str, Any]) -> float | None:
             return max(1.0, min(float(custom), 600.0))
         except (TypeError, ValueError):
             return None
+    if node_type == "image_generate":  # 그림 만들기는 오래 걸린다(최대 4장)
+        return max(120.0, get_settings().genio_node_timeout_seconds)
     if node_type != "wait":
         return None
     try:
@@ -491,7 +557,9 @@ def _finish(
         inp += i
         out += o
         cost += cost_of(model, i, o)
+    cost += sum(services.extra_costs, Decimal("0"))  # 이미지 만들기 예상 비용
     services.usage.clear()
+    services.extra_costs.clear()
     run.token_usage = {"input_tokens": inp, "output_tokens": out}
     run.cost = cost
     run.status = status
@@ -955,6 +1023,7 @@ def run_node_once(
     if node is None:
         return {"kind": "error", "value": f"'{node_id}' 단계를 찾지 못했어요.", "logs": [], "ms": 0}
     services = RunServices(db, app.workspace_id)
+    services.app_id = app.id
     services.current_node = node.id
     env_vars = decrypt_env_vars(app.env_vars or [])
     ctx = _build_ctx(
@@ -984,6 +1053,7 @@ def _execute(db: Session, run_id: str) -> None:
         return
     ensure_market_nodes(db)
     services = RunServices(db, app.workspace_id)
+    services.app_id = app.id
     run_id_for_events = run.id
 
     def delta_sink(node_id: str, text: str) -> None:
@@ -1205,6 +1275,7 @@ def _execute(db: Session, run_id: str) -> None:
                     continue
                 # 여러 갈래가 동시에 돌 때: 갈래마다 DB 연결을 따로 쓴다
                 local = RunServices(SessionLocal(), app.workspace_id)
+                local.app_id = app.id
                 local.depth = services.depth
                 local.on_delta = services.on_delta
                 local.current_node = node.id
@@ -1229,6 +1300,8 @@ def _execute(db: Session, run_id: str) -> None:
                     kind, value = "crash", type(exc).__name__
                 services.usage.extend(local.usage)
                 local.usage.clear()
+                services.extra_costs.extend(local.extra_costs)
+                local.extra_costs.clear()
                 local.db.close()
                 record(node, step, ctx, kind, value)
     finally:

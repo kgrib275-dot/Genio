@@ -13,6 +13,7 @@ import {
 import { useState, type ReactNode } from "react";
 import { AppIcon } from "@/components/AppIcon";
 import { Markdown } from "@/components/chat/Markdown";
+import { FileList, type ResolveFile } from "@/components/files/FileList";
 import type { ChatLine } from "@/lib/api/chat";
 import type { Citation, Rating } from "@/lib/api/types";
 import { cn, copyText } from "@/lib/cn";
@@ -101,6 +102,7 @@ export function ChatMessage({
   onRetry,
   onSuggest,
   onSpeak,
+  resolveFile,
 }: {
   line: ChatLine;
   appName: string;
@@ -114,6 +116,8 @@ export function ChatMessage({
   onRetry: () => void;
   onSuggest: (q: string) => void;
   onSpeak: (text: string) => void;
+  /** 이미지·파일 단계가 만든 파일을 받을 경로 */
+  resolveFile?: ResolveFile;
 }) {
   const [copied, setCopied] = useState(false);
 
@@ -187,6 +191,9 @@ export function ChatMessage({
         </div>
         {!line.streaming && (
           <>
+            {resolveFile && line.outFiles && line.outFiles.length > 0 && (
+              <FileList files={line.outFiles} resolve={resolveFile} className="mt-2" />
+            )}
             {line.citations && line.citations.length > 0 && <Citations items={line.citations} />}
             <div className="mt-1 flex flex-wrap items-center gap-0.5 text-slate-400">
               {line.moderated && (

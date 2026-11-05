@@ -1,16 +1,36 @@
 """테스트용 가짜 LLM 어댑터. 실제 공급자를 부르지 않는다."""
 
+import base64
 import hashlib
 import json
 import math
 import re
+import struct
+import zlib
 from collections.abc import Callable
 from typing import Any
 
 from api.llm.base import ChatTurn, Message, OnText, ToolCall, ToolDef, parse_json_object
+from api.llm.image import RawImage, RawImageResult
 from nodes import LlmResult
 
 DIM = 1536
+
+
+def tiny_png(w: int = 4, h: int = 4) -> bytes:
+    """시험용 진짜 PNG(빨간 네모)."""
+
+    def chunk(kind: bytes, data: bytes) -> bytes:
+        body = kind + data
+        return struct.pack(">I", len(data)) + body + struct.pack(">I", zlib.crc32(body))
+
+    raw = b"".join(b"\x00" + b"\xff\x00\x00" * w for _ in range(h))
+    return (
+        b"\x89PNG\r\n\x1a\n"
+        + chunk(b"IHDR", struct.pack(">IIBBBBB", w, h, 8, 2, 0, 0, 0))
+        + chunk(b"IDAT", zlib.compress(raw))
+        + chunk(b"IEND", b"")
+    )
 
 
 def fake_embedding(text: str) -> list[float]:
@@ -40,6 +60,21 @@ class FakeAdapter:
     def __init__(self, script: list[Callable[[list[Message]], ChatTurn]] | None = None) -> None:
         self.script = list(script or [])
         self.calls: list[dict[str, Any]] = []
+        # 이미지 만들기 시험: 던질 오류, 돌려줄 그림 바이트(없으면 작은 PNG)
+        self.image_error: Exception | None = None
+        self.image_bytes: bytes | None = None
+
+    def generate_images(self, *, model: str, prompt: str, size: str, count: int) -> RawImageResult:
+        self.calls.append(
+            {"kind": "image", "model": model, "prompt": prompt, "size": size, "count": count}
+        )
+        if self.image_error is not None:
+            raise self.image_error
+        data = base64.b64encode(self.image_bytes or tiny_png()).decode()
+        return RawImageResult(
+            images=[RawImage(b64=data, revised_prompt=f"다듬은 설명: {prompt[:20]}")] * count,
+            model=model,
+        )
 
     def complete(
         self,

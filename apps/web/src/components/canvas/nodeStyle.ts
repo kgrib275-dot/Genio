@@ -2,6 +2,8 @@ import {
   Bot,
   Braces,
   FileCode,
+  FileDown,
+  ImagePlus,
   FileText,
   ListFilter,
   ListTree,
@@ -41,6 +43,9 @@ export const TYPE_ICON: Record<string, LucideIcon> = {
   document_extractor: FileText,
   variable_assigner: Variable,
   agent: Bot,
+  // v0.9
+  image_generate: ImagePlus,
+  file_export: FileDown,
 };
 
 /** 카테고리별 색(아이콘 타일·왼쪽 띠) */

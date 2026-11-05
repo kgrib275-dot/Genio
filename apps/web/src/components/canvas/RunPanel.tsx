@@ -2,6 +2,7 @@ import { RotateCcw, Wand2 } from "lucide-react";
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { DataView } from "@/components/DataView";
+import { FileList } from "@/components/files/FileList";
 import { inspectorSteps } from "@/components/run/inspectorSteps";
 import { ValueInspector } from "@/components/run/ValueInspector";
 import { StatusBadge } from "@/components/ui/badge";
@@ -10,6 +11,7 @@ import { useRun } from "@/lib/api/apps";
 import type { GraphNode, Run, RunStep } from "@/lib/api/types";
 import { splitFailure, useRerunFromNode, type RunDetailStory, type StoryStep } from "@/lib/api/v5c";
 import { formatCost } from "@/lib/cn";
+import { runFilePath, type WithFiles } from "@/lib/fileKinds";
 
 const TERMINAL = new Set(["succeeded", "failed", "waiting_approval"]);
 
@@ -204,6 +206,15 @@ export function RunPanel({
         <div className="border-b border-slate-100 px-3 py-2">
           <p className="text-[11px] font-medium text-slate-500">결과</p>
           <p className="whitespace-pre-wrap text-sm text-slate-900">{run.output.text}</p>
+        </div>
+      )}
+      {ended && ((fresh as (RunDetailStory & WithFiles) | undefined)?.files?.length ?? 0) > 0 && (
+        <div className="border-b border-slate-100 px-3 py-2">
+          <p className="mb-1 text-[11px] font-medium text-slate-500">만들어진 파일</p>
+          <FileList
+            files={(fresh as RunDetailStory & WithFiles).files}
+            resolve={(f, inline) => runFilePath(run.id, f.id, inline)}
+          />
         </div>
       )}
       <ul>

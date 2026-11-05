@@ -1,7 +1,7 @@
 """v0.9: human task timeout rules and forwarding history
 
 Revision ID: 0017
-Revises: 0016
+Revises: 0015
 Create Date: 2026-11-05 14:00:00
 """
 
@@ -12,7 +12,7 @@ from alembic import op
 from sqlalchemy.dialects import postgresql
 
 revision: str = "0017"
-down_revision: str | None = "0016"
+down_revision: str | None = "0015"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

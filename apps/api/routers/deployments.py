@@ -496,6 +496,11 @@ def public_form_result(token: str, run_id: str, db: DbDep, user: OptionalUser) -
     body: dict[str, Any] = {"run_id": run.id, "status": run.status}
     if run.status == "succeeded":
         body["text"] = str(out.get("text", ""))
+        from api.services import run_files
+
+        made = run_files.files_of_run(db, run, app.workspace_id)
+        if made:
+            body["files"] = run_files.with_public_links(made, app.id, run.id)
     elif run.status == "failed":
         msg = (run.error or "").strip()
         body["error"] = {
@@ -513,7 +518,7 @@ def public_session_messages(
     token: str, session_id: str, db: DbDep, user: OptionalUser
 ) -> list[dict[str, Any]]:
     """브라우저가 가진 세션 id로 지난 대화를 다시 불러온다(이 배포의 대화만)."""
-    dep, app, _ = _load_public(db, token)
+    dep, app, version = _load_public(db, token)
     _check_access(db, dep, app, user)
     conv = db.scalar(
         select(Conversation).where(
@@ -524,11 +529,17 @@ def public_session_messages(
     )
     if conv is None:
         raise AppError(404, "지난 대화를 찾을 수 없어요.", "새 대화를 시작하세요.")
-    msgs = db.scalars(
-        select(Message).where(Message.conversation_id == conv.id).order_by(Message.created_at)
+    msgs = list(
+        db.scalars(
+            select(Message).where(Message.conversation_id == conv.id).order_by(Message.created_at)
+        )
     )
-    return [
-        {
+    from api.services import run_files
+
+    makes_files = run_files.graph_makes_files(version.graph)
+    out: list[dict[str, Any]] = []
+    for m in msgs:
+        item: dict[str, Any] = {
             "id": m.id,
             "role": m.role,
             "content": m.content,
@@ -538,8 +549,13 @@ def public_session_messages(
             "moderated": bool(m.moderated),
             "annotated": m.annotation_id is not None,
         }
-        for m in msgs
-    ]
+        run = db.get(Run, m.run_id) if makes_files and m.role == "assistant" and m.run_id else None
+        if run is not None and run.status == "succeeded" and not m.moderated:
+            made = run_files.files_of_run(db, run, app.workspace_id)
+            if made:  # 지난 대화를 다시 열면 새로 서명한 링크를 준다
+                item["files"] = run_files.with_public_links(made, app.id, run.id)
+        out.append(item)
+    return out
 
 
 def _session_conv(db: Session, dep: Deployment, app: App, session_id: str) -> Conversation:

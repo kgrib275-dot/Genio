@@ -16,7 +16,7 @@ from api.core.errors import AppError
 from api.deps import EDIT_APPS, VIEW_RUNS, Ctx, DbDep, require_role
 from api.engine.executor import _limits_message
 from api.models import App, WorkflowVersion
-from api.routers.common import client_ip
+from api.routers.common import client_ip, public_origin
 from api.routers.deployments import OptionalUser, _check_access, _load_public
 from api.services import apps as app_svc
 from api.services import batches as svc
@@ -147,8 +147,8 @@ def app_create(app_id: str, body: BatchIn, ctx: AppBuilders) -> dict[str, Any]:
 
 
 @router.get("/apps/{app_id}/batches/{batch_id}")
-def app_status(app_id: str, batch_id: str, ctx: AppViewers) -> dict[str, Any]:
-    return svc.batch_status(ctx.db, app_id, batch_id, public=False)
+def app_status(app_id: str, batch_id: str, request: Request, ctx: AppViewers) -> dict[str, Any]:
+    return svc.batch_status(ctx.db, app_id, batch_id, public=False, origin=public_origin(request))
 
 
 @router.post("/apps/{app_id}/batches/{batch_id}/cancel")
@@ -157,8 +157,8 @@ def app_cancel(app_id: str, batch_id: str, ctx: AppBuilders) -> dict[str, Any]:
 
 
 @router.get("/apps/{app_id}/batches/{batch_id}/results.csv")
-def app_results(app_id: str, batch_id: str, ctx: AppViewers) -> Response:
-    status = svc.batch_status(ctx.db, app_id, batch_id, public=False)
+def app_results(app_id: str, batch_id: str, request: Request, ctx: AppViewers) -> Response:
+    status = svc.batch_status(ctx.db, app_id, batch_id, public=False, origin=public_origin(request))
     fields = svc.batch_input_fields(ctx.db, app_id, batch_id)
     return _csv_response(svc.results_csv(status, fields), "batch-results.csv")
 
@@ -242,7 +242,9 @@ def public_status(
     token: str, batch_id: str, request: Request, db: DbDep, user: OptionalUser
 ) -> dict[str, Any]:
     _, app, _ = _public_ctx(db, token, user, request, limit=None)
-    return svc.batch_status(db, app.id, batch_id, public=True)
+    return svc.batch_status(
+        db, app.id, batch_id, public=True, origin=public_origin(request), token=token
+    )
 
 
 @router.post("/public/apps/{token}/batches/{batch_id}/cancel")
@@ -258,7 +260,9 @@ def public_results(
     token: str, batch_id: str, request: Request, db: DbDep, user: OptionalUser
 ) -> Response:
     _, app, _ = _public_ctx(db, token, user, request, limit=None)
-    status = svc.batch_status(db, app.id, batch_id, public=True)
+    status = svc.batch_status(
+        db, app.id, batch_id, public=True, origin=public_origin(request), token=token
+    )
     fields = svc.batch_input_fields(db, app.id, batch_id)
     return _csv_response(svc.results_csv(status, fields), "batch-results.csv")
 

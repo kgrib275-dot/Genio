@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { RotateCcw } from "lucide-react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { FailureBox, JsonView, StepRow, StoryList } from "@/components/canvas/RunPanel";
+import { FileList } from "@/components/files/FileList";
 import { inspectorSteps } from "@/components/run/inspectorSteps";
 import { ValueInspector } from "@/components/run/ValueInspector";
 import { DataView } from "@/components/DataView";
@@ -20,6 +21,7 @@ import { canEdit, useSession } from "@/store/session";
 import { streamRunEvents } from "@/lib/api/builder";
 import type { Run, RunDetail, RunStep } from "@/lib/api/types";
 import { formatCost, formatDate } from "@/lib/cn";
+import { runFilePath, type WithFiles } from "@/lib/fileKinds";
 import { useListControls } from "@/lib/useListControls";
 import { RUN_STATUS } from "@/lib/runLabels";
 import { useRerunFromNode, type RunDetailStory, type StoryStep } from "@/lib/api/v5c";
@@ -293,6 +295,20 @@ export default function RunDetailPage() {
           </CardBody>
         </Card>
       </div>
+      {((r as RunDetail & WithFiles).files?.length ?? 0) > 0 && (
+        <Card className="mt-6">
+          <CardHeader
+            title="만들어진 파일"
+            description="이미지 만들기·파일 만들기 단계가 만든 파일이에요. 눌러서 내려받아요."
+          />
+          <CardBody>
+            <FileList
+              files={(r as RunDetail & WithFiles).files}
+              resolve={(f, inline) => runFilePath(r.id, f.id, inline)}
+            />
+          </CardBody>
+        </Card>
+      )}
       {steps.some((s) => s.output && Object.keys(s.output).length > 0) && (
         <Card className="mt-6">
           <CardHeader
