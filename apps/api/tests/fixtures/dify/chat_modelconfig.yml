@@ -1,0 +1,74 @@
+app:
+  description: 이름을 받아 인사하는 챗봇
+  icon: 💬
+  icon_background: '#FFEAD5'
+  mode: chat
+  name: 인사 챗봇
+kind: app
+version: 0.1.5
+model_config:
+  agent_mode:
+    enabled: false
+    max_iteration: 5
+    strategy: function_call
+    tools: []
+  annotation_reply:
+    enabled: false
+  chat_prompt_config: {}
+  completion_prompt_config: {}
+  dataset_configs:
+    datasets:
+      datasets:
+      - dataset:
+          enabled: true
+          id: 4f0f6b0a-1111-4222-8333-444455556666
+    retrieval_model: single
+  dataset_query_variable: ''
+  external_data_tools: []
+  file_upload:
+    image:
+      detail: high
+      enabled: false
+      number_limits: 3
+      transfer_methods:
+      - remote_url
+      - local_file
+  model:
+    completion_params:
+      stop: []
+      temperature: 0.8
+    mode: chat
+    name: gpt-4o-mini
+    provider: openai
+  more_like_this:
+    enabled: false
+  opening_statement: 안녕하세요, {{name}}님!
+  pre_prompt: '당신은 {{company}}의 안내원입니다. 사용자 이름은 {{name}}입니다. 항상 존댓말로 답하세요.'
+  prompt_type: simple
+  retriever_resource:
+    enabled: true
+  sensitive_word_avoidance:
+    enabled: false
+  speech_to_text:
+    enabled: true
+  suggested_questions:
+  - 영업 시간은?
+  suggested_questions_after_answer:
+    enabled: false
+  text_to_speech:
+    enabled: false
+  user_input_form:
+  - text-input:
+      default: ''
+      label: 이름
+      max_length: 48
+      required: true
+      variable: name
+  - select:
+      default: ''
+      label: 회사
+      options:
+      - 효성
+      - 제니오
+      required: true
+      variable: company

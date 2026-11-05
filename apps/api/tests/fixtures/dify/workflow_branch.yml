@@ -1,0 +1,243 @@
+app:
+  description: 주문 금액에 따라 할인을 계산하고 외부 시스템에 알리는 흐름
+  icon: 🧮
+  icon_background: '#E4FBCC'
+  mode: workflow
+  name: 주문 할인 계산
+  use_icon_as_answer_icon: false
+kind: app
+version: 0.1.5
+workflow:
+  conversation_variables: []
+  environment_variables: []
+  features:
+    file_upload:
+      enabled: false
+    opening_statement: ''
+    retriever_resource:
+      enabled: false
+    sensitive_word_avoidance:
+      enabled: false
+    speech_to_text:
+      enabled: false
+    suggested_questions: []
+    suggested_questions_after_answer:
+      enabled: false
+    text_to_speech:
+      enabled: false
+  graph:
+    edges:
+    - id: e-start-cond
+      source: '1000000000001'
+      sourceHandle: source
+      target: '1000000000002'
+      targetHandle: target
+      type: custom
+    - id: e-cond-code
+      source: '1000000000002'
+      sourceHandle: 'true'
+      target: '1000000000003'
+      targetHandle: target
+      type: custom
+    - id: e-cond-else
+      source: '1000000000002'
+      sourceHandle: 'false'
+      target: '1000000000006'
+      targetHandle: target
+      type: custom
+    - id: e-code-http
+      source: '1000000000003'
+      sourceHandle: source
+      target: '1000000000004'
+      targetHandle: target
+      type: custom
+    - id: e-http-tpl
+      source: '1000000000004'
+      sourceHandle: source
+      target: '1000000000005'
+      targetHandle: target
+      type: custom
+    - id: e-tpl-end
+      source: '1000000000005'
+      sourceHandle: source
+      target: '1000000000007'
+      targetHandle: target
+      type: custom
+    - id: e-else-end
+      source: '1000000000006'
+      sourceHandle: source
+      target: '1000000000008'
+      targetHandle: target
+      type: custom
+    nodes:
+    - data:
+        desc: ''
+        title: 시작
+        type: start
+        variables:
+        - label: 고객 이름
+          max_length: 48
+          options: []
+          required: true
+          type: text-input
+          variable: customer
+        - label: 주문 금액
+          max_length: 48
+          options: []
+          required: true
+          type: number
+          variable: amount
+        - label: 국가
+          max_length: 48
+          options:
+          - 한국
+          - 일본
+          required: false
+          type: select
+          variable: country
+      id: '1000000000001'
+      position:
+        x: 30
+        y: 300
+      type: custom
+    - data:
+        cases:
+        - case_id: 'true'
+          conditions:
+          - comparison_operator: '>'
+            id: c1
+            value: '100'
+            varType: number
+            variable_selector:
+            - '1000000000001'
+            - amount
+          id: 'true'
+          logical_operator: and
+        desc: ''
+        title: 큰 주문인가?
+        type: if-else
+      id: '1000000000002'
+      position:
+        x: 330
+        y: 300
+      type: custom
+    - data:
+        code: "def main(amount: float) -> dict:\n    return {\"discount\": amount * 0.1}\n"
+        code_language: python3
+        desc: ''
+        outputs:
+          discount:
+            children: null
+            type: number
+        title: 할인 계산
+        type: code
+        variables:
+        - value_selector:
+          - '1000000000001'
+          - amount
+          variable: amount
+      id: '1000000000003'
+      position:
+        x: 630
+        y: 200
+      type: custom
+    - data:
+        authorization:
+          config:
+            api_key: sk-live-do-not-copy
+            type: bearer
+          type: api-key
+        body:
+          data:
+          - id: b1
+            key: ''
+            type: text
+            value: '{"customer": "{{#1000000000001.customer#}}", "discount": {{#1000000000003.discount#}}}'
+          type: json
+        desc: ''
+        headers: 'Content-Type: application/json'
+        method: post
+        params: 'source:genio'
+        timeout:
+          max_connect_timeout: 0
+          max_read_timeout: 0
+          max_write_timeout: 0
+        title: 외부 시스템에 알리기
+        type: http-request
+        url: https://api.example.com/discounts
+        variables: []
+      id: '1000000000004'
+      position:
+        x: 930
+        y: 200
+      type: custom
+    - data:
+        desc: ''
+        template: '{{ name }}님, 할인 {{ discount }}원이 적용돼요. (응답 {{ code }})'
+        title: 안내 문구
+        type: template-transform
+        variables:
+        - value_selector:
+          - '1000000000001'
+          - customer
+          variable: name
+        - value_selector:
+          - '1000000000003'
+          - discount
+          variable: discount
+        - value_selector:
+          - '1000000000004'
+          - status_code
+          variable: code
+      id: '1000000000005'
+      position:
+        x: 1230
+        y: 200
+      type: custom
+    - data:
+        desc: ''
+        template: '{{ name }}님, 이번 주문은 할인 대상이 아니에요.'
+        title: 할인 없음
+        type: template-transform
+        variables:
+        - value_selector:
+          - '1000000000001'
+          - customer
+          variable: name
+      id: '1000000000006'
+      position:
+        x: 630
+        y: 420
+      type: custom
+    - data:
+        desc: ''
+        outputs:
+        - value_selector:
+          - '1000000000005'
+          - output
+          variable: message
+        title: 결과(할인)
+        type: end
+      id: '1000000000007'
+      position:
+        x: 1530
+        y: 200
+      type: custom
+    - data:
+        desc: ''
+        outputs:
+        - value_selector:
+          - '1000000000006'
+          - output
+          variable: message
+        title: 결과(없음)
+        type: end
+      id: '1000000000008'
+      position:
+        x: 930
+        y: 420
+      type: custom
+    viewport:
+      x: 0
+      y: 0
+      zoom: 1

@@ -1,0 +1,110 @@
+app:
+  description: 문서 기반 질문 답변
+  icon: 📚
+  icon_background: '#D1E9FF'
+  mode: advanced-chat
+  name: 문서 Q&A 봇
+kind: app
+version: 0.1.5
+workflow:
+  conversation_variables: []
+  environment_variables: []
+  features:
+    opening_statement: ''
+    retriever_resource:
+      enabled: true
+    suggested_questions: []
+  graph:
+    edges:
+    - id: e1
+      source: start
+      sourceHandle: source
+      target: kr
+      targetHandle: target
+      type: custom
+    - id: e2
+      source: kr
+      sourceHandle: source
+      target: llm1
+      targetHandle: target
+      type: custom
+    - id: e3
+      source: llm1
+      sourceHandle: source
+      target: ans
+      targetHandle: target
+      type: custom
+    nodes:
+    - data:
+        title: Start
+        type: start
+        variables: []
+      id: start
+      position:
+        x: 80
+        y: 200
+      type: custom
+    - data:
+        dataset_ids:
+        - 4f0f6b0a-1111-4222-8333-444455556666
+        - 9a8b7c6d-1111-4222-8333-444455556666
+        multiple_retrieval_config:
+          reranking_enable: false
+          score_threshold: 0.4
+          score_threshold_enabled: true
+          top_k: 4
+        query_variable_selector:
+        - sys
+        - query
+        retrieval_mode: multiple
+        title: 지식 검색
+        type: knowledge-retrieval
+      id: kr
+      position:
+        x: 380
+        y: 200
+      type: custom
+    - data:
+        context:
+          enabled: true
+          variable_selector:
+          - kr
+          - result
+        memory:
+          window:
+            enabled: false
+            size: 10
+        model:
+          completion_params:
+            temperature: 0.2
+          mode: chat
+          name: claude-3-5-sonnet
+          provider: anthropic
+        prompt_template:
+        - id: p1
+          role: system
+          text: '아래 자료로만 답하세요.
+
+
+            {{#context#}}'
+        - id: p2
+          role: user
+          text: '{{#sys.query#}}'
+        title: 답변 만들기
+        type: llm
+        vision:
+          enabled: false
+      id: llm1
+      position:
+        x: 680
+        y: 200
+      type: custom
+    - data:
+        answer: '{{#llm1.text#}}'
+        title: Answer
+        type: answer
+      id: ans
+      position:
+        x: 980
+        y: 200
+      type: custom
