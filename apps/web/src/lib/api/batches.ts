@@ -53,6 +53,8 @@ export interface BatchStatus {
     text: string;
     error?: RowError;
     run_id?: string;
+    /** v0.9: 이 줄이 만든 파일(파일을 만드는 흐름일 때) */
+    files?: { id: string; filename: string; kind: string; url?: string }[];
   }[];
 }
 

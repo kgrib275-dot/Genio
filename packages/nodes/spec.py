@@ -135,6 +135,34 @@ class NodeServices(Protocol):
         """OpenAPI로 가져온 API 도구를 부른다. 출력: {status, ok, body, text}"""
         ...
 
+    # v0.9
+    def generate_images(
+        self,
+        *,
+        provider: str,
+        model: str | None,
+        prompt: str,
+        size: str,
+        count: int,
+    ) -> dict[str, Any]:
+        """AI로 그림을 만들어 워크스페이스 파일로 저장한다. 출력: {files, revised_prompt, cost}"""
+        ...
+
+    def export_file(
+        self,
+        *,
+        fmt: str,
+        filename: str,
+        source: str,
+        text: str,
+        rows: Any,
+        columns: list[str] | None,
+        bom: bool,
+        sheet: str,
+    ) -> dict[str, Any]:
+        """글·표를 파일로 만들어 워크스페이스 파일로 저장한다. 출력: {file: {id, filename, mime, size}}"""
+        ...
+
 
 @dataclass
 class NodeContext:

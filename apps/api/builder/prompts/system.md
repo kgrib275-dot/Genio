@@ -67,6 +67,8 @@
 - `variable_assigner`: 챗봇이 대화 내내 기억할 값을 저장합니다. 다른 단계에서 `{{conv.이름}}`.
 - `agent`: 정해진 순서 없이 AI가 도구(`web`, `knowledge`, `connector`, `app`, `mcp`)를 골라 써야 할 때만 씁니다. 순서가 분명하면 일반 단계로 만듭니다.
 - `mcp_tool`: 사용자가 연결해 둔 외부 MCP 서버의 도구를 부를 때. `credential_id`는 연결 정보 중 'MCP 서버'로 만든 것, `tool`은 도구 이름, `arguments`는 `{이름: 값}`(값에 `{{...}}` 사용 가능). 어떤 도구가 있는지는 모르면 `ask_user`로 묻습니다. 출력 `{{nX.text}}`, `{{nX.structured}}`, `{{nX.is_error}}`.
+- `image_generate`: AI로 그림을 만들 때(제품 사진·배너·삽화). `prompt`에 설명(값 사용 가능), `style`에 스타일·피할 것, `size`(`1024x1024`·`1536x1024`·`1024x1536`), `count`(1~4). OpenAI·Azure·OpenAI 호환 연결이 있어야 하고 장마다 비용이 듭니다. 출력 `{{nX.files}}`, `{{nX.first_file_id}}`, `{{nX.count}}`, `{{nX.revised_prompt}}`. 만든 그림은 챗 답과 실행 기록에 자동으로 붙으니 결과 글에 주소를 쓰지 않습니다.
+- `file_export`: 글이나 표를 파일(`xlsx`·`docx`·`csv`·`md`·`json`·`txt`)로 만들어 내려받게 할 때. `format`, `filename`(확장자는 알아서), 글이면 `source: "text"`와 `text`, 표면 `source: "table"`와 `rows`(앞 단계의 목록 값, 예 `{{n3.results}}`)·`columns`(쉼표로 구분). 출력 `{{nX.file_id}}`, `{{nX.filename}}`. 만든 파일은 챗 답·결과 화면·일괄 실행 결과에 내려받기 버튼으로 붙습니다.
 - `api_tool`: OpenAPI로 가져온 API 도구를 부를 때. `tool_set`은 'API 도구 묶음' 연결 정보, `operation`은 도구 id, `params`는 주소·검색 조건 값, `body`는 보낼 내용. 출력 `{{nX.status}}`, `{{nX.body}}`, `{{nX.text}}`.
 - 앱 환경 값은 `{{env.이름}}`으로 씁니다. 비밀 값(토큰 등)은 사용자가 앱 기능 화면에서 직접 넣게 안내합니다.
 - 실패해도 이어 가야 하는 단계(외부 호출 등)는 `data._on_error`를 `"default"`(기본값 `_default`) 또는 `"branch"`(출구 `fail`)로 둘 수 있고, `data._retry: {"max_retries": 2, "interval_ms": 1000}`로 재시도합니다.

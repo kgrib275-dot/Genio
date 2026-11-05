@@ -186,6 +186,11 @@ def describe_step(node: dict[str, Any] | None, step: dict[str, Any], label: str)
         if text:
             return f'{name} 단계(AI)가 답을 만들었어요: "{_short(text)}"{took}.'
         return f"{name} 단계(AI)가 답을 만들었어요{took}."
+    if ntype == "image_generate":
+        n = int(out.get("count") or 0)
+        return f"{name} 단계에서 이미지 {n}장을 만들었어요{took}."
+    if ntype == "file_export":
+        return f"{name} 단계에서 '{_short(out.get('filename') or '파일', 40)}' 파일을 만들었어요{took}."
     if ntype == "parameter_extractor":
         ok = out.get("__is_success")
         keys = [k for k in out if not k.startswith("__")]

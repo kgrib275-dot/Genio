@@ -1,0 +1,93 @@
+{
+  "version": 1,
+  "nodes": [
+    {
+      "id": "n1",
+      "type": "input",
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "data": {
+        "label": "주간 보고 입력",
+        "fields": [
+          {
+            "key": "team",
+            "label": "팀 이름",
+            "type": "text",
+            "required": true
+          },
+          {
+            "key": "done",
+            "label": "이번 주 한 일(한 줄에 하나씩)",
+            "type": "text",
+            "required": true
+          }
+        ]
+      }
+    },
+    {
+      "id": "n2",
+      "type": "code",
+      "position": {
+        "x": 300,
+        "y": 0
+      },
+      "data": {
+        "label": "줄마다 나누기",
+        "language": "python",
+        "inputs": {
+          "text": "{{n1.done}}"
+        },
+        "code": "lines = [l.strip(' -•\\t') for l in str(inputs['text']).splitlines() if l.strip()]\nresult = {'rows': [{'번호': i + 1, '한 일': l} for i, l in enumerate(lines)], 'count': len(lines)}"
+      }
+    },
+    {
+      "id": "n3",
+      "type": "file_export",
+      "position": {
+        "x": 600,
+        "y": 0
+      },
+      "data": {
+        "label": "엑셀 파일 만들기",
+        "format": "xlsx",
+        "filename": "{{n1.team}} 주간 보고",
+        "source": "table",
+        "rows": "{{n2.rows}}",
+        "columns": "번호, 한 일",
+        "sheet": "주간 보고"
+      }
+    },
+    {
+      "id": "n4",
+      "type": "output",
+      "position": {
+        "x": 900,
+        "y": 0
+      },
+      "data": {
+        "label": "결과",
+        "template": "'{{n3.filename}}' 파일을 만들었어요(한 일 {{n2.count}}건). 아래 파일 버튼으로 내려받으세요."
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "e1",
+      "source": "n1",
+      "target": "n2"
+    },
+    {
+      "id": "e2",
+      "source": "n2",
+      "target": "n3"
+    },
+    {
+      "id": "e3",
+      "source": "n3",
+      "target": "n4"
+    }
+  ],
+  "variables": {}
+}

@@ -2,6 +2,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { api, apiFetch } from "@/lib/api/client";
 import { sendPublicChat } from "@/lib/api/resources";
+import type { OutputFile } from "@/lib/fileKinds";
 import { streamSSE, type SSEEvent } from "@/lib/api/sse";
 import type {
   Citation,
@@ -81,6 +82,8 @@ export interface ChatLine {
   annotated?: boolean;
   rating?: Rating | null;
   files?: StoredFile[];
+  /** v0.9: 이미지·파일 단계가 만든 파일(서명 링크 포함) */
+  outFiles?: OutputFile[];
   /** 답 조각이 오는 중 */
   streaming?: boolean;
   /** 사용자가 멈춤 */
@@ -101,6 +104,8 @@ export interface SessionMessage {
   citations?: Citation[];
   moderated?: boolean;
   annotated?: boolean;
+  /** v0.9: 이 답이 만든 파일(지난 대화를 열 때 새로 서명한 링크) */
+  files?: OutputFile[];
 }
 
 export interface ChatSendBody {
@@ -120,6 +125,8 @@ export interface ChatTransport {
   sessionState?: (sessionId: string) => Promise<SessionState>;
   /** '상담원 연결' 버튼 */
   requestHandoff?: (sessionId: string) => Promise<unknown>;
+  /** 공유 링크 토큰(있으면 답에 실린 서명 링크로 파일을 받는다) */
+  fileToken?: string;
 }
 
 export function publicTransport(token: string): ChatTransport {
@@ -133,6 +140,7 @@ export function publicTransport(token: string): ChatTransport {
       ),
     sessionState: (sid) => fetchSessionState(token, sid),
     requestHandoff: (sid) => requestHandoff(token, sid),
+    fileToken: token,
   };
 }
 
@@ -166,6 +174,7 @@ export function linesFromSession(msgs: SessionMessage[], nextId: () => number): 
       messageId: m.role === "assistant" ? m.id : undefined,
       rating: m.feedback ?? null,
       citations: m.citations && m.citations.length ? m.citations : undefined,
+      outFiles: m.files && m.files.length ? m.files : undefined,
       moderated: m.moderated,
       annotated: m.annotated,
       createdAt: m.created_at,

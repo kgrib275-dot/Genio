@@ -11,11 +11,13 @@ import {
 import { AppIcon } from "@/components/AppIcon";
 import { BatchRunPanel } from "@/components/batch/BatchRunPanel";
 import { Markdown } from "@/components/chat/Markdown";
+import { FileList } from "@/components/files/FileList";
 import { errorLines } from "@/lib/api/client";
 import { startFormRun, waitFormResult, type FormRunResult } from "@/lib/api/form";
 import type { PublicApp, StoredFile } from "@/lib/api/types";
 import { uploadPublicFile } from "@/lib/api/v2";
 import { cn } from "@/lib/cn";
+import { resolveFilePath } from "@/lib/fileKinds";
 
 type Field = PublicApp["input_fields"][number];
 
@@ -281,6 +283,13 @@ export function WorkflowFormView({
               ) : result.text ? (
                 <Markdown text={result.text} />
               ) : null}
+              {result.status === "succeeded" && (result.files?.length ?? 0) > 0 && (
+                <FileList
+                  className="mt-3"
+                  files={result.files}
+                  resolve={(f, inline) => resolveFilePath(f, { token }, inline)}
+                />
+              )}
               {done && (
                 <button
                   type="button"

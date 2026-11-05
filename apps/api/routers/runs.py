@@ -71,12 +71,16 @@ def run_detail(db: Session, run: Run) -> dict[str, Any]:
         d["summary"] = describe_step(node, d, label)
         steps.append(d)
     rd = run_dict(run)
+    app = db.get(App, run.app_id)
+    from api.services.run_files import files_of_run  # v0.9: 이미지·파일 단계가 만든 파일
+
     return {
         **rd,
         "steps": steps,
         "story": describe_run(rd, steps),
         "approval": run.approval,
         "graph": graph,
+        "files": files_of_run(db, run, app.workspace_id) if app is not None else [],
     }
 
 

@@ -1,5 +1,6 @@
 // 워크플로우 앱 공유 화면(입력 폼 → 결과). 기능 정의서 Part 1 §2 앱 유형.
 import { api } from "@/lib/api/client";
+import type { OutputFile } from "@/lib/fileKinds";
 
 export interface FormRunStarted {
   run_id: string;
@@ -10,6 +11,8 @@ export interface FormRunResult {
   run_id: string;
   status: "queued" | "running" | "succeeded" | "failed" | "waiting_approval" | string;
   text?: string;
+  /** v0.9: 이미지·파일 단계가 만든 파일(서명 링크 포함) */
+  files?: OutputFile[];
   error?: { message: string; hint: string; detail?: string };
 }
 

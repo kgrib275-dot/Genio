@@ -61,6 +61,10 @@ def _warn(node_type: str, data: dict[str, Any]) -> tuple[str | None, bool]:
         return "다른 앱이 실제로 한 번 실행돼요.", True
     if node_type == "agent":
         return "에이전트가 도구를 실제로 써서 비용이 들거나 바깥에 영향을 줄 수 있어요.", True
+    if node_type == "image_generate":
+        return "AI로 그림을 실제로 만들어요(장당 비용이 들고 파일이 저장돼요).", True
+    if node_type == "file_export":
+        return "파일이 실제로 만들어져 워크스페이스 파일에 저장돼요.", True
     if node_type in ("llm", "question_classifier", "parameter_extractor", "knowledge_search"):
         return "AI를 실제로 한 번 불러서 비용이 조금 들어요.", False
     return None, False
