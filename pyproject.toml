@@ -20,12 +20,12 @@ ignore = ["RUF001", "RUF002", "RUF003", "E501"]  # 한국어 전각 문자 허�
 python_version = "3.12"
 strict = true
 mypy_path = ["apps", "packages"]
-packages = ["api", "worker", "nodes"]
+packages = ["api", "worker", "nodes", "sandbox"]
 explicit_package_bases = true
 plugins = ["pydantic.mypy"]
 
 [[tool.mypy.overrides]]
-module = ["celery", "celery.*", "simpleeval", "RestrictedPython", "RestrictedPython.*", "pymysql", "pymysql.*", "docx", "docx.*", "pptx", "pptx.*", "openpyxl", "openpyxl.*"]
+module = ["celery", "celery.*", "boto3", "boto3.*", "botocore", "botocore.*", "simpleeval", "RestrictedPython", "RestrictedPython.*", "pymysql", "pymysql.*", "docx", "docx.*", "pptx", "pptx.*", "openpyxl", "openpyxl.*"]
 ignore_missing_imports = true
 follow_imports = "skip"
 

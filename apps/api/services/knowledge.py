@@ -17,6 +17,7 @@ from api.db import is_postgres
 from api.llm.base import LlmError
 from api.llm.registry import resolve_llm
 from api.models import Chunk, Document, KnowledgeBase
+from api.services import storage
 from nodes import NodeError
 
 ALLOWED_MIME = {
@@ -308,7 +309,7 @@ def process_document(db: Session, document_id: str) -> None:
             kb_settings(kb),
             filename=doc.filename,
             mime=doc.mime,
-            content=doc.content or b"",
+            content=storage.read_content(doc),
             source=doc.source,
             doc_metadata=doc.doc_metadata,
         )

@@ -66,6 +66,30 @@ def _worker() -> dict[str, Any]:
     return _item("ok", "실행 워커", f"워커 {len(replies)}개 응답", workers=len(replies))
 
 
+def _sandbox() -> dict[str, Any]:
+    """코드 단계를 격리 서버에서 돌리는지, 응답은 하는지."""
+    from api.engine import sandbox_client
+
+    if not sandbox_client.enabled():
+        return _item(
+            "unknown",
+            "코드 실행",
+            "서버 안에서 실행해요(격리 서버를 쓰지 않음). 여러 사람이 쓰면 격리 서버를 켜는 것을 권해요.",
+            mode="in-process",
+        )
+    ok, ms = sandbox_client.health()
+    if not ok:
+        return _item(
+            "error",
+            "코드 실행",
+            "코드 실행 서버가 응답하지 않아요. 코드 단계가 실패하고 있어요.",
+            mode="sandbox",
+        )
+    return _item(
+        "ok" if ms < 500 else "warn", "코드 실행", f"격리 서버 응답 {ms}ms", mode="sandbox", ms=ms
+    )
+
+
 def _queue() -> dict[str, Any]:
     st = get_settings()
     url = st.celery_broker_url or st.redis_url
@@ -136,7 +160,7 @@ def system_status(db: Session) -> dict[str, Any]:
     now = datetime.now(UTC)
     since = now - timedelta(hours=24)
     redis_item, _ = _redis()
-    items = [_db(db), redis_item, _worker(), _queue(), _backup(now), _disk()]
+    items = [_db(db), redis_item, _worker(), _queue(), _sandbox(), _backup(now), _disk()]
     runs_24h = db.scalar(select(func.count()).select_from(Run).where(Run.created_at >= since)) or 0
     failed_24h = (
         db.scalar(

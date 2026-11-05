@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any, Protocol
 
 from api.config import get_settings
+from api.engine import sandbox_client
 from nodes import NodeError
 
 ALLOWED_IMPORTS = ("json", "math", "re", "datetime", "statistics", "random", "string", "itertools")
@@ -71,5 +72,18 @@ class RestrictedPythonRunner:
         return result
 
 
+class SandboxRunner:
+    """v0.8: 별도 컨테이너의 코드 실행 서버(GENIO_SANDBOX_URL)에서 실행한다."""
+
+    def __init__(self, timeout: float | None = None) -> None:
+        self.timeout = timeout or get_settings().genio_code_node_timeout_seconds
+
+    def run(self, code: str, inputs: dict[str, Any]) -> dict[str, Any]:
+        return sandbox_client.run_remote("python", code, inputs, self.timeout)
+
+
 def get_code_runner() -> CodeRunner:
+    # 격리 서버를 설정했으면 그쪽으로, 아니면 지금처럼 서버 안에서 실행한다
+    if sandbox_client.enabled():
+        return SandboxRunner()
     return RestrictedPythonRunner()

@@ -43,12 +43,17 @@ _SECRET_PATTERNS = [
 ]
 
 
-def scrub(text: str) -> str:
-    """비밀처럼 보이는 값을 가리고 길이를 줄인다."""
+def redact(text: str) -> str:
+    """비밀처럼 보이는 값만 가린다(길이·공백은 그대로). Sentry 같은 외부 전송 전 정리에도 쓴다."""
     out = str(text or "")
     for pat, repl in _SECRET_PATTERNS:
         out = pat.sub(repl, out)
-    out = " ".join(out.split())
+    return out
+
+
+def scrub(text: str) -> str:
+    """비밀처럼 보이는 값을 가리고 길이를 줄인다."""
+    out = " ".join(redact(text).split())
     return out[:MAX_MESSAGE]
 
 

@@ -21,6 +21,7 @@ from sqlalchemy.orm import Session
 
 from api.config import get_settings
 from api.connectors.runtime import run_connector
+from api.core.errors import AppError
 from api.db import SessionLocal
 from api.engine import events, safe_http
 from api.engine.code_runner import get_code_runner
@@ -31,7 +32,7 @@ from api.llm.registry import resolve_llm
 from api.market.service import ensure_market_nodes
 from api.models import App, DataTable, Run, RunStep, StoredFile, WorkflowVersion
 from api.schemas.graph import Graph
-from api.services import knowledge
+from api.services import knowledge, storage
 from api.services.app_config import decrypt_env_vars, merged_features
 from nodes import LlmResult, NodeContext, NodeError, NodeResult, registry
 
@@ -198,7 +199,10 @@ class RunServices:
         f = self.db.get(StoredFile, file_id)
         if f is None or f.workspace_id != self.workspace_id:
             raise NodeError("파일을 찾을 수 없어요. 다시 올려 주세요.")
-        return f.filename, f.mime, f.content
+        try:
+            return f.filename, f.mime, storage.read_content(f)
+        except AppError as exc:
+            raise NodeError(f"{exc.message} {exc.hint}") from None
 
     def extract_text(self, *, filename: str, mime: str, content: bytes) -> str:
         try:
@@ -291,7 +295,6 @@ class RunServices:
         filter: dict[str, Any] | None,
         limit: int,
     ) -> dict[str, Any]:
-        from api.core.errors import AppError
         from api.services import data_tables
 
         table = self.db.get(DataTable, table_id)
