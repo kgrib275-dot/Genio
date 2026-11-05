@@ -24,6 +24,11 @@ export interface Appearance {
   width: number;
   height: number;
   title: string;
+  /** v0.8: 링크를 공유할 때 메신저에 뜨는 미리보기 */
+  share_title: string;
+  share_description: string;
+  /** 썸네일로 올린 파일 id(없으면 기본 그림) */
+  share_image: string;
 }
 
 export const DEFAULT_APPEARANCE: Appearance = {
@@ -35,6 +40,9 @@ export const DEFAULT_APPEARANCE: Appearance = {
   width: 380,
   height: 600,
   title: "",
+  share_title: "",
+  share_description: "",
+  share_image: "",
 };
 
 export const HEX_COLOR = /^#[0-9a-fA-F]{6}$/;

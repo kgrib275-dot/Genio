@@ -1,6 +1,6 @@
 // 배포 모양(위젯 색·위치·버튼 글·인사 말풍선·창 크기)을 바꾸고 바로 미리 본다.
-import { MessageCircle, X } from "lucide-react";
-import { useState, type CSSProperties } from "react";
+import { ImagePlus, MessageCircle, Trash2, X } from "lucide-react";
+import { useRef, useState, type CSSProperties } from "react";
 import { ErrorBox } from "@/components/ErrorBox";
 import { Button } from "@/components/ui/button";
 import { Field, Input, Textarea } from "@/components/ui/input";
@@ -12,7 +12,39 @@ import {
   useUpdateAppearance,
   type Appearance,
 } from "@/lib/api/chat";
+import { uploadWorkspaceFile } from "@/lib/api/v2";
 import { cn } from "@/lib/cn";
+import { useSession } from "@/store/session";
+
+const THUMB_MAX_BYTES = 2 * 1024 * 1024;
+const THUMB_TYPES = ["image/png", "image/jpeg", "image/webp", "image/gif"];
+
+/** 링크를 붙였을 때 메신저에 뜨는 모습(카드) 미리 보기 */
+function SharePreviewCard({
+  title,
+  description,
+  imageUrl,
+}: {
+  title: string;
+  description: string;
+  imageUrl: string;
+}) {
+  return (
+    <div
+      aria-label="공유 미리보기"
+      className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm"
+    >
+      <img src={imageUrl} alt="" className="aspect-[1200/630] w-full bg-slate-100 object-cover" />
+      <div className="space-y-0.5 px-3 py-2">
+        <p className="text-[10px] text-slate-400">제니오</p>
+        <p className="line-clamp-2 text-[13px] font-semibold leading-snug text-slate-900">
+          {title}
+        </p>
+        <p className="line-clamp-2 text-[11px] leading-snug text-slate-500">{description}</p>
+      </div>
+    </div>
+  );
+}
 
 const SWATCHES = ["#4f46e5", "#0ea5e9", "#10b981", "#f59e0b", "#e11d48", "#7c3aed", "#0f172a"];
 
@@ -94,6 +126,8 @@ export function AppearanceEditor({
   initial,
   widget,
   appName,
+  appDescription,
+  shareToken,
   onClose,
 }: {
   appId: string;
@@ -101,14 +135,50 @@ export function AppearanceEditor({
   initial: Partial<Appearance> | undefined;
   widget: boolean;
   appName: string;
+  /** 앱 소개(공유 소개 문구를 비웠을 때 쓰는 글) */
+  appDescription?: string;
+  /** 이미 저장한 썸네일을 미리 볼 때 쓰는 공유 토큰 */
+  shareToken?: string;
   onClose: () => void;
 }) {
+  const ws = useSession((s) => s.workspaceId);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [localThumb, setLocalThumb] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
   const [look, setLook] = useState<Appearance>(() => appearanceOf(initial));
   const [colorText, setColorText] = useState(look.primary_color);
   const save = useUpdateAppearance(appId);
   const set = <K extends keyof Appearance>(k: K, v: Appearance[K]) =>
     setLook((l) => ({ ...l, [k]: v }));
   const colorOk = HEX_COLOR.test(colorText);
+  const thumbUrl =
+    localThumb ??
+    (look.share_image && shareToken
+      ? `/api/v1/public/apps/${shareToken}/share-image?v=${look.share_image}`
+      : "/og-image.png");
+
+  async function pickThumb(file: File | undefined) {
+    if (!file) return;
+    if (!THUMB_TYPES.includes(file.type)) {
+      toast.error("PNG·JPG·WEBP·GIF 그림만 쓸 수 있어요. 다른 그림 파일을 골라 주세요.");
+      return;
+    }
+    if (file.size > THUMB_MAX_BYTES) {
+      toast.error("그림이 너무 커요(최대 2MB). 크기를 줄여서 다시 올려 주세요.");
+      return;
+    }
+    setUploading(true);
+    try {
+      const saved = await uploadWorkspaceFile(ws, file);
+      set("share_image", saved.id);
+      setLocalThumb(URL.createObjectURL(file));
+    } catch (err) {
+      toast.error(err);
+    } finally {
+      setUploading(false);
+      if (fileRef.current) fileRef.current.value = "";
+    }
+  }
   const clamp = (n: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, n || lo));
 
   return (
@@ -183,6 +253,87 @@ export function AppearanceEditor({
               onChange={(e) => set("title", e.target.value)}
             />
           </Field>
+          {!widget && (
+            <div className="space-y-3 rounded-lg border border-slate-200 bg-white p-3">
+              <p className="text-sm font-semibold text-slate-800">공유 미리보기</p>
+              <p className="-mt-2 text-xs text-slate-500">
+                링크를 카카오톡·슬랙·메일에 붙였을 때 보이는 제목·소개 문구·썸네일이에요. 누구나 열
+                수 있는 앱만 이 내용이 보이고, 멤버 전용 앱은 일반 소개만 나가요.
+              </p>
+              <Field label="공유 제목(비우면 앱 이름)" htmlFor={`stitle-${deploymentId}`}>
+                <Input
+                  id={`stitle-${deploymentId}`}
+                  maxLength={60}
+                  value={look.share_title}
+                  placeholder={appName}
+                  onChange={(e) => set("share_title", e.target.value)}
+                />
+              </Field>
+              <Field
+                label="소개 문구(비우면 앱 설명)"
+                htmlFor={`sdesc-${deploymentId}`}
+                hint={`${look.share_description.length}/160자`}
+              >
+                <Textarea
+                  id={`sdesc-${deploymentId}`}
+                  maxLength={160}
+                  rows={2}
+                  value={look.share_description}
+                  placeholder={appDescription || "예: 연차·반차를 말로 신청하세요."}
+                  onChange={(e) => set("share_description", e.target.value)}
+                />
+              </Field>
+              <Field
+                label="썸네일 그림"
+                htmlFor={`sthumb-${deploymentId}`}
+                hint="1200×630 크기를 권장해요. PNG·JPG·WEBP·GIF, 2MB 이하. 비우면 제니오 기본 그림이 나가요."
+              >
+                <div className="flex flex-wrap items-center gap-2">
+                  <input
+                    ref={fileRef}
+                    id={`sthumb-${deploymentId}`}
+                    type="file"
+                    accept={THUMB_TYPES.join(",")}
+                    className="sr-only"
+                    onChange={(e) => void pickThumb(e.target.files?.[0])}
+                  />
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    disabled={uploading}
+                    onClick={() => fileRef.current?.click()}
+                  >
+                    <ImagePlus className="h-3.5 w-3.5" />{" "}
+                    {uploading ? "올리는 중…" : look.share_image ? "그림 바꾸기" : "그림 올리기"}
+                  </Button>
+                  {look.share_image && (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      className="text-red-600"
+                      onClick={() => {
+                        set("share_image", "");
+                        setLocalThumb(null);
+                      }}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" /> 기본 그림으로
+                    </Button>
+                  )}
+                </div>
+              </Field>
+              <SharePreviewCard
+                title={look.share_title || appName}
+                description={
+                  look.share_description ||
+                  appDescription ||
+                  "말로 요청하면 일하는 앱이 만들어져요. 챗봇·자동화·사람 승인까지 코딩 없이 한 곳에서."
+                }
+                imageUrl={thumbUrl}
+              />
+            </div>
+          )}
           {widget && (
             <>
               <Field label="버튼 위치" htmlFor={`pos-${deploymentId}`}>

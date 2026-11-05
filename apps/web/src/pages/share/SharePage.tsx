@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { useLoggedIn } from "@/app/useAuthState";
 import { AppIcon } from "@/components/AppIcon";
@@ -18,6 +18,18 @@ export default function SharePage() {
   const loggedIn = useLoggedIn();
   const app = usePublicApp(token);
   const transport = useMemo(() => publicTransport(token), [token]);
+  // 탭 제목을 앱의 공유 제목(없으면 앱 이름)으로 바꾼다
+  const early = app.data as PublicAppV4 | undefined;
+  const earlyLook = appearanceOf(early?.appearance);
+  const tabTitle = early ? earlyLook.share_title || earlyLook.title || early.name : "";
+  useEffect(() => {
+    if (!tabTitle) return;
+    const before = document.title;
+    document.title = `${tabTitle} · 제니오`;
+    return () => {
+      document.title = before;
+    };
+  }, [tabTitle]);
 
   if (app.isLoading) return <Loading />;
   if (app.error)

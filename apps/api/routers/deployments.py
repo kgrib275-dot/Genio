@@ -64,6 +64,10 @@ class Appearance(BaseModel):
     width: int = Field(default=380, ge=300, le=640)
     height: int = Field(default=600, ge=400, le=900)
     title: str = Field(default="", max_length=60)
+    # v0.8: 링크를 공유할 때 메신저에 뜨는 미리보기(제목·소개 문구·썸네일 파일 id)
+    share_title: str = Field(default="", max_length=60)
+    share_description: str = Field(default="", max_length=160)
+    share_image: str = Field(default="", max_length=64)
 
 
 def appearance_of(d: Deployment) -> dict[str, Any]:
@@ -211,6 +215,16 @@ def update_deployment(
         raise not_found("배포")
     app = ctx.db.get(App, dep.app_id)
     if body.appearance is not None:
+        if body.appearance.share_image and app is not None:
+            from api.services.share_meta import MAX_IMAGE_BYTES, image_ok
+
+            img = ctx.db.get(StoredFile, body.appearance.share_image)
+            if not image_ok(img, app.workspace_id):
+                raise AppError(
+                    422,
+                    "썸네일로 쓸 수 없는 그림이에요.",
+                    f"PNG·JPG·WEBP·GIF 그림을 {MAX_IMAGE_BYTES // (1024 * 1024)}MB 이하로 올려 주세요.",
+                )
         dep.appearance = body.appearance.model_dump()
     access_changed = any(
         v is not None for v in (body.access, body.allowed_roles, body.allowed_users)

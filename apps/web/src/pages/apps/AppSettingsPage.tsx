@@ -395,6 +395,8 @@ function DeploymentsCard({ appId, editable }: { appId: string; editable: boolean
                 initial={(d as DeploymentV4).appearance}
                 widget={d.channel === "web_widget"}
                 appName={appInfo.data?.name ?? "앱"}
+                appDescription={appInfo.data?.description ?? undefined}
+                shareToken={d.public_token}
                 onClose={() => setStyling(null)}
               />
             )}
