@@ -2,6 +2,8 @@ import { RotateCcw, Wand2 } from "lucide-react";
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { DataView } from "@/components/DataView";
+import { inspectorSteps } from "@/components/run/inspectorSteps";
+import { ValueInspector } from "@/components/run/ValueInspector";
 import { StatusBadge } from "@/components/ui/badge";
 import { toast } from "@/components/ui/toast-store";
 import { useRun } from "@/lib/api/apps";
@@ -144,10 +146,13 @@ export function RunPanel({
   run,
   steps,
   nodes,
+  selectedId,
 }: {
   run: Run | null;
   steps: RunStep[];
   nodes: GraphNode[];
+  /** 캔버스에서 고른 단계(값 확인창에서 먼저 펼친다) */
+  selectedId?: string | null;
 }) {
   const navigate = useNavigate();
   const ended = Boolean(run && TERMINAL.has(run.status));
@@ -216,6 +221,15 @@ export function RunPanel({
           />
         ))}
       </ul>
+      <details className="border-t border-slate-100">
+        <summary className="cursor-pointer px-3 py-2 font-medium text-slate-700">
+          값 확인창(단계별 값 찾기·복사)
+        </summary>
+        <ValueInspector
+          steps={inspectorSteps(rows, labelOf)}
+          focusNodeId={selectedId ?? undefined}
+        />
+      </details>
     </div>
   );
 }

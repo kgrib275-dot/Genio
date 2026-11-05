@@ -561,3 +561,36 @@ Project = {id, workspace_id, name, description, color: indigo|sky|emerald|amber|
 | POST /workspaces/{ws}/members/{id}/reset-2fa | 소유자·관리자(소유자·관리자 대상은 소유자만) | 휴대폰 분실 시 2단계 인증 끄기 |
 
 토큰: JWT에 `sid`(user_sessions.id)를 넣고, 요청마다 기기가 끊겼는지와 `users.tokens_valid_after`(비밀번호 재설정·모든 기기 로그아웃·탈퇴 시각)를 확인한다. 마이그레이션 0010.
+
+
+## v0.8 일괄 실행·단계 시험·값 확인창
+흐름(워크플로우) 앱 전용이다(챗 앱·파일 입력 칸이 있는 흐름은 422). 새 DB 테이블·마이그레이션은 없다.
+
+### 일괄 실행
+| 메서드·경로 | 권한 | 설명 |
+|---|---|---|
+| GET /apps/{id}/batches/template.csv | 제작자 이상 | 입력 칸 이름이 머리글인 CSV 양식(UTF-8 BOM) |
+| POST /apps/{id}/batches/preview (multipart `file`) | 제작자 이상 | CSV·XLSX(2MB)를 읽어 `{fields, max_rows, columns[{header, field}], unmatched[], rows[{row, values, errors[{message, hint}]}], total, ok_count, error_count}`. 열은 입력 칸 key·이름으로 맞춘다(순서 무관) |
+| POST /apps/{id}/batches `{rows[{row, values}], skip_invalid?, version?}` | 제작자 이상 | 최대 200줄. `version`이 없으면 검사를 통과한 작업본. `201 {batch_id, total}`. 월 비용 한도에 걸리면 429 |
+| GET /apps/{id}/batches/{batch_id} | 운영자 이상 | `{batch_id, total, counts{queued, running, succeeded, failed, cancelled, waiting_approval}, settled, done, cancelled, created_at, rows[{row, status, input, text, error?, run_id}]}` |
+| POST /apps/{id}/batches/{batch_id}/cancel | 제작자 이상 | 아직 시작하지 않은 줄만 취소 `{cancelled: n}` |
+| GET /apps/{id}/batches/{batch_id}/results.csv | 운영자 이상 | 줄·상태·입력 칸들·결과·오류(UTF-8 BOM). `=`·`+`·`-`·`@`로 시작하는 글은 앞에 `'`를 붙여 수식 실행을 막는다 |
+| 공유 링크 | 접근 권한 확인 | 같은 경로가 `/public/apps/{token}/batches[...]`에 있다. 한 번에 **50줄**, 앱·IP당 분당 6번(양식·상태 읽기 제외), 끝나지 않은 공개 일괄 실행은 앱당 3개까지(넘으면 429). 줄별 `run_id`와 내부 오류 원문은 내보내지 않는다. 다른 앱의 batch_id는 404 |
+
+- 줄마다 `Run`(trigger=`batch`) 한 개를 미리 만들고, 번호·줄·보냄 표시는 `run.context`(`batch_id`, `row`, `source`, `dispatched`, `cancelled`)에 둔다. 서버를 다시 켜도 상태가 이어진다.
+- **동시 실행 한도 5줄**: 처음에 5줄만 큐에 넣고, 줄이 끝날 때마다(executor `_after_finish`) 다음 줄을 넣는다. 상태를 읽을 때도 한 번 더 밀고, 5분 넘게 '대기'에 머문 줄은 다시 큐에 넣는다. PostgreSQL에서는 batch마다 advisory lock으로 여러 워커가 같은 줄을 넣지 않게 한다.
+- 한 줄이 실패해도 나머지는 계속 간다. 일괄 실행의 줄은 '실패하면 다른 앱 실행'을 부르지 않는다. 실행 목록에는 `일괄`로 보인다.
+- 줄 검사: 필수 칸이 비면 `'이름' 칸이 비어 있어요.`, 숫자 칸에 글이 있으면 `'수량'에는 숫자를 넣어 주세요(지금 '많이').`처럼 두 줄(message·hint)로 돌려준다.
+
+### 단계 하나만 시험(제작자 이상)
+| 메서드·경로 | 설명 |
+|---|---|
+| POST /apps/{id}/nodes/{node_id}/test-inputs `{data?}` | 이 단계가 쓰는 앞 단계 값 목록 `{node_id, type, label, testable, reason, warn, risky, last_run_id, groups[{scope, label, editable, fields[{field, path, value, kind, from_last_run}]}]}`. 값은 가장 최근에 성공한 실행에서 채운다. `data`는 아직 저장하지 않은 설정 패널의 값. `{{ 100 // n1.qty }}`처럼 식 안의 참조도 찾는다 |
+| POST /apps/{id}/nodes/{node_id}/test `{values?, data?}` | 그 단계 하나만 실행. `values`는 `{"n1": {...}, "input": {...}, "conv": {...}}`이고 안 보내면 최근 성공한 실행의 값. `{ok, output, handle, summary, error{message, hint}, ms, logs[], tokens{input_tokens, output_tokens}}` |
+
+- 실행 기록은 남기지 않는다. 시간 제한·사설망 차단·코드 격리는 실제 실행과 같은 경로(`engine/executor.run_node_once`)를 쓴다. 월 비용 한도에 걸리면 429.
+- 승인·질문·배정 같은 사람 단계는 `422 사람 단계는 단독으로 시험할 수 없어요.`
+- 바깥에 영향을 주는 단계(연결·쓰기 방식 HTTP·데이터 표 쓰기·다른 앱 실행·에이전트)는 `risky: true`와 `warn` 문장을 돌려주고, 화면이 실행 전에 한 번 더 확인한다.
+
+### 값 확인창
+화면 기능이다(새 API 없음). 실행 로그 패널·실행 상세에서 `run.steps[].output`을 `경로 = 값` 목록으로 펼쳐 검색하고, 복사 단추로 `{{단계.경로}}`를 복사한다. 캔버스에서 단계를 고르면 설정 패널에 그 단계의 지난 테스트 실행 값이 나온다.

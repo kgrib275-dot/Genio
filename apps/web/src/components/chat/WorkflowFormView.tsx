@@ -9,6 +9,7 @@ import {
   type ReactNode,
 } from "react";
 import { AppIcon } from "@/components/AppIcon";
+import { BatchRunPanel } from "@/components/batch/BatchRunPanel";
 import { Markdown } from "@/components/chat/Markdown";
 import { errorLines } from "@/lib/api/client";
 import { startFormRun, waitFormResult, type FormRunResult } from "@/lib/api/form";
@@ -36,6 +37,8 @@ export function WorkflowFormView({
   headerActions?: ReactNode;
 }) {
   const [values, setValues] = useState<Record<string, string>>({});
+  // 여러 건을 표 한 장으로 한 번에 실행하는 방식(파일 입력 칸이 있는 흐름은 쓸 수 없다)
+  const [mode, setMode] = useState<"one" | "batch">("one");
   const [files, setFiles] = useState<StoredFile[]>([]);
   const [uploading, setUploading] = useState(false);
   const [running, setRunning] = useState(false);
@@ -46,6 +49,7 @@ export function WorkflowFormView({
 
   const textFields = fields.filter((f) => f.type !== "file");
   const fileField = fields.find((f) => f.type === "file");
+  const canBatch = !fileField && fields.length > 0;
   const missing = textFields.filter((f) => f.required && !String(values[f.key] ?? "").trim());
 
   const submit = async (e: FormEvent) => {
@@ -103,8 +107,42 @@ export function WorkflowFormView({
       <main className="min-h-0 flex-1 overflow-y-auto">
         <div className="mx-auto w-full max-w-2xl space-y-4 px-4 py-6">
           {description && <p className="text-sm text-slate-600">{description}</p>}
+          {canBatch && (
+            <div
+              role="tablist"
+              aria-label="실행 방식"
+              className="inline-flex rounded-lg bg-slate-100 p-1 text-sm"
+            >
+              {(
+                [
+                  ["one", "한 건 실행"],
+                  ["batch", "여러 건 한 번에"],
+                ] as const
+              ).map(([k, label]) => (
+                <button
+                  key={k}
+                  type="button"
+                  role="tab"
+                  aria-selected={mode === k}
+                  onClick={() => setMode(k)}
+                  className={cn(
+                    "rounded-md px-3 py-1.5",
+                    mode === k ? "bg-white font-medium shadow-sm" : "text-slate-500",
+                  )}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          )}
+          {canBatch && mode === "batch" && (
+            <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-card">
+              <BatchRunPanel source={{ kind: "public", token }} />
+            </section>
+          )}
           <form
             onSubmit={submit}
+            hidden={canBatch && mode === "batch"}
             className="space-y-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-card"
           >
             {textFields.length === 0 && !fileField && (
@@ -205,7 +243,7 @@ export function WorkflowFormView({
             </div>
           )}
 
-          {result && (
+          {result && !(canBatch && mode === "batch") && (
             <section
               aria-live="polite"
               className={cn(

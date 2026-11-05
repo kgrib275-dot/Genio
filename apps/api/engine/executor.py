@@ -38,7 +38,13 @@ from nodes import LlmResult, NodeContext, NodeError, NodeResult, registry
 log = logging.getLogger("genio.engine")
 TERMINAL = {"succeeded", "failed"}
 # 실패해도 '실패하면 다른 앱 실행'을 부르지 않는 실행(빌더 시험·하위 실행·실패 처리 자신)
-NO_FAILURE_HOOK = {"on_failure", "test", "preview", "tool", "subflow"}
+NO_FAILURE_HOOK = {"on_failure", "test", "preview", "tool", "subflow", "batch"}
+# 일괄 실행(v0.8) 줄이 run.context에 달고 다니는 표시. 실행이 끝나며 context를 새로 쓸 때도 남긴다.
+BATCH_KEYS = ("batch_id", "row", "source", "dispatched", "dispatched_at", "cancelled", "created")
+
+
+def _batch_meta(context: dict[str, Any]) -> dict[str, Any]:
+    return {k: context[k] for k in BATCH_KEYS if k in context}
 
 
 # 프롬프트 인젝션 기본 방어(기능 정의서 §7): 모든 AI 단계의 시스템 지시 끝에 붙인다.
@@ -483,6 +489,14 @@ def _after_finish(db: Session, run: Run) -> None:
         except Exception:
             log.exception("챗 결과 전달 실패(run=%s)", run.id)
             db.rollback()
+    if run.trigger == "batch" and (run.status in TERMINAL or run.status == "waiting_approval"):
+        try:
+            from api.services.batches import on_run_finished
+
+            on_run_finished(db, run)  # v0.8 일괄 실행: 한도 안에서 다음 줄을 큐에 넣는다
+        except Exception:
+            log.exception("일괄 실행 다음 줄 처리 실패(run=%s)", run.id)
+            db.rollback()
     if run.status in TERMINAL:
         try:
             from api.services.tracing import dispatch_trace
@@ -819,6 +833,82 @@ def _invoke(spec: Any, node: Any, ctx: NodeContext) -> tuple[str, Any]:
         return "crash", type(exc).__name__
 
 
+def _build_ctx(
+    run_id: str,
+    node_id: str,
+    svc: Any,
+    graph: Graph,
+    outputs: dict[str, dict[str, Any]],
+    run_input: dict[str, Any],
+    env_vars: dict[str, Any],
+    conv_vars: dict[str, Any],
+    extra: dict[str, Any] | None = None,
+) -> NodeContext:
+    """단계에 넘길 실행 환경. 값 범위(앞 단계 결과·입력·환경 값·대화 값)를 매번 새로 모은다."""
+    sc: dict[str, Any] = {
+        **outputs,
+        "input": run_input,
+        "vars": graph.variables,
+        "env": env_vars,
+        "conv": conv_vars,
+        **(extra or {}),
+    }
+    c = NodeContext(
+        run_id=run_id,
+        node_id=node_id,
+        run_input=run_input,
+        outputs=outputs,
+        services=svc,
+        render=lambda t, s=sc: render(t, s),  # type: ignore[misc]
+        render_value=lambda val, s=sc: render_value(val, s),  # type: ignore[misc]
+        evaluate=lambda e, s=sc: evaluate(e, s),  # type: ignore[misc]
+    )
+    base = dict(extra or {})
+    c.scoped = lambda more, b=base: _share_logs(
+        _build_ctx(
+            run_id, node_id, svc, graph, outputs, run_input, env_vars, conv_vars, {**b, **more}
+        ),
+        c,
+    )
+    return c
+
+
+def run_node_once(
+    db: Session,
+    app: App,
+    graph: Graph,
+    node_id: str,
+    *,
+    values: dict[str, dict[str, Any]],
+    run_input: dict[str, Any],
+    conv: dict[str, Any],
+) -> dict[str, Any]:
+    """단계 하나만 실행한다(캔버스의 '이 단계만 시험'). 실행 기록은 남기지 않는다.
+
+    시간 제한·사설망 차단·코드 격리는 실제 실행과 같은 경로(_invoke)를 쓴다.
+    결과: {"kind": ok|error|crash, "value": 결과|문장, "logs": [...], "ms": 걸린 시간, "usage": [...]}
+    """
+    ensure_market_nodes(db)
+    node = graph.node(node_id)
+    if node is None:
+        return {"kind": "error", "value": f"'{node_id}' 단계를 찾지 못했어요.", "logs": [], "ms": 0}
+    services = RunServices(db, app.workspace_id)
+    services.current_node = node.id
+    env_vars = decrypt_env_vars(app.env_vars or [])
+    ctx = _build_ctx(
+        "node-test", node.id, services, graph, dict(values), run_input, env_vars, dict(conv)
+    )
+    started = time.perf_counter()
+    kind, value = _invoke(registry.get(node.type), node, ctx)
+    return {
+        "kind": kind,
+        "value": value,
+        "logs": list(ctx.logs),
+        "ms": int((time.perf_counter() - started) * 1000),
+        "usage": list(services.usage),
+    }
+
+
 def _parallel_limit() -> int:
     return max(1, min(int(get_settings().genio_run_parallelism), 16))
 
@@ -917,27 +1007,9 @@ def _execute(db: Session, run_id: str) -> None:
     ] = {}
 
     def make_ctx(node_id: str, svc: Any, extra: dict[str, Any] | None = None) -> NodeContext:
-        sc: dict[str, Any] = {
-            **outputs,
-            "input": run_input,
-            "vars": graph.variables,
-            "env": env_vars,
-            "conv": conv_vars,
-            **(extra or {}),
-        }
-        c = NodeContext(
-            run_id=run.id,
-            node_id=node_id,
-            run_input=run_input,
-            outputs=outputs,
-            services=svc,
-            render=lambda t, s=sc: render(t, s),  # type: ignore[misc]
-            render_value=lambda val, s=sc: render_value(val, s),  # type: ignore[misc]
-            evaluate=lambda e, s=sc: evaluate(e, s),  # type: ignore[misc]
+        return _build_ctx(
+            run.id, node_id, svc, graph, outputs, run_input, env_vars, conv_vars, extra
         )
-        base = dict(extra or {})
-        c.scoped = lambda more, b=base: _share_logs(make_ctx(node_id, svc, {**b, **more}), c)
-        return c
 
     def record(node: Any, step: RunStep, ctx: NodeContext, kind: str, value: Any) -> None:
         """단계 결과를 기록하고 다음 길을 정한다(메인 스레드에서만)."""
@@ -1122,6 +1194,7 @@ def _execute(db: Session, run_id: str) -> None:
             "requested_at": now().isoformat(),
         }
         run.context = {
+            **_batch_meta(context),
             "outputs": outputs,
             "conv": conv_vars,
             "sched": sched.dump(),
@@ -1135,5 +1208,10 @@ def _execute(db: Session, run_id: str) -> None:
     if not last_output_text and output_values:
         last_output_text = str(list(output_values.values())[-1].get("text", ""))
     run.output = {"text": last_output_text, "outputs": output_values, "conv": conv_vars}
-    run.context = {"outputs": outputs, "conv": conv_vars, "usage": node_usage}
+    run.context = {
+        **_batch_meta(context),
+        "outputs": outputs,
+        "conv": conv_vars,
+        "usage": node_usage,
+    }
     _finish(db, run, services, "succeeded")

@@ -8,8 +8,11 @@ import { FailureSettings } from "@/components/canvas/FailureSettings";
 import { nodeFields, nodeTemplates, nodeWidgets } from "@/components/canvas/formRegistry";
 import { toRjsfUiSchema } from "@/components/canvas/uiSchema";
 import type { NodeFormContext } from "@/components/canvas/widgets";
+import { NodeTestPanel } from "@/components/canvas/NodeTestPanel";
+import { ValueRows } from "@/components/run/ValueInspector";
 import { Button } from "@/components/ui/button";
-import type { GraphNode, NodeType } from "@/lib/api/types";
+import type { GraphNode, NodeType, RunStep } from "@/lib/api/types";
+import { flattenValue } from "@/lib/valueFlatten";
 
 export interface NodeSettingsFormProps {
   node: GraphNode;
@@ -63,6 +66,8 @@ export function NodeSettingsPanel({
   onDelete,
   onClose,
   readOnly,
+  appId,
+  lastStep,
 }: {
   node: GraphNode;
   spec: NodeType | undefined;
@@ -73,6 +78,10 @@ export function NodeSettingsPanel({
   onDelete: () => void;
   onClose: () => void;
   readOnly?: boolean;
+  /** 이 단계만 시험할 앱(없으면 시험 영역을 숨긴다) */
+  appId?: string;
+  /** 방금 한 테스트 실행에서 이 단계가 낸 값 */
+  lastStep?: RunStep | null;
 }) {
   const hasUpstream = nodes.some((n) => n.id !== node.id);
   return (
@@ -127,6 +136,19 @@ export function NodeSettingsPanel({
         )}
         {spec && node.type !== "input" && node.type !== "output" && (
           <FailureSettings key={node.id} data={node.data} onChange={onChange} readOnly={readOnly} />
+        )}
+        {lastStep?.output && Object.keys(lastStep.output).length > 0 && (
+          <details className="mt-4 rounded-lg border border-slate-200" open>
+            <summary className="cursor-pointer px-3 py-2 text-xs font-medium text-slate-700">
+              지난 테스트 실행에서 이 단계가 낸 값
+            </summary>
+            <div className="border-t border-slate-100">
+              <ValueRows nodeId={node.id} rows={flattenValue(lastStep.output)} />
+            </div>
+          </details>
+        )}
+        {appId && !readOnly && spec && node.type !== "input" && (
+          <NodeTestPanel key={node.id} appId={appId} node={node} />
         )}
         {hasUpstream && !readOnly && (
           <p className="mt-4 rounded bg-slate-50 px-3 py-2 text-xs text-slate-600">

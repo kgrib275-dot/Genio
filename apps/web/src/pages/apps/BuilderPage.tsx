@@ -339,6 +339,8 @@ export default function BuilderPage() {
                   nodes={graph.nodes}
                   errors={nodeErrors[selected.id]}
                   readOnly={readOnly}
+                  appId={appId}
+                  lastStep={steps[selected.id]}
                   onChange={(data) => useCanvas.getState().updateNodeData(selected.id, data)}
                   onDelete={() => useCanvas.getState().removeNode(selected.id)}
                   onClose={() => useCanvas.getState().select(null)}
@@ -373,7 +375,7 @@ export default function BuilderPage() {
             </button>
             {logOpen && (
               <div className="max-h-64 overflow-y-auto border-t border-slate-100">
-                <RunPanel run={run} steps={stepList} nodes={graph.nodes} />
+                <RunPanel run={run} steps={stepList} nodes={graph.nodes} selectedId={selectedId} />
               </div>
             )}
           </div>
@@ -384,6 +386,7 @@ export default function BuilderPage() {
         onClose={() => setTestOpen(false)}
         inputNode={inputNode}
         running={running}
+        canBatch={app.data?.type === "workflow"}
         onRun={(input) => void onRun(input)}
       />
       {previewOpen && (
