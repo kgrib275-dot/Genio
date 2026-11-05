@@ -209,6 +209,11 @@ function CreateAccountDialog({
   );
 }
 
+/** 멤버 줄의 비어 있는 동작 버튼 자리(버튼과 같은 폭) */
+function ActionSlot() {
+  return <span aria-hidden className="inline-block h-8 w-[38px] shrink-0" />;
+}
+
 /** 새로 만든 임시 비밀번호를 한 번만 보여 준다. */
 function IssuedPasswordDialog({
   issued,
@@ -389,94 +394,108 @@ export function MembersSection({ ws, manage }: { ws: string; manage: boolean }) 
                     {ko.roles[m.role]}
                   </Badge>
                 )}
-                {canReset(m) && (
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    aria-label={`${m.name} 비밀번호 재설정`}
-                    title="비밀번호 재설정"
-                    disabled={reset.isPending}
-                    onClick={() => {
-                      if (
-                        window.confirm(
-                          `${m.name}님의 비밀번호를 새 임시 비밀번호로 바꿀까요? 지금 비밀번호는 더 이상 쓸 수 없어요.`,
-                        )
-                      )
-                        reset.mutate(m.id, {
-                          onSuccess: (r) =>
-                            setIssued({
-                              name: m.name,
-                              email: m.email,
-                              password: r.temporary_password,
-                            }),
-                        });
-                    }}
-                  >
-                    <RotateCcw className="h-3.5 w-3.5" />
-                  </Button>
-                )}
-                {manage && m.two_factor && m.user_id !== me.data?.id && (
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    aria-label={`${m.name} 2단계 인증 끄기`}
-                    title="2단계 인증 끄기(휴대폰 분실)"
-                    disabled={reset2fa.isPending}
-                    onClick={() => {
-                      if (
-                        window.confirm(
-                          `${m.name}님의 2단계 인증을 끌까요? 휴대폰을 잃어버렸을 때만 쓰세요. 다음 로그인부터 비밀번호만 확인해요.`,
-                        )
-                      )
-                        reset2fa.mutate(m.id, {
-                          onSuccess: () =>
-                            toast.success("2단계 인증을 껐어요. 본인에게 다시 켜도록 안내하세요."),
-                          onError: (err) => toast.error(err),
-                        });
-                    }}
-                  >
-                    <ShieldOff className="h-3.5 w-3.5" />
-                  </Button>
-                )}
-                {manage && m.role !== "owner" && (
-                  <span className="flex gap-0.5">
-                    {isOwner && (
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        aria-label={`${m.name}에게 소유권 넘기기`}
-                        title="소유권 넘기기"
-                        disabled={transfer.isPending}
-                        onClick={() => {
-                          if (
-                            window.confirm(
-                              `${m.name}님에게 소유권을 넘길까요? 나는 관리자가 되고, 되돌리려면 새 소유자가 다시 넘겨야 해요.`,
-                            )
-                          )
-                            transfer.mutate(m.id, {
-                              onSuccess: () => toast.success("소유권을 넘겼어요."),
-                            });
-                        }}
-                      >
-                        <Crown className="h-3.5 w-3.5" />
-                      </Button>
-                    )}
+                {/* 동작 버튼은 자리를 고정해, 버튼이 없는 줄도 역할 칸이 같은 위치에 오게 한다 */}
+                <div className="flex shrink-0 items-center justify-end gap-0.5">
+                  {canReset(m) ? (
                     <Button
                       size="sm"
                       variant="ghost"
-                      className="text-red-600"
-                      aria-label={`${m.name} 내보내기`}
-                      title="내보내기"
-                      disabled={remove.isPending}
+                      aria-label={`${m.name} 비밀번호 재설정`}
+                      title="비밀번호 재설정"
+                      disabled={reset.isPending}
                       onClick={() => {
-                        if (window.confirm(`${m.name}님을 워크스페이스에서 내보낼까요?`))
-                          remove.mutate(m.id, { onSuccess: () => toast.success("내보냈어요.") });
+                        if (
+                          window.confirm(
+                            `${m.name}님의 비밀번호를 새 임시 비밀번호로 바꿀까요? 지금 비밀번호는 더 이상 쓸 수 없어요.`,
+                          )
+                        )
+                          reset.mutate(m.id, {
+                            onSuccess: (r) =>
+                              setIssued({
+                                name: m.name,
+                                email: m.email,
+                                password: r.temporary_password,
+                              }),
+                          });
                       }}
                     >
-                      <UserMinus className="h-3.5 w-3.5" />
+                      <RotateCcw className="h-3.5 w-3.5" />
                     </Button>
-                  </span>
-                )}
+                  ) : manage ? (
+                    <ActionSlot />
+                  ) : null}
+                  {manage && m.two_factor && m.user_id !== me.data?.id ? (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      aria-label={`${m.name} 2단계 인증 끄기`}
+                      title="2단계 인증 끄기(휴대폰 분실)"
+                      disabled={reset2fa.isPending}
+                      onClick={() => {
+                        if (
+                          window.confirm(
+                            `${m.name}님의 2단계 인증을 끌까요? 휴대폰을 잃어버렸을 때만 쓰세요. 다음 로그인부터 비밀번호만 확인해요.`,
+                          )
+                        )
+                          reset2fa.mutate(m.id, {
+                            onSuccess: () =>
+                              toast.success(
+                                "2단계 인증을 껐어요. 본인에게 다시 켜도록 안내하세요.",
+                              ),
+                            onError: (err) => toast.error(err),
+                          });
+                      }}
+                    >
+                      <ShieldOff className="h-3.5 w-3.5" />
+                    </Button>
+                  ) : manage ? (
+                    <ActionSlot />
+                  ) : null}
+                  {manage && m.role !== "owner" ? (
+                    <>
+                      {isOwner && (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          aria-label={`${m.name}에게 소유권 넘기기`}
+                          title="소유권 넘기기"
+                          disabled={transfer.isPending}
+                          onClick={() => {
+                            if (
+                              window.confirm(
+                                `${m.name}님에게 소유권을 넘길까요? 나는 관리자가 되고, 되돌리려면 새 소유자가 다시 넘겨야 해요.`,
+                              )
+                            )
+                              transfer.mutate(m.id, {
+                                onSuccess: () => toast.success("소유권을 넘겼어요."),
+                              });
+                          }}
+                        >
+                          <Crown className="h-3.5 w-3.5" />
+                        </Button>
+                      )}
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="text-red-600"
+                        aria-label={`${m.name} 내보내기`}
+                        title="내보내기"
+                        disabled={remove.isPending}
+                        onClick={() => {
+                          if (window.confirm(`${m.name}님을 워크스페이스에서 내보낼까요?`))
+                            remove.mutate(m.id, { onSuccess: () => toast.success("내보냈어요.") });
+                        }}
+                      >
+                        <UserMinus className="h-3.5 w-3.5" />
+                      </Button>
+                    </>
+                  ) : manage ? (
+                    <>
+                      {isOwner && <ActionSlot />}
+                      <ActionSlot />
+                    </>
+                  ) : null}
+                </div>
               </li>
             ))}
           </ul>
