@@ -114,3 +114,37 @@ Dify 공식 문서(docs.dify.ai, 2026-11 조사)의 기능을 Genio와 비교했
 | 위젯 모양(theme) | **추가** `deployments.appearance` |
 | 빌더 안 대화 시험(Debug & Preview) | **추가** `/apps/{id}/preview/chat` |
 | 리드 수집 폼, 사람 상담원 연결 | 범위 밖(ADR 후보) |
+
+
+---
+# v0.8 (ADR 0012) — dify.ai/ko·docs.dify.ai 재조사(2026-11-05)
+
+| Dify | v0.8 |
+|---|---|
+| 워크플로우 웹앱 일괄 처리 | **추가** CSV·XLSX 일괄 실행(앱 200건·공유 50건) |
+| 단일 노드 실행, Variable Inspector | **추가** 단계 하나만 시험, 값 확인창 |
+| MCP 클라이언트(도구 노드·에이전트) | **추가** `mcp_tool` 단계, 에이전트 MCP 도구 |
+| OpenAPI 커스텀 도구 | **추가** `api_tool` 단계 |
+| Marketplace 플러그인 200개 이상 | 부분: 마켓 69개(커넥터 33), 제3자 플러그인 등록은 범위 밖 |
+| 지식 데이터 소스(Notion·웹 크롤·드라이브) | **추가** Notion·웹 크롤·공개 Google 문서(개인 드라이브 OAuth는 범위 밖) |
+| 외부 지식베이스 API | **추가** |
+| Test and Tune Retrieval | **추가** 검색 튜닝 |
+| 지식 요청 한도·저장 용량 | **추가** 문서 수·용량·분당 요청 한도 |
+| Snippets | **추가** 스니펫 |
+| Go to Anything, Hotkeys | **추가** Ctrl+K 검색창, 단축키 목록 |
+| 웹앱 브랜딩, IP Access Control | **추가** 로고, 허용 IP |
+| API Reference, difyctl | **추가** `/api-docs`, `scripts/genio_cli.py` |
+| 코드 샌드박스 서비스 | **추가** 별도 컨테이너(선택) |
+| S3 등 저장소 선택 | **추가** DB·디스크·S3 |
+| Sentry | **추가**(선택) |
+| DSL 가져오기·내보내기 | **추가** Dify DSL → 제니오 변환(내보내기는 제니오 JSON) |
+| 사람 입력(수정·전달·시간 초과) | 부분: 승인·질문·배정, '전달'과 시간 초과 자동 처리는 다음 |
+| 캔버스 동시 편집·댓글 | 다음 |
+| 이미지 만들기·파일 출력 | 다음 |
+| 서비스 이벤트 트리거 | 다음 |
+| 관측 도구(Opik·Arize·Phoenix·Weave·OpenTelemetry) | 다음 |
+| 키 여러 개 분산·공급자 폴백 | 다음 |
+| 재정렬 전용 모델 | 다음 |
+| 지식 파이프라인 캔버스·멀티모달 검색 | 다음 |
+| SSO·SCIM·사용자 정의 역할·BYOK·다중 워크스페이스·결제 | 범위 밖(ADR 0012) |
+| K8s Helm·Terraform·고가용성 | 범위 밖(ADR 0012) |
