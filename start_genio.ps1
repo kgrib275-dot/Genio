@@ -10,6 +10,14 @@ Set-Location -Path $PSScriptRoot
 $LocalUrl = "http://127.0.0.1:5190"
 $ShareUrl = "https://genio.tail6bd481.ts.net"
 
+# docker는 진행 상황을 오류 출력(stderr)으로 내보낸다. Windows PowerShell 5.1은 "Stop" 상태에서 그 줄을
+# 치명적 오류로 보고 스크립트를 끝내 버리므로, docker를 부를 때만 "Continue"로 바꾸고 종료 코드로 판단한다.
+function Native([scriptblock]$Block) {
+    $prev = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    try { & $Block } finally { $ErrorActionPreference = $prev }
+}
+
 function Step($msg) { Write-Host ""; Write-Host "▶ $msg" -ForegroundColor Cyan }
 function Ok($msg) { Write-Host "  ✓ $msg" -ForegroundColor Green }
 function Fail($msg, $hint) {
@@ -59,11 +67,11 @@ if (-not (Test-Path ".env")) {
 
 # 3) 컨테이너
 Step "컨테이너 실행 (web · api · worker · postgres · redis · tailscale)"
-if ($Rebuild) { docker compose up -d --build } else { docker compose up -d }
+if ($Rebuild) { Native { docker compose up -d --build } } else { Native { docker compose up -d } }
 if ($LASTEXITCODE -ne 0) { Fail "컨테이너를 띄우지 못했어요." "docker compose logs 로 오류를 확인하세요." }
 Ok "컨테이너 실행됨"
 # tailscale은 web의 네트워크를 같이 쓰므로, web이 새로 만들어졌으면 다시 붙여야 한다
-docker compose up -d --force-recreate tailscale 2>$null | Out-Null
+Native { docker compose up -d --force-recreate tailscale 2>&1 | Out-Null }
 
 # 4) 준비 확인
 Step "서버 준비 기다리는 중"
@@ -80,8 +88,8 @@ if (-not $ready) { Fail "서버가 3분 안에 준비되지 않았어요." "dock
 Ok "서버 준비됨"
 
 # Tailscale genio 기기 로그인 확인(처음 한 번 승인 필요)
-$login = docker compose logs tailscale 2>$null | Select-String -Pattern "https://login\.tailscale\.com/a/\S+" | Select-Object -Last 1
-$tsStatus = docker compose exec -T tailscale tailscale status 2>$null
+$login = Native { docker compose logs tailscale 2>&1 } | Select-String -Pattern "https://login\.tailscale\.com/a/\S+" | Select-Object -Last 1
+$tsStatus = Native { docker compose exec -T tailscale tailscale status 2>&1 }
 if (-not ($tsStatus -match "genio") -and $login) {
     Write-Host ""
     Write-Host "  ! 공유 주소를 쓰려면 아래 링크에서 Tailscale 승인을 한 번 해 주세요:" -ForegroundColor Yellow
