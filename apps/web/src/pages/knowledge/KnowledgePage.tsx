@@ -54,6 +54,9 @@ import {
   UrlImportDialog,
 } from "@/pages/knowledge/KbDialogs";
 import { PipelineDialog, QaImportDialog } from "@/pages/knowledge/KbPipelineDialogs";
+import { ImageReportBadge } from "@/components/knowledge/ImageReportBadge";
+import { KbImage } from "@/components/knowledge/KbImage";
+import type { CitationImage, ImageReport, KbDocWithImages } from "@/lib/api/kbcanvas";
 import { ProjectDot } from "@/components/projects/ProjectDialog";
 import { useProjects } from "@/lib/api/v3";
 import { useCreateKnowledgeBaseV5, useEmbeddingModels, useToggleDocument } from "@/lib/api/v5b";
@@ -131,6 +134,9 @@ function DocRow({
         {formatBytes(d.size)} · 조각 {d.chunk_count}
       </span>
       <StatusBadge status={d.status} />
+      {(d as KbDocWithImages).image_report && (
+        <ImageReportBadge report={(d as KbDocWithImages).image_report as ImageReport} />
+      )}
       {!enabled && <Badge tone="gray">검색에서 뺌</Badge>}
       {d.error && (
         <span className="basis-full text-xs text-red-600" title={d.error}>
@@ -287,6 +293,13 @@ function SearchCard({ kb }: { kb: KnowledgeBaseV2 }) {
               </div>
             ) : (
               <p className="whitespace-pre-wrap">{h.content}</p>
+            )}
+            {(h as SearchHitV2 & { image?: CitationImage }).image && (
+              <div className="mt-2">
+                <KbImage
+                  image={(h as SearchHitV2 & { image?: CitationImage }).image as CitationImage}
+                />
+              </div>
             )}
           </div>
         ))}
@@ -487,7 +500,7 @@ function KbDetail({ ws, kb, editable }: { ws: string; kb: KnowledgeBaseV2; edita
                     <input
                       ref={fileRef}
                       type="file"
-                      accept=".pdf,.txt,.md,.docx,.pptx,.xlsx,.html,.htm,application/pdf,text/plain,text/markdown,text/html,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.presentationml.presentation,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                      accept=".pdf,.txt,.md,.docx,.pptx,.xlsx,.html,.htm,.png,.jpg,.jpeg,.webp,image/png,image/jpeg,image/webp,application/pdf,text/plain,text/markdown,text/html,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.presentationml.presentation,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                       multiple
                       className="hidden"
                       aria-label="문서 파일"

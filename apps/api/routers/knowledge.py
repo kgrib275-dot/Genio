@@ -1,5 +1,6 @@
 """지식베이스: 목록·생성·삭제, 문서 업로드(→ 워커에서 청킹·임베딩), 디버그 검색."""
 
+import base64
 import json
 import re
 from typing import Annotated, Any, Literal
@@ -16,7 +17,7 @@ from api.engine import safe_http
 from api.llm.catalog import catalog
 from api.models import Chunk, Document, KnowledgeBase
 from api.routers.projects import check_project_target
-from api.services import kb_limits, storage
+from api.services import kb_images, kb_limits, storage
 from api.services import kb_pipeline as pipe
 from api.services import knowledge as svc
 from api.services.projects import hidden_project_ids
@@ -151,7 +152,10 @@ def delete_kb(kb_id: str, ctx: KbBuilders) -> Response:
         target_id=kb.id,
         meta={"name": kb.name},
     )
-    stored = storage.locations(ctx.db.scalars(select(Document).where(Document.kb_id == kb_id)))
+    docs = list(ctx.db.scalars(select(Document).where(Document.kb_id == kb_id)))
+    stored = storage.locations(docs)
+    for d in docs:
+        stored += kb_images.delete_document_images(ctx.db, d)  # 문서가 만든 그림 파일도 같이 지운다
     ctx.db.delete(kb)
     ctx.db.commit()
     storage.purge(stored)
@@ -184,6 +188,8 @@ def _doc(d: Document, chunks: int) -> dict[str, Any]:
         "source": d.source,
         "url": d.url,
         "enabled": d.enabled,
+        # v0.9 이미지 색인: 그림 수·설명한 수·실패한 수(없으면 None)
+        "image_report": (d.doc_metadata or {}).get(kb_images.IMG_REPORT_KEY),
     }
 
 
@@ -196,7 +202,7 @@ async def upload_document(
     if svc.kind_of(filename, mime) is None:
         raise AppError(
             415,
-            "PDF·DOCX·PPTX·XLSX·HTML·TXT·MD 파일만 올릴 수 있어요.",
+            "PDF·DOCX·PPTX·XLSX·HTML·TXT·MD·PNG·JPG·WEBP 파일만 올릴 수 있어요.",
             "파일 형식을 바꿔서 다시 올려 주세요.",
         )
     content = await file.read(svc.MAX_UPLOAD_BYTES + 1)
@@ -258,7 +264,7 @@ def delete_document(document_id: str, ctx: DocBuilders) -> Response:
         target_id=doc.id,
         meta={"filename": doc.filename},
     )
-    stored = storage.locations([doc])
+    stored = storage.locations([doc]) + kb_images.delete_document_images(ctx.db, doc)
     ctx.db.delete(doc)
     ctx.db.commit()
     storage.purge(stored)
@@ -444,6 +450,9 @@ def _chunk(c: Chunk) -> dict[str, Any]:
         "parent_content": c.parent_content,
         "enabled": c.enabled,
         "char_count": len(c.content),
+        "kind": (c.metadata_ or {}).get("kind", "text"),
+        "image_file_id": (c.metadata_ or {}).get("file_id"),
+        "page": (c.metadata_ or {}).get("page"),
     }
 
 
@@ -480,6 +489,7 @@ def update_chunk(chunk_id: str, body: ChunkPatch, ctx: ChunkBuilders) -> dict[st
 # ---------------- v0.6 질문·답 형식과 문서 처리 순서 ----------------
 MAX_TABLE_BYTES = 5 * 1024 * 1024
 PREVIEW_CHUNKS = 50
+PREVIEW_THUMB_BYTES = 150_000
 
 
 async def _read_table_file(file: UploadFile) -> tuple[str, bytes]:
@@ -626,16 +636,27 @@ async def preview_pipeline(
         raise AppError(422, str(exc), "다른 파일로 다시 해 보세요.") from exc
     finally:
         ctx.db.rollback()  # 미리 보기는 아무것도 저장하지 않는다
+    # 글 조각은 앞의 50개, 그림 조각은 모두(최대 20장)를 보여 준다
+    shown = [(i, p) for i, p in enumerate(result.pieces) if p.kind != "image"][:PREVIEW_CHUNKS]
+    shown += [(i, p) for i, p in enumerate(result.pieces) if p.kind == "image"]
+    chunks = []
+    for i, p in shown:
+        item: dict[str, Any] = {"index": i, **p.as_dict(), "char_count": len(p.content)}
+        if p.kind == "image" and p.image_index is not None and p.image_index < len(result.images):
+            img = result.images[p.image_index]
+            if len(img.data) <= PREVIEW_THUMB_BYTES:
+                item["thumb"] = f"data:{img.mime};base64,{base64.b64encode(img.data).decode()}"
+        chunks.append(item)
     return {
         "total": len(result.pieces),
-        "chunks": [
-            {"index": i, **p.as_dict(), "char_count": len(p.content)}
-            for i, p in enumerate(result.pieces[:PREVIEW_CHUNKS])
-        ],
+        "chunks": chunks,
         "metadata": result.metadata,
         "log": result.log,
         "text_preview": result.text[:2000],
         "chunk_mode": cfg["chunk_mode"],
+        # v0.9 처리 캔버스: 단계별 결과(글자 수·조각 수·AI 호출 수·예상 비용 등)
+        "stages": result.stages,
+        "ai_calls": len(result.usage),
     }
 
 

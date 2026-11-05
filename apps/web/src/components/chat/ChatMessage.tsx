@@ -3,6 +3,7 @@ import {
   Check,
   ChevronDown,
   Copy,
+  Image as ImageIcon,
   Paperclip,
   RotateCcw,
   ShieldBan,
@@ -13,11 +14,15 @@ import {
 import { useState, type ReactNode } from "react";
 import { AppIcon } from "@/components/AppIcon";
 import { Markdown } from "@/components/chat/Markdown";
+import { KbImage } from "@/components/knowledge/KbImage";
+import type { CitationImage } from "@/lib/api/kbcanvas";
 import type { ChatLine } from "@/lib/api/chat";
 import type { Citation, Rating } from "@/lib/api/types";
 import { cn, copyText } from "@/lib/cn";
 
-function Citations({ items }: { items: Citation[] }) {
+type CitationWithImage = Citation & { image?: CitationImage };
+
+function Citations({ items }: { items: CitationWithImage[] }) {
   const [open, setOpen] = useState<number | null>(null);
   return (
     <div className="mt-2 space-y-1">
@@ -40,6 +45,7 @@ function Citations({ items }: { items: Citation[] }) {
           >
             <span className="font-semibold">{c.index}</span>
             <span className="truncate">{c.filename}</span>
+            {c.image && <ImageIcon className="h-3 w-3 shrink-0" aria-label="그림 있음" />}
             <ChevronDown className={cn("h-3 w-3 shrink-0", open === c.index && "rotate-180")} />
           </button>
         ))}
@@ -47,12 +53,13 @@ function Citations({ items }: { items: Citation[] }) {
       {items
         .filter((c) => c.index === open)
         .map((c) => (
-          <p
+          <div
             key={c.index}
-            className="max-h-48 overflow-y-auto whitespace-pre-wrap rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600"
+            className="max-h-64 space-y-2 overflow-y-auto rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600"
           >
-            {c.content}
-          </p>
+            {c.image && <KbImage image={c.image} />}
+            <p className="whitespace-pre-wrap">{c.content}</p>
+          </div>
         ))}
     </div>
   );
