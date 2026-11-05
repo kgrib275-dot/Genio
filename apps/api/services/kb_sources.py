@@ -18,7 +18,7 @@ from sqlalchemy.orm import Session
 from api.config import get_settings
 from api.core.errors import AppError
 from api.models import Document, KnowledgeBase
-from api.services import kb_crawl, kb_google, kb_notion
+from api.services import kb_crawl, kb_google, kb_notion, storage
 from api.services.kb_limits import check_write
 from nodes import NodeError
 
@@ -393,7 +393,10 @@ def sync_source(db: Session, kb_id: str, sid: str) -> dict[str, Any]:
                 doc.filename = inc.filename
                 doc.mime = inc.mime
                 doc.size = len(inc.content)
-                doc.content = inc.content
+                old_locs = storage.locations(
+                    [doc]
+                )  # 본문이 바뀌면 예전 저장소 파일은 커밋 뒤에 지운다
+                storage.write_content(doc, inc.content, kind="documents", content_type=inc.mime)
                 doc.url = inc.url
                 doc.status = "uploaded"
                 doc.error = None
@@ -408,15 +411,17 @@ def sync_source(db: Session, kb_id: str, sid: str) -> dict[str, Any]:
                     mime=inc.mime,
                     size=len(inc.content),
                     status="uploaded",
-                    content=inc.content,
                     source=str(src["type"]),
                     url=inc.url,
                     doc_metadata=meta,
                 )
+                storage.write_content(doc, inc.content, kind="documents", content_type=inc.mime)
+                old_locs = []
                 db.add(doc)
                 existing[inc.key] = doc
                 summary["added"] += 1
             db.commit()
+            storage.purge(old_locs)
             to_process.append(doc.id)
         summary["unchanged"] += len(got.unchanged_keys)
         summary["missing"] = len([k for k in existing if k not in seen])

@@ -1,0 +1,6 @@
+# Sandbox service deps (ASCII only). No DB / Redis / LLM libraries here on purpose.
+fastapi>=0.115,<1
+uvicorn>=0.30,<1
+pydantic>=2.8,<3
+RestrictedPython>=7.4
+quickjs==1.19.4

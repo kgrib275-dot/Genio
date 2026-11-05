@@ -745,3 +745,20 @@ DB 변경 없음: 지식베이스 설정(`knowledge_bases.settings` JSON)과 문
 앱 기능: `opening_statement`·`suggested_questions`·`suggested_questions_after_answer`(→ 이어질 질문)·`retriever_resource`(→ 출처)·`speech_to_text`/`text_to_speech`·`file_upload`·`sensitive_word_avoidance`(키워드 방식 → 금지어)를 옮긴다. 환경 변수는 앱 환경 값으로(비밀은 값 없이). 대화 변수의 처음 값은 옮기지 않는다.
 
 확인 한계: 시험 자료는 Dify DSL(0.1.x)을 알고 있는 대로 직접 쓴 것이다. 실제 Dify에서 내보낸 파일로는 아직 확인하지 못했다.
+
+## v0.8 파일 저장소·코드 샌드박스 (ADR 0012)
+
+기존 API의 요청·응답 모양은 바뀌지 않는다. 바뀐 것은 아래와 같다.
+
+- **파일 저장소** — 환경 값 `GENIO_STORAGE=db|disk|s3`(기본 `db`). 파일을 올리는 API(`POST /workspaces/{ws}/files`, 지식베이스 문서 올리기, 웹 페이지·질문·답 표 가져오기)와 읽는 곳(흐름의 파일 입력, 공유 썸네일 `GET /public/apps/{token}/share-image`, 문서 처리)은 모두 저장소 서비스(`services/storage.py`)를 거친다. 응답에는 저장 위치가 드러나지 않는다.
+  - DB: `files`·`documents`에 `storage`(`db|disk|s3`, 기본 `db`)와 `storage_key`(저장소 안의 키) 두 칸이 생겼다(마이그레이션 0013, 추가만). 저장소가 `db`가 아니면 `content`는 비어 있다(`files`는 빈 바이트, `documents`는 NULL).
+  - 저장소에 문제가 생기면 두 줄 오류가 나온다: 읽기·쓰기 실패 503("파일 저장소(S3)에 연결하지 못했어요 / 저장소 주소·버킷·접근 키 설정을 확인해 달라고 관리자에게 요청하세요"), 저장된 파일이 없으면 404("저장된 파일을 찾지 못했어요 / 파일을 다시 올려 주세요"). 오류 문장에는 주소·키가 들어가지 않는다.
+  - 문서·지식베이스를 지우면 저장소의 본문도 지운다. 옮기기·되돌리기·고아 파일 찾기: `scripts/migrate_files_to_storage.py`(docs/runbook.md).
+- **관리 > 시스템 상태**(`GET /admin/status`)의 `items`에 **"코드 실행"** 한 줄이 늘었다.
+  - 격리 서버를 쓰지 않으면 `status: "unknown"`, `mode: "in-process"`.
+  - 켜 두었으면 응답 시간과 함께 `ok`(500ms 미만)·`warn`, 응답이 없으면 `error`(`mode: "sandbox"`, `ms`).
+- **코드 실행 격리 서버** — 별도 컨테이너(`apps/sandbox`), 제니오 API가 아니라 api·worker가 내부망에서만 부른다. 이 서버의 계약:
+  - `GET /health` → `{"status":"ok"}`(인증 없음, 다른 정보 없음)
+  - `POST /run` 헤더 `X-Sandbox-Key`, 본문 `{"language":"python|javascript","code":str,"inputs":{...},"timeout":1~60}` → `{"ok":true,"result":{...}}` 또는 `{"ok":false,"kind":"error|timeout|memory|output","error":str}`(HTTP 200). 인증 실패 401, 키 미설정 503(`kind:"config"`), 본문 1MB 초과 413, 형식 오류 422, 동시 실행 초과 429(`kind:"busy"`).
+  - 제니오 쪽은 `GENIO_SANDBOX_URL`이 있을 때만 이 서버를 부르고, 없으면 지금처럼 서버 안에서 실행한다. 사용자가 고른 주소는 절대 쓰지 않는다(운영자가 정한 환경 값만).
+- **오류 수집(Sentry)** — `SENTRY_DSN`이 있을 때만 켜진다. 사용자·요청 정보와 지역 변수는 보내지 않고 글 속 비밀값은 `****`로 가린다.

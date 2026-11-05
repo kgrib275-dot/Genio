@@ -4,6 +4,10 @@ import os
 
 from celery import Celery
 
+from api.core.sentry import init_sentry
+
+init_sentry("worker")  # SENTRY_DSN이 있을 때만 켜진다(v0.8)
+
 celery = Celery(
     "genio",
     broker=os.getenv("CELERY_BROKER_URL", "redis://localhost:6379/1"),

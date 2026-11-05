@@ -16,7 +16,7 @@ from api.engine import safe_http
 from api.llm.catalog import catalog
 from api.models import Chunk, Document, KnowledgeBase
 from api.routers.projects import check_project_target
-from api.services import kb_limits
+from api.services import kb_limits, storage
 from api.services import kb_pipeline as pipe
 from api.services import knowledge as svc
 from api.services.projects import hidden_project_ids
@@ -151,8 +151,10 @@ def delete_kb(kb_id: str, ctx: KbBuilders) -> Response:
         target_id=kb.id,
         meta={"name": kb.name},
     )
+    stored = storage.locations(ctx.db.scalars(select(Document).where(Document.kb_id == kb_id)))
     ctx.db.delete(kb)
     ctx.db.commit()
+    storage.purge(stored)
     return Response(status_code=204)
 
 
@@ -208,8 +210,8 @@ async def upload_document(
         mime=mime,
         size=len(content),
         status="uploaded",
-        content=content,
     )
+    storage.write_content(doc, content, kind="documents", content_type=mime)
     ctx.db.add(doc)
     audit(
         ctx.db,
@@ -256,8 +258,10 @@ def delete_document(document_id: str, ctx: DocBuilders) -> Response:
         target_id=doc.id,
         meta={"filename": doc.filename},
     )
+    stored = storage.locations([doc])
     ctx.db.delete(doc)
     ctx.db.commit()
+    storage.purge(stored)
     return Response(status_code=204)
 
 
@@ -353,10 +357,12 @@ def import_url(kb_id: str, body: UrlIn, ctx: KbBuilders) -> dict[str, Any]:
         mime="text/plain",
         size=len(body_text.encode("utf-8")),
         status="uploaded",
-        content=body_text.encode("utf-8"),
         source="url",
         url=body.url.strip(),
         doc_metadata={"source_url": body.url.strip()},
+    )
+    storage.write_content(
+        doc, body_text.encode("utf-8"), kind="documents", content_type="text/plain"
     )
     ctx.db.add(doc)
     audit(
@@ -527,13 +533,13 @@ async def import_qa_table(
         mime="text/csv" if filename.lower().endswith(".csv") else svc.XLSX_MIME,
         size=len(content),
         status="uploaded",
-        content=content,
         source=pipe.QA_SOURCE,
         doc_metadata={
             pipe.QA_Q_KEY: question_column or gq or "",
             pipe.QA_A_KEY: answer_column or ga or "",
         },
     )
+    storage.write_content(doc, content, kind="documents", content_type=doc.mime)
     ctx.db.add(doc)
     audit(
         ctx.db,
@@ -598,7 +604,7 @@ async def preview_pipeline(
         doc = ctx.db.get(Document, document_id)
         if doc is None or doc.kb_id != kb_id:
             raise not_found("문서")
-        filename, mime, content = doc.filename, doc.mime, doc.content or b""
+        filename, mime, content = doc.filename, doc.mime, storage.read_content(doc)
         source, doc_meta = doc.source, dict(doc.doc_metadata or {})
     else:
         raise AppError(422, "미리 볼 문서가 없어요.", "파일을 올리거나 문서를 하나 골라 주세요.")

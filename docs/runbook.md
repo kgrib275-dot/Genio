@@ -154,3 +154,75 @@ alembic -c apps/api/alembic.ini check      # 모델과 DB가 같은지
 ## 운영 준비: 활동 기록 내보내기
 - **관리 > 활동 기록 > CSV로 받기**(소유자·관리자): 화면에서 고른 종류·한 일·사람·기간·검색어 그대로 최대 5만 줄을 받는다.
 - 엑셀에서 한글이 깨지지 않게 BOM을 붙인다. 부가 정보 중 key·token·secret·password·credential이 들어간 항목은 `****`로 바꾼다.
+
+## v0.8 운영 안전 (ADR 0012)
+
+### 1. 파일 저장소: DB · 디스크 · S3
+올린 파일(채팅 첨부·앱 입력 파일·공유 썸네일)과 지식베이스 문서 본문을 어디에 둘지 고른다. **기본은 `db`(지금과 같음)**이라 아무것도 하지 않으면 바뀌는 것이 없다.
+
+| 값 | 어디에 | 언제 쓰나 |
+|---|---|---|
+| `db` | DB 열(content) | 기본. 파일이 적을 때. DB 백업에 파일도 함께 들어간다 |
+| `disk` | 서버 볼륨(`GENIO_STORAGE_DIR`, 컴포즈의 `filestore`) | 서버 한 대, DB를 가볍게 하고 싶을 때 |
+| `s3` | S3 호환 저장소(AWS S3, RustFS, 사내 S3 등) | 서버가 여러 대이거나 파일이 많을 때 |
+
+**바꾸는 법** (`.env` 수정 뒤 `docker compose up -d`로 api·worker를 다시 만든다)
+- 디스크: `GENIO_STORAGE=disk`
+- S3: `GENIO_STORAGE=s3`, `GENIO_S3_BUCKET`, `GENIO_S3_ACCESS_KEY`, `GENIO_S3_SECRET_KEY`, (AWS 밖이면 `GENIO_S3_ENDPOINT_URL`, MinIO·RustFS 같은 서버는 `GENIO_S3_PATH_STYLE=true`)
+- 바꾼 뒤 **새로 올리는 파일만** 새 저장소에 쌓이고, 이미 올린 파일은 자기가 있던 곳(행의 `storage` 값)에서 계속 읽힌다. 섞여 있어도 된다.
+
+**이미 있는 파일 옮기기** (저장소를 바꾼 뒤, 순서대로)
+```bash
+# 0) (처음 한 번, S3만) 버킷이 없으면 만든다
+docker compose exec api python /app/scripts/migrate_files_to_storage.py --init-bucket
+# 1) 먼저 얼마나 옮길지만 센다(아무것도 바꾸지 않음)
+docker compose exec api python /app/scripts/migrate_files_to_storage.py --target s3 --dry-run
+# 2) 옮긴다. 저장소에서 다시 읽어 크기·sha256이 맞을 때만 행을 바꾸고, DB 본문은 그대로 둔다
+docker compose exec api python /app/scripts/migrate_files_to_storage.py --target s3
+# 3) 며칠 써 보고 이상이 없으면 DB 본문을 비운다(DB가 가벼워진다)
+docker compose exec api python /app/scripts/migrate_files_to_storage.py --target s3 --clear-db
+```
+- 중간에 멈춰도 같은 명령을 다시 돌리면 이어서 한다(배치마다 커밋). 한 건이라도 실패하면 종료 코드 1과 실패 목록이 나온다.
+- **되돌리기**: 2번까지만 했다면(`--clear-db` 전) DB 본문이 그대로 있으니 `GENIO_STORAGE=db`로 돌리고 아래 SQL로 읽는 곳만 DB로 바꾸면 된다.
+  `UPDATE files SET storage='db', storage_key=NULL; UPDATE documents SET storage='db', storage_key=NULL;`
+  3번까지 했다면 먼저 저장소의 본문을 DB로 되돌린다: `... migrate_files_to_storage.py --restore-to-db`
+- **고아 파일 찾기**(저장소에는 있는데 어떤 행도 가리키지 않는 키, 지우지는 않는다): `... --orphans s3`. 파일·문서를 지우면 저장소의 본문도 함께 지워지지만, 워크스페이스·앱을 통째로 지우면 남을 수 있다.
+- 내려받은 파일 이름·형식 검사(15MB 상한, 허용 확장자)는 저장소와 상관없이 그대로다.
+
+**자체 S3 서버가 필요하면** (이미 쓰는 S3가 있으면 건너뛴다): 컴포즈에 `objectstore`(RustFS, S3 호환)가 선택 서비스로 들어 있다. MinIO 공식 이미지는 더는 배포되지 않아 RustFS를 썼다.
+```bash
+# .env: GENIO_S3_ACCESS_KEY, GENIO_S3_SECRET_KEY(꼭 정한다. 비우면 서버가 시작을 거부한다),
+#       GENIO_STORAGE=s3, GENIO_S3_ENDPOINT_URL=http://objectstore:9000, GENIO_S3_BUCKET=genio, GENIO_S3_PATH_STYLE=true
+COMPOSE_PROFILES=storage docker compose up -d     # objectstore: 관리 화면은 127.0.0.1:59001 에서만 열린다(S3 주소는 내부망 전용)
+docker compose exec api python /app/scripts/migrate_files_to_storage.py --init-bucket
+```
+- 이 서버의 데이터는 `objectdata` 볼륨에 있다. **백업 대상에 넣어야 한다**(아래 4번).
+
+### 2. 코드 실행 격리 서버(sandbox)
+코드 단계(파이썬·자바스크립트)를 API 서버 안이 아니라 **별도 컨테이너**에서 돌린다. 여러 사람이 코드를 쓰는 환경에서 권한이 높은 API 프로세스(DB·AI 키를 가진)와 사용자 코드를 떼어 놓기 위한 것이다. **기본은 꺼짐(서버 안 실행)**이고, 관리 > 시스템 상태의 "코드 실행" 줄에 지금 어디서 도는지 보인다.
+
+**켜는 법**
+```bash
+# .env: GENIO_SANDBOX_KEY=<긴 무작위 문자열>, GENIO_SANDBOX_URL=http://sandbox:9100
+COMPOSE_PROFILES=sandbox docker compose up -d --build
+```
+**네트워크·권한 모델**
+- `sandbox`는 `sandbox_net`(**internal: true** = 바깥 인터넷으로 나가는 길이 없는 내부망)에만 붙는다. api·worker는 기존 네트워크에 더해 `sandbox_net`에도 붙어서 부를 수 있다. DB·Redis에는 닿지 못한다.
+- 비 root 사용자(uid 10001), 읽기 전용 파일시스템(`/tmp`만 64MB tmpfs), 모든 리눅스 권한 제거(`cap_drop: ALL`), `no-new-privileges`, 메모리 2GB·CPU 2개·프로세스 256개 제한.
+- 코드 한 건마다 새 프로세스를 띄워 CPU·메모리(기본 512MB, `SANDBOX_MEMORY_MB`)·파일 수·파일 크기·프로세스 수 제한(`resource`)을 걸고, 제한 시간이 지나면 프로세스를 죽인다. 결과는 1MB까지.
+- API 요청은 공유 키(`X-Sandbox-Key`)로 인증한다. **키가 비어 있으면 서버가 실행을 거절한다**(열어 둔 채로 뜨지 않음). 동시 실행은 프로세스당 `SANDBOX_MAX_CONCURRENT`(기본 4)개, 넘으면 "바빠요".
+- 코드에서 파일·네트워크·`os`는 원래 막혀 있고(허용 모듈만), 이 구성은 그 뒤에 한 겹을 더 두는 것이다.
+- 확인: `docker compose logs sandbox`, 시스템 상태 "코드 실행"이 정상(응답 ms)이면 된다. 응답이 없으면 코드 단계가 "코드 실행 서버에 연결하지 못했어요"로 실패한다. 급하면 `.env`의 `GENIO_SANDBOX_URL`을 비우고 api·worker를 다시 만들면 바로 서버 안 실행으로 돌아간다.
+
+### 3. 오류 수집(Sentry, 선택)
+- `.env`에 `SENTRY_DSN`을 넣으면 api·worker의 처리되지 않은 오류가 Sentry로 간다. 비워 두면 아무것도 보내지 않는다. 이 서버의 서버 오류 기록(관리 > 시스템 상태)은 Sentry와 상관없이 계속 남는다.
+- 사용자·요청(헤더·쿠키·본문·주소의 쿼리)·지역 변수·서버 이름은 보내지 않고, 글에서 토큰·키·비밀번호처럼 보이는 값은 `****`로 가린다. HTTP 호출 기록(breadcrumb)은 보내지 않는다.
+- 성능 추적은 기본 꺼짐(`SENTRY_TRACES_SAMPLE_RATE=0`). 버전(`GENIO_VERSION`)이 release로 붙는다.
+
+### 4. 백업: 파일을 S3로 옮기면 무엇을 챙기나
+- DB 백업(`backups/`)에는 **저장소를 `db`로 쓴 파일만** 들어 있다. `disk`·`s3`로 옮긴 파일은 DB 백업에 **없다**(행에는 어디에 있는지만 남는다).
+- 그래서 저장소를 옮기면 **DB 백업과 파일 저장소를 같은 시점에 맞춰 백업**해야 복구할 수 있다.
+  - `disk`: `filestore` 볼륨(컨테이너 `/data/files`)을 같이 백업한다.
+  - `s3`: 버킷 버전 관리(또는 다른 버킷으로 복제)를 켜 둔다. 자체 서버면 `objectdata` 볼륨을 백업한다.
+- 복구 순서: DB 복구(`scripts/restore_backup.sh`) → 파일 저장소 복구 → 시스템 상태·파일 열어 보기로 확인. 행은 있는데 파일이 없으면 "저장된 파일을 찾지 못했어요"가 나온다.
+- 옮기기 전에 백업을 한 번 받아 두고, `--clear-db`는 저장소 쪽 백업까지 확인한 뒤에만 쓴다.

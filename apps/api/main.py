@@ -13,6 +13,7 @@ from sqlalchemy import text
 
 from api.config import get_settings
 from api.core.errors import install_error_handlers
+from api.core.sentry import init_sentry
 from api.db import Base, SessionLocal, engine
 from api.market.service import ensure_market_nodes, sync_catalog
 from api.routers import (
@@ -50,6 +51,7 @@ from api.services.seed import seed_demo, seed_demo_samples
 
 logging.basicConfig(level=get_settings().genio_log_level)
 log = logging.getLogger("genio")
+init_sentry("api")  # SENTRY_DSN이 있을 때만 켜진다(v0.8)
 
 
 def startup() -> None:

@@ -1,6 +1,7 @@
 """v0.8 지식 데이터 소스: 웹사이트 크롤링·Notion 동기화·공개 Google 문서(가짜 서버로 확인)."""
 
 import json
+from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit
 
@@ -738,3 +739,40 @@ def test_daily_resync_task_and_protected_settings(
     s = r.json()["settings"]
     assert s["kind"] == "internal" and s["external"] is None and s["chunk_size"] == 500
     assert len(s["sources"]) == 1 and s["tuning"]["questions"] == []
+
+
+def test_web_source_uses_configured_file_storage(
+    client: TestClient,
+    team: Team,
+    fake_llm: FakeAdapter,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """저장소를 디스크로 바꾸면 가져온 문서 본문도 디스크에 쌓이고(DB 칸은 비움), 고치면 예전 파일은 지워진다."""
+    from api.services import storage
+
+    st = get_settings()
+    monkeypatch.setattr(st, "genio_storage", "disk")
+    monkeypatch.setattr(st, "genio_storage_dir", str(tmp_path / "files"))
+    storage._build.cache_clear()
+    add_llm(client, team, provider="openai", model="gpt-4o-mini")
+    site = make_site()
+    install_site(monkeypatch, site)
+    kb = make_kb(client, team)
+    src = add_web(client, team, kb)
+    assert src["last_status"] == "ok"
+    with SessionLocal() as db:
+        docs = db.query(Document).all()
+        assert docs and all(d.storage == "disk" and d.storage_key for d in docs)
+        assert all(not d.content for d in docs)
+        old_key = next(d.storage_key for d in docs if d.filename == "B 쪽.txt")
+        assert "새 내용" not in storage.read_content(docs[0]).decode()
+    # 한 쪽이 바뀌면 새 본문이 쓰이고 예전 파일은 지워진다
+    site[f"{BASE}/b"] = (200, html("B 쪽", BODY + "B 쪽이 새 내용으로 바뀌었어요"), "text/html")
+    client.post(f"/api/v1/knowledge-bases/{kb}/sources/{src['id']}/sync", headers=team.h("builder"))
+    with SessionLocal() as db:
+        b = next(d for d in db.query(Document).all() if d.filename == "B 쪽.txt")
+        assert b.storage == "disk" and b.storage_key != old_key
+        assert "새 내용" in storage.read_content(b).decode()
+    assert not any(p.name == old_key.split("/")[-1] for p in (tmp_path / "files").rglob("*"))
+    storage._build.cache_clear()

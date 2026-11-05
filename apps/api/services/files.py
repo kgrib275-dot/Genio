@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from api.core.errors import AppError
 from api.models import StoredFile
+from api.services import storage
 
 MAX_FILE_BYTES = 15 * 1024 * 1024
 ALLOWED_EXT = (
@@ -63,9 +64,11 @@ async def save_upload(
         filename=name,
         mime=file.content_type or "application/octet-stream",
         size=len(content),
-        content=content,
+        content=b"",
         created_by=user_id,
     )
+    # 설정된 저장소(db·disk·s3)에 본문을 쓰고, 어디에 있는지 행에 적는다
+    storage.write_content(f, content, kind="files", content_type=f.mime)
     db.add(f)
     db.commit()
     return file_dict(f)

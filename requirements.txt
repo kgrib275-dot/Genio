@@ -30,3 +30,5 @@ croniter>=2.0,<7
 tzdata>=2024.1
 quickjs==1.19.4
 PyYAML>=6,<7
+boto3>=1.34,<2  # optional S3 file storage (GENIO_STORAGE=s3)
+sentry-sdk>=2,<3  # optional error reporting (SENTRY_DSN)

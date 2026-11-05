@@ -8,6 +8,7 @@ import json
 from typing import Any
 
 from api.config import get_settings
+from api.engine import sandbox_client
 from nodes import NodeError
 
 MEMORY_LIMIT = 64 * 1024 * 1024
@@ -29,6 +30,10 @@ WRAPPER = """
 
 
 def run_javascript(code: str, inputs: dict[str, Any]) -> dict[str, Any]:
+    if sandbox_client.enabled():  # v0.8: 격리 서버가 있으면 그쪽에서 실행
+        return sandbox_client.run_remote(
+            "javascript", code, inputs, get_settings().genio_code_node_timeout_seconds
+        )
     try:
         import quickjs  # type: ignore[import-untyped]
     except ImportError as exc:  # pragma: no cover - 설치 누락

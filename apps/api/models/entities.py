@@ -311,6 +311,9 @@ class Document(Base):
     # ADR 0002
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
     content: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
+    # v0.8: 본문이 있는 곳(db면 content 열, 아니면 storage_key로 저장소에서 읽음)
+    storage: Mapped[str] = mapped_column(String(20), default="db", server_default="db")
+    storage_key: Mapped[str | None] = mapped_column(Text, nullable=True)
     # v0.2: 메타데이터·출처
     doc_metadata: Mapped[dict[str, Any]] = mapped_column(
         "doc_metadata", JsonType, default=dict, server_default="{}"
@@ -488,6 +491,9 @@ class StoredFile(Base):
     mime: Mapped[str] = mapped_column(String(100))
     size: Mapped[int] = mapped_column(Integer)
     content: Mapped[bytes] = mapped_column(LargeBinary)
+    # v0.8: 본문이 있는 곳. db면 content 열, 아니면 storage_key로 저장소(disk·s3)에서 읽는다
+    storage: Mapped[str] = mapped_column(String(20), default="db", server_default="db")
+    storage_key: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_by: Mapped[str | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     created_at: Mapped[datetime] = _created()
 

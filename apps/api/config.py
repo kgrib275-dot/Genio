@@ -66,6 +66,23 @@ class Settings(BaseSettings):
 
     market_items_dir: str = "market-items"
 
+    # v0.8 파일 저장소(ADR 0012): db(기본, 지금과 같음) | disk | s3. 접근 키·비밀 키는 로그에 남기지 않는다.
+    genio_storage: str = "db"
+    genio_storage_dir: str = "/data/files"
+    genio_s3_endpoint_url: str = ""
+    genio_s3_bucket: str = ""
+    genio_s3_region: str = "us-east-1"
+    genio_s3_access_key: str = ""
+    genio_s3_secret_key: str = ""
+    genio_s3_path_style: bool = False
+    genio_s3_prefix: str = "genio/"
+    # v0.8 코드 실행 격리 서버(비우면 지금처럼 서버 안에서 실행). 키는 서버와 같은 값을 쓴다.
+    genio_sandbox_url: str = ""
+    genio_sandbox_key: str = ""
+    # v0.8 오류 수집(Sentry). 비우면 아무것도 보내지 않는다.
+    sentry_dsn: str = ""
+    sentry_traces_sample_rate: float = 0.0
+
 
 @lru_cache
 def get_settings() -> Settings:

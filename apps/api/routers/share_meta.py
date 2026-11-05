@@ -3,10 +3,12 @@
 from fastapi import APIRouter, Request, Response
 from fastapi.responses import HTMLResponse
 
+from api.core.errors import AppError
 from api.deps import DbDep
 from api.models import StoredFile
 from api.routers.common import public_origin
 from api.services import share_meta as svc
+from api.services import storage
 
 router = APIRouter(tags=["share-meta"])
 CACHE = {"Cache-Control": "public, max-age=300", "X-Content-Type-Options": "nosniff"}
@@ -52,4 +54,8 @@ def share_image(token: str, db: DbDep) -> Response:
     f = db.get(StoredFile, file_id) if file_id else None
     if f is None or not svc.image_ok(f, app.workspace_id):
         return _default_image()
-    return Response(f.content, media_type=f.mime, headers=CACHE)
+    try:
+        data = storage.read_content(f)
+    except AppError:
+        return _default_image()  # 저장소가 잠깐 안 돼도 미리보기는 기본 그림으로
+    return Response(data, media_type=f.mime, headers=CACHE)

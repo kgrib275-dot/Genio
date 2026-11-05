@@ -29,11 +29,19 @@ x-backend-common: &backend-common
     - ./market-items:/app/market-items
     # 자동 백업 결과(status.json)를 읽기만 한다
     - ./backups:/backups:ro
+    # v0.8 GENIO_STORAGE=disk 일 때 파일이 쌓이는 곳(기본 db 모드에서는 비어 있다)
+    - filestore:/data/files
+    # v0.8 파일 옮기기 도구(scripts/migrate_files_to_storage.py)
+    - ./scripts:/app/scripts:ro
   depends_on:
     postgres:
       condition: service_healthy
     redis:
       condition: service_healthy
+  # sandbox_net: 코드 실행 서버(profile sandbox)와만 이어지는 내부망. default는 지금처럼 DB·Redis·인터넷용
+  networks:
+    - default
+    - sandbox_net
   restart: unless-stopped
 
 services:
@@ -108,6 +116,70 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
+  # v0.8 코드 실행 격리 서버(선택, profile: sandbox). 켜는 법: docs/runbook.md "v0.8 운영 안전"
+  #   .env에 GENIO_SANDBOX_KEY=<긴 무작위 문자열>, GENIO_SANDBOX_URL=http://sandbox:9100 를 넣고
+  #   COMPOSE_PROFILES=sandbox docker compose up -d --build 로 올린다. 비워 두면 지금처럼 서버 안에서 실행한다.
+  # 외부로 나가는 길이 없는 내부망(sandbox_net)에만 두고, DB·Redis·AI 키에는 접근하지 못한다.
+  sandbox:
+    profiles: ["sandbox"]
+    build:
+      context: .
+      dockerfile: apps/sandbox/Dockerfile
+    environment:
+      GENIO_SANDBOX_KEY: ${GENIO_SANDBOX_KEY:-}
+      SANDBOX_MEMORY_MB: ${SANDBOX_MEMORY_MB:-512}
+      SANDBOX_MAX_CONCURRENT: ${SANDBOX_MAX_CONCURRENT:-4}
+    networks:
+      - sandbox_net
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,noexec,nosuid
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 2g
+    cpus: 2.0
+    pids_limit: 256
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:9100/health')\""]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  # v0.8 파일 저장용 S3 호환 서버(선택, profile: storage). MinIO 공식 이미지가 더는 배포되지 않아
+  # RustFS(S3 호환, Apache-2.0)를 쓴다. 이미 쓰는 S3(AWS 등)가 있으면 이 서비스는 필요 없다.
+  #   .env: GENIO_STORAGE=s3, GENIO_S3_ENDPOINT_URL=http://objectstore:9000, GENIO_S3_BUCKET=genio,
+  #         GENIO_S3_ACCESS_KEY=..., GENIO_S3_SECRET_KEY=..., GENIO_S3_PATH_STYLE=true
+  #   COMPOSE_PROFILES=storage docker compose up -d  → 버킷 만들기와 옮기기는 docs/runbook.md 참고
+  objectstore-init:
+    profiles: ["storage"]
+    image: alpine:3.20
+    command: ["sh", "-c", "mkdir -p /data/d0 && chown -R 10001:10001 /data"]
+    volumes:
+      - objectdata:/data
+    restart: "no"
+
+  objectstore:
+    profiles: ["storage"]
+    image: rustfs/rustfs:latest
+    environment:
+      # 비워 두면 RustFS가 시작을 거부한다(기본 비밀번호로 뜨지 않음). 꼭 .env에 정해 준다.
+      RUSTFS_ACCESS_KEY: ${GENIO_S3_ACCESS_KEY:-}
+      RUSTFS_SECRET_KEY: ${GENIO_S3_SECRET_KEY:-}
+      RUSTFS_VOLUMES: /data/d0
+      RUSTFS_ADDRESS: ":9000"
+    volumes:
+      - objectdata:/data
+    # S3 주소(9000)는 컴포즈 내부망에서만 쓴다. 관리 화면(9001)만 이 PC에서 본다.
+    ports:
+      - "127.0.0.1:59001:9001"
+    depends_on:
+      objectstore-init:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
   web:
     # 배포용 빌드를 nginx로 서빙(빠른 첫 화면). 개발 중 바로 반영하려면 apps/web에서 npm run dev(5190, API 8190 프록시).
     build:
@@ -147,3 +219,10 @@ services:
 volumes:
   pgdata:
   tsstate:
+  filestore:
+  objectdata:
+
+networks:
+  # 외부로 나가는 길이 없는 내부망(internal): 코드 실행 서버는 여기에만 둔다
+  sandbox_net:
+    internal: true
