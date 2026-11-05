@@ -12,7 +12,7 @@ router = APIRouter(tags=["share-meta"])
 CACHE = {"Cache-Control": "public, max-age=300", "X-Content-Type-Options": "nosniff"}
 
 
-@router.get("/public/share/{token}", response_class=HTMLResponse)
+@router.api_route("/public/share/{token}", methods=["GET", "HEAD"], response_class=HTMLResponse)
 def share_page(token: str, request: Request, db: DbDep) -> HTMLResponse:
     """공유 링크(또는 '-' = 일반 소개)의 미리보기 HTML."""
     meta = svc.build_meta(db, token, public_origin(request))
@@ -34,12 +34,12 @@ def _default_image() -> Response:
     return Response(data, media_type="image/png", headers=CACHE)
 
 
-@router.get("/public/og-default.png")
+@router.api_route("/public/og-default.png", methods=["GET", "HEAD"])
 def og_default() -> Response:
     return _default_image()
 
 
-@router.get("/public/apps/{token}/share-image")
+@router.api_route("/public/apps/{token}/share-image", methods=["GET", "HEAD"])
 def share_image(token: str, db: DbDep) -> Response:
     """앱 관리자가 올린 썸네일(누구나 열 수 있는 앱만). 없으면 기본 그림."""
     from api.routers.deployments import appearance_of
