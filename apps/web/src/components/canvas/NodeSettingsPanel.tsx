@@ -148,7 +148,7 @@ export function NodeSettingsPanel({
           </details>
         )}
         {appId && !readOnly && spec && node.type !== "input" && (
-          <NodeTestPanel key={node.id} appId={appId} node={node} />
+          <NodeTestPanel key={`test-${node.id}`} appId={appId} node={node} />
         )}
         {hasUpstream && !readOnly && (
           <p className="mt-4 rounded bg-slate-50 px-3 py-2 text-xs text-slate-600">
