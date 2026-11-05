@@ -117,7 +117,7 @@ def test_reset_password(client: TestClient, team: Team) -> None:
         db.flush()
         db.add(Membership(user_id=team.users["operator"], workspace_id=other.id, role="member"))
         db.commit()
-    members = client.get(base, headers=team.h("admin")).json()
+    members = client.get(base, headers=team.h("owner")).json()
     op = next(m for m in members if m["role"] == "operator")
     assert op["only_here"] is False
     shared = client.post(f"{base}/{op['id']}/reset-password", headers=team.h("owner"))

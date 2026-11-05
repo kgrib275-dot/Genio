@@ -4,7 +4,7 @@ import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { ErrorBox } from "@/components/ErrorBox";
 import { Button } from "@/components/ui/button";
 import { Field, Input } from "@/components/ui/input";
-import { useSignup } from "@/lib/api/auth";
+import { useAuthConfig, useSignup } from "@/lib/api/auth";
 import { VerifyStep } from "@/pages/auth/AccountSteps";
 import { AuthShell } from "@/pages/auth/AuthShell";
 import { safeNext } from "@/lib/nav";
@@ -13,6 +13,7 @@ import { AgreementChecks, LegalLinks } from "@/pages/legal/AgreementChecks";
 export default function SignupPage() {
   const [form, setForm] = useState({ name: "", email: "", password: "", workspace_name: "" });
   const signup = useSignup();
+  const authConfig = useAuthConfig();
   const [agree, setAgree] = useState({ terms: false, privacy: false });
   const navigate = useNavigate();
   const [params] = useSearchParams();
@@ -44,6 +45,22 @@ export default function SignupPage() {
     return (
       <AuthShell title="거의 다 됐어요" subtitle="메일함에서 확인 링크를 열어 주세요.">
         <VerifyStep email={verifyEmail} onBack={() => navigate("/login")} />
+      </AuthShell>
+    );
+
+  // 가입을 닫아 둔 곳: 계정은 관리자가 임시 비밀번호로 내준다
+  if (authConfig.data && !authConfig.data.allow_signup)
+    return (
+      <AuthShell title="지금은 가입을 받지 않아요" subtitle="계정은 관리자가 만들어 드려요.">
+        <div className="space-y-4 text-sm text-slate-600">
+          <p>
+            워크스페이스 관리자에게 <b>계정 만들기</b>를 요청하면 임시 비밀번호를 받을 수 있어요.
+            처음 로그인할 때 새 비밀번호를 정하면 바로 쓸 수 있어요.
+          </p>
+          <Link to="/login" className="font-semibold text-indigo-600 hover:text-indigo-700">
+            로그인 화면으로
+          </Link>
+        </div>
       </AuthShell>
     );
 

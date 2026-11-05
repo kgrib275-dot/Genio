@@ -104,6 +104,12 @@ def send_verify_mail(db: Session, user: User, request: Request) -> None:
     )
 
 
+@router.get("/auth/config")
+def auth_config(db: DbDep) -> dict[str, bool]:
+    """로그인 전 화면이 알아야 하는 설정(가입 허용 여부). 비밀은 없다."""
+    return {"allow_signup": bool(system.get_system(db)["allow_signup"])}
+
+
 @router.post("/auth/signup")
 def signup(body: SignupIn, request: Request, db: DbDep) -> dict[str, Any]:
     if not system.get_system(db)["allow_signup"]:
@@ -287,6 +293,8 @@ def me(user: CurrentUser, db: DbDep) -> dict[str, Any]:
         # v0.7 계정 스스로 관리
         "email_verified": user.email_verified_at is not None,
         "two_factor": bool(user.totp_enabled),
+        # v0.8: 임시 비밀번호로 로그인했으면 먼저 바꿔야 한다
+        "must_change_password": bool(user.must_change_password),
     }
 
 
@@ -398,6 +406,7 @@ def change_password(body: PasswordIn, user: CurrentUser, db: DbDep) -> dict[str,
         raise AppError(400, "새 비밀번호가 지금과 같아요.", "다른 비밀번호를 정하세요.")
     check_password(body.new_password, user.email)
     user.password_hash = hash_password(body.new_password)
+    user.must_change_password = False
     audit(
         db,
         workspace_id=None,

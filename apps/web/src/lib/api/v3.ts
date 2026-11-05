@@ -18,9 +18,12 @@ export function useUpdateMe() {
 }
 
 export function useChangePassword() {
+  const qc = useQueryClient();
   return useMutation({
     mutationFn: (v: { current_password: string; new_password: string }) =>
       api.post<{ ok: boolean }>("/me/password", v),
+    // 임시 비밀번호를 바꾼 뒤에는 '먼저 바꾸세요' 화면이 사라지도록 내 정보를 다시 읽는다
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ["me"] }),
   });
 }
 

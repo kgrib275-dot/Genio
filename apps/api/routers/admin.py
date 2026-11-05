@@ -396,6 +396,7 @@ def create_account(ws: str, body: AccountIn, ctx: Managers) -> dict[str, Any]:
         password_hash=hash_password(password),
         preferences={"default_workspace_id": ws},
         email_verified_at=datetime.now(UTC),
+        must_change_password=True,  # 관리자가 내준 비밀번호는 첫 로그인 때 바꾸게 한다
     )
     ctx.db.add(u)
     ctx.db.flush()
@@ -445,6 +446,7 @@ def reset_password(ws: str, member_id: str, ctx: Managers) -> dict[str, Any]:
         raise not_found("멤버")
     password = temporary_password()
     u.password_hash = hash_password(password)
+    u.must_change_password = True
     audit(
         ctx.db,
         workspace_id=ws,
@@ -455,6 +457,10 @@ def reset_password(ws: str, member_id: str, ctx: Managers) -> dict[str, Any]:
         meta={"email": u.email},
     )
     ctx.db.commit()
+    # 예전 비밀번호로 열려 있던 로그인은 모두 끊는다(새 임시 비밀번호로 다시 들어와야 한다)
+    from api.services.accounts import revoke_all
+
+    revoke_all(ctx.db, u)
     return {"temporary_password": password}
 
 

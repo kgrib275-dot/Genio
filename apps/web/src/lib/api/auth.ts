@@ -7,6 +7,15 @@ export function useMe(enabled = true) {
   return useQuery({ queryKey: ["me"], queryFn: () => api.get<Me>("/me"), enabled });
 }
 
+/** 로그인 전 화면이 쓰는 설정: 가입을 열어 두었는지 */
+export function useAuthConfig() {
+  return useQuery({
+    queryKey: ["auth-config"],
+    queryFn: () => api.get<{ allow_signup: boolean }>("/auth/config"),
+    staleTime: 60_000,
+  });
+}
+
 function useTokenMutation<V, R extends LoginResult = Tokens>(fn: (v: V) => Promise<R>) {
   const qc = useQueryClient();
   return useMutation({

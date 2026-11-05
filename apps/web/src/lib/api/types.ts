@@ -131,6 +131,8 @@ export interface Me {
   /** v0.7: 이메일 확인 여부, 2단계 인증 사용 여부 */
   email_verified?: boolean;
   two_factor?: boolean;
+  /** v0.8: 관리자가 내준 임시 비밀번호로 로그인했으면 true(먼저 바꿔야 함) */
+  must_change_password?: boolean;
 }
 
 export type ProjectColor = "indigo" | "sky" | "emerald" | "amber" | "rose" | "violet" | "slate";

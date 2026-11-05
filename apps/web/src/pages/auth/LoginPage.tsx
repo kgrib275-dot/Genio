@@ -9,7 +9,7 @@ import {
 } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { ErrorBox } from "@/components/ErrorBox";
-import { useLogin } from "@/lib/api/auth";
+import { useAuthConfig, useLogin } from "@/lib/api/auth";
 import { cn } from "@/lib/cn";
 import { safeNext } from "@/lib/nav";
 import { MfaStep, VerifyStep } from "@/pages/auth/AccountSteps";
@@ -77,6 +77,7 @@ export default function LoginPage() {
   const [mfaToken, setMfaToken] = useState<string | null>(null);
   const [verifyEmail, setVerifyEmail] = useState<string | null>(null);
   const login = useLogin();
+  const authConfig = useAuthConfig();
   const navigate = useNavigate();
   const [params] = useSearchParams();
   const koreanInPassword = HANGUL.test(password);
@@ -245,17 +246,24 @@ export default function LoginPage() {
           )}
         </button>
       </form>
-      <p className="mt-5 text-center text-sm text-slate-500">
-        처음이신가요?{" "}
-        <Link
-          to={`/signup${params.get("next") ? `?next=${encodeURIComponent(params.get("next") ?? "")}` : ""}`}
-          className="font-semibold text-indigo-600 hover:text-indigo-700"
-        >
-          가입하기
-        </Link>
-      </p>
+      {authConfig.data?.allow_signup ? (
+        <p className="mt-5 text-center text-sm text-slate-500">
+          처음이신가요?{" "}
+          <Link
+            to={`/signup${params.get("next") ? `?next=${encodeURIComponent(params.get("next") ?? "")}` : ""}`}
+            className="font-semibold text-indigo-600 hover:text-indigo-700"
+          >
+            가입하기
+          </Link>
+        </p>
+      ) : (
+        <p className="mt-5 text-center text-sm text-slate-500">
+          계정은 관리자가 만들어 드려요. 임시 비밀번호를 받아 로그인하세요.
+        </p>
+      )}
       <p className="mt-2 text-center text-xs text-slate-400">
-        메일을 받을 수 없다면 워크스페이스 관리자에게 비밀번호 재설정을 요청하세요.
+        비밀번호를 잊었거나 메일을 받을 수 없다면 워크스페이스 관리자에게 임시 비밀번호를
+        요청하세요.
       </p>
       <LegalLinks />
     </AuthShell>

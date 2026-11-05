@@ -90,6 +90,7 @@ def reset_password(body: ResetIn, request: Request, db: DbDep) -> dict[str, Any]
     user = accounts.use_link_token(db, body.token, "reset")
     check_password(body.password, user.email)
     user.password_hash = hash_password(body.password)
+    user.must_change_password = False
     # 메일을 열었으니 이메일도 확인된 것. 다른 기기의 로그인은 모두 끊는다
     if user.email_verified_at is None:
         user.email_verified_at = _now()

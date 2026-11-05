@@ -78,6 +78,8 @@ class User(Base):
     )
     totp_secret_encrypted: Mapped[str | None] = mapped_column(Text, nullable=True)
     totp_enabled: Mapped[bool] = mapped_column(default=False, server_default="false")
+    # v0.8: 관리자가 내준 임시 비밀번호는 첫 로그인 때 바꿔야 한다
+    must_change_password: Mapped[bool] = mapped_column(default=False, server_default="false")
     recovery_codes: Mapped[list[str]] = mapped_column(JsonType, default=list, server_default="[]")
     tokens_valid_after: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True

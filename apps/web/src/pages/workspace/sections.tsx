@@ -218,7 +218,7 @@ function IssuedPasswordDialog({
   onClose: () => void;
 }) {
   const text = issued
-    ? `제니오 로그인 정보\n주소: ${window.location.origin}/login\n이메일: ${issued.email}\n임시 비밀번호: ${issued.password}\n로그인한 뒤 내 설정에서 비밀번호를 바꿔 주세요.`
+    ? `제니오 로그인 정보\n주소: ${window.location.origin}/login\n이메일: ${issued.email}\n임시 비밀번호: ${issued.password}\n처음 로그인할 때 새 비밀번호를 정하게 돼요.`
     : "";
   return (
     <Dialog
@@ -256,7 +256,8 @@ function IssuedPasswordDialog({
             로그인 안내문 복사(주소·이메일·비밀번호)
           </Button>
           <p className="text-xs text-slate-500">
-            로그인한 뒤 <b>내 설정</b>에서 비밀번호를 바꾸도록 안내하세요.
+            처음 로그인하면 이 비밀번호를 <b>새 비밀번호로 바꾸는 화면</b>이 먼저 나와요. 임시
+            비밀번호는 그 한 번만 쓸 수 있어요.
           </p>
         </div>
       )}

@@ -73,10 +73,22 @@ def get_optional_user(request: Request, db: DbDep) -> User | None:
     return user
 
 
+# 임시 비밀번호를 아직 바꾸지 않은 계정이 쓸 수 있는 경로(내 정보 보기·비밀번호 바꾸기·기기 로그아웃)
+_PASSWORD_CHANGE_OK = ("/api/v1/me", "/api/v1/me/password")
+
+
 def get_current_user(request: Request, db: DbDep) -> User:
     user = get_optional_user(request, db)
     if user is None:
         raise AppError(401, "로그인이 필요해요.", "다시 로그인한 뒤 시도하세요.")
+    if user.must_change_password:
+        path = request.url.path.rstrip("/")
+        if path not in _PASSWORD_CHANGE_OK and not path.startswith("/api/v1/me/sessions"):
+            raise AppError(
+                403,
+                "임시 비밀번호를 먼저 바꿔야 해요.",
+                "화면 안내에 따라 새 비밀번호를 정한 뒤 다시 시도하세요.",
+            )
     return user
 
 
