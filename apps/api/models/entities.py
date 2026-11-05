@@ -166,6 +166,11 @@ class App(Base):
     test_inputs: Mapped[list[dict[str, Any]]] = mapped_column(
         JsonType, default=list, server_default="[]"
     )
+    # v0.9: 작업본이 저장될 때마다 1씩 늘어나는 번호(동시 편집 충돌 감지)와 마지막으로 고친 사람
+    draft_rev: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    updated_by: Mapped[str | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
 
 
 class WorkflowVersion(Base):
@@ -680,6 +685,46 @@ class HumanTask(Base):
     completed_by: Mapped[str | None] = mapped_column(
         ForeignKey("users.id", name="human_tasks_completed_by_fkey"), nullable=True
     )
+
+
+class DraftSnapshot(Base):
+    """작업본 기록(v0.9): 앱마다 최근 20번의 작업본. 동시 편집 때 합치는 기준(base)을 되살린다."""
+
+    __tablename__ = "draft_snapshots"
+    __table_args__ = (UniqueConstraint("app_id", "rev"),)
+    id: Mapped[str] = _id()
+    app_id: Mapped[str] = mapped_column(ForeignKey("apps.id", ondelete="CASCADE"), index=True)
+    rev: Mapped[int] = mapped_column(Integer)
+    graph: Mapped[dict[str, Any]] = mapped_column(JsonType, default=dict, server_default="{}")
+    user_id: Mapped[str | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    created_at: Mapped[datetime] = _created()
+
+
+class CanvasComment(Base):
+    """캔버스 댓글(v0.9): 단계나 캔버스 위치에 다는 스레드. parent_id가 있으면 답글."""
+
+    __tablename__ = "canvas_comments"
+    id: Mapped[str] = _id()
+    app_id: Mapped[str] = mapped_column(ForeignKey("apps.id", ondelete="CASCADE"), index=True)
+    node_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    x: Mapped[float | None] = mapped_column(nullable=True)
+    y: Mapped[float | None] = mapped_column(nullable=True)
+    parent_id: Mapped[str | None] = mapped_column(
+        ForeignKey("canvas_comments.id", ondelete="CASCADE"), nullable=True, index=True
+    )
+    body: Mapped[str] = mapped_column(Text)
+    mentions: Mapped[list[str]] = mapped_column(JsonType, default=list, server_default="[]")
+    resolved: Mapped[bool] = mapped_column(default=False, server_default="false")
+    resolved_by: Mapped[str | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    created_by: Mapped[str | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    created_at: Mapped[datetime] = _created()
+    edited_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class Snippet(Base):

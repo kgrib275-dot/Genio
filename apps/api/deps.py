@@ -320,6 +320,9 @@ def require_role(roles: tuple[Role, ...], via: Via = "ws") -> Callable[..., Ctx]
 
             if not can_access(db, _project_of(db, via, str(key)), user.id, role):
                 raise not_found("대상")
+        # 작업본을 바꾸는 쪽(draft_hooks)이 누가·어느 화면에서 바꿨는지 알 수 있게 세션에 적어 둔다
+        db.info["actor_id"] = user.id
+        db.info["client_id"] = (request.headers.get("x-genio-client") or "")[:64] or None
         return Ctx(user=user, workspace_id=workspace_id, role=role, db=db)
 
     return dep

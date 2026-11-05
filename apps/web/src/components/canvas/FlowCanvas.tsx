@@ -13,7 +13,17 @@ import {
   type NodeChange,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import { Copy, ClipboardPaste, Layers, Power, Settings2, StickyNote, Trash2 } from "lucide-react";
+import {
+  Copy,
+  ClipboardPaste,
+  Layers,
+  MapPin,
+  MessageSquare,
+  Power,
+  Settings2,
+  StickyNote,
+  Trash2,
+} from "lucide-react";
 import {
   useCallback,
   useEffect,
@@ -28,22 +38,27 @@ import { CanvasToolbar } from "@/components/canvas/CanvasToolbar";
 import { NodeView, type GenioFlowNode } from "@/components/canvas/NodeView";
 import { fanCounts } from "@/components/canvas/nodeUtils";
 import { NoteView, type NoteFlowNode } from "@/components/canvas/NoteView";
+import { PinView, type PinFlowNode } from "@/components/canvas/PinView";
 import { copySelection, type Clip } from "@/components/canvas/graphOps";
 import { DRAG_TYPE } from "@/components/canvas/NodePalette";
 import { SnippetSaveDialog } from "@/components/canvas/SnippetDialogs";
 import { registerViewportCenter } from "@/components/canvas/viewportBridge";
 import { defaultData } from "@/components/canvas/nodeUtils";
 import { toast } from "@/components/ui/toast-store";
+import { useComments } from "@/lib/api/collab";
 import type { NodeType } from "@/lib/api/types";
+import { openCountByNode, pinThreads } from "@/lib/commentsUi";
 import { useCanvas } from "@/store/canvas";
+import { useCollab } from "@/store/collab";
 
-const nodeTypes = { genio: NodeView, note: NoteView };
+const nodeTypes = { genio: NodeView, note: NoteView, pin: PinView };
 // 글자가 읽히는 정도(0.7배) 아래로는 줄이지 않는다. 흐름이 길면 옆으로 끌어서 본다.
 const FIT_OPTIONS = { padding: 0.15, maxZoom: 1, minZoom: 0.7 };
 const NOTE_PREFIX = "note:";
+const PIN_PREFIX = "pin:";
 const MINIMAP_KEY = "genio.canvas.minimap";
 
-type FlowNode = GenioFlowNode | NoteFlowNode;
+type FlowNode = GenioFlowNode | NoteFlowNode | PinFlowNode;
 
 function readMinimap(): boolean {
   try {
@@ -111,6 +126,29 @@ function Inner({ specs, readOnly }: { specs: NodeType[]; readOnly?: boolean }) {
   const [menu, setMenu] = useState<Menu | null>(null);
   const [snippetClip, setSnippetClip] = useState<Clip | null>(null);
   const [minimap, setMinimap] = useState(readMinimap);
+  // v0.9: 같이 보는 사람, 댓글
+  const appId = useCanvas((s) => s.appId);
+  const comments = useComments(appId, Boolean(appId));
+  const collabUsers = useCollab((s) => s.users);
+  const collabMe = useCollab((s) => s.me);
+  const commentMode = useCollab((s) => s.commentMode);
+  const commentsOpen = useCollab((s) => s.panelOpen);
+  const openCounts = useMemo(() => openCountByNode(comments.data ?? []), [comments.data]);
+  const firstOpenThread = useMemo(() => {
+    const m: Record<string, string> = {};
+    for (const t of comments.data ?? [])
+      if (t.node_id && !t.resolved && !m[t.node_id]) m[t.node_id] = t.id;
+    return m;
+  }, [comments.data]);
+  const pins = useMemo(() => pinThreads(comments.data ?? []), [comments.data]);
+  const peersByNode = useMemo(() => {
+    const m: Record<string, typeof collabUsers> = {};
+    for (const u of collabUsers) {
+      if (u.user_id === collabMe || !u.node_id) continue;
+      (m[u.node_id] ??= []).push(u);
+    }
+    return m;
+  }, [collabUsers, collabMe]);
   const wrapRef = useRef<HTMLDivElement>(null);
   const { screenToFlowPosition, fitView, getNodes, getNodesBounds, getViewport, setViewport } =
     useReactFlow();
@@ -176,7 +214,20 @@ function Inner({ specs, readOnly }: { specs: NodeType[]; readOnly?: boolean }) {
           highlighted: Boolean(highlights[n.id]),
           step: steps[n.id],
           ...fanCounts(graph.edges, n.id),
+          peers: peersByNode[n.id],
+          commentCount: openCounts[n.id] ?? 0,
+          commentFocusId: firstOpenThread[n.id] ?? null,
         },
+      })),
+      // 캔버스 빈 곳에 꽂은 댓글 핀
+      ...pins.map((t): PinFlowNode => ({
+        id: PIN_PREFIX + t.id,
+        type: "pin",
+        position: { x: t.x ?? 0, y: t.y ?? 0 },
+        draggable: false,
+        selectable: false,
+        zIndex: 5,
+        data: { thread: t },
       })),
     ],
     [
@@ -190,6 +241,10 @@ function Inner({ specs, readOnly }: { specs: NodeType[]; readOnly?: boolean }) {
       highlights,
       steps,
       readOnly,
+      peersByNode,
+      openCounts,
+      firstOpenThread,
+      pins,
     ],
   );
 
@@ -222,6 +277,7 @@ function Inner({ specs, readOnly }: { specs: NodeType[]; readOnly?: boolean }) {
       let blocks: Set<string> | null = null;
       let notes: Set<string> | null = null;
       for (const c of changes) {
+        if ("id" in c && c.id.startsWith(PIN_PREFIX)) continue; // 댓글 핀은 옮기거나 지우지 않는다
         const isNote = "id" in c && c.id.startsWith(NOTE_PREFIX);
         const noteId = isNote ? c.id.slice(NOTE_PREFIX.length) : "";
         if (c.type === "position" && c.position && !readOnly) {
@@ -389,7 +445,10 @@ function Inner({ specs, readOnly }: { specs: NodeType[]; readOnly?: boolean }) {
   const menuNode = menu?.nodeId ? graph.nodes.find((n) => n.id === menu.nodeId) : undefined;
 
   return (
-    <div ref={wrapRef} className="relative h-full w-full">
+    <div
+      ref={wrapRef}
+      className={`relative h-full w-full ${commentMode ? "[&_.react-flow__pane]:!cursor-crosshair" : ""}`}
+    >
       <ReactFlow<FlowNode, Edge>
         colorMode={dark ? "dark" : "light"}
         nodes={nodes}
@@ -398,7 +457,16 @@ function Inner({ specs, readOnly }: { specs: NodeType[]; readOnly?: boolean }) {
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
         onConnect={onConnect}
-        onPaneClick={() => {
+        onPaneClick={(e) => {
+          if (commentMode && !readOnly) {
+            // 댓글 핀 꽂기: 누른 자리에 새 댓글을 쓴다
+            const at = screenToFlowPosition({ x: e.clientX, y: e.clientY });
+            useCollab
+              .getState()
+              .openCompose({ nodeId: null, x: Math.round(at.x), y: Math.round(at.y) });
+            useCollab.getState().setCommentMode(false);
+            return;
+          }
           useCanvas.getState().setSelection([]);
           setSelNotes([]);
           setMenu(null);
@@ -451,6 +519,13 @@ function Inner({ specs, readOnly }: { specs: NodeType[]; readOnly?: boolean }) {
         onDuplicate={actions.duplicate}
         onSaveSnippet={actions.saveSnippet}
         onArrange={actions.arrange}
+        commentsOpen={commentsOpen}
+        commentMode={commentMode}
+        onToggleComments={() => {
+          const c = useCollab.getState();
+          if (c.commentMode) c.setCommentMode(false);
+          else c.openPanel(!c.panelOpen);
+        }}
         onToggleMinimap={() =>
           setMinimap((v) => {
             try {
@@ -481,6 +556,15 @@ function Inner({ specs, readOnly }: { specs: NodeType[]; readOnly?: boolean }) {
                 }}
               >
                 설정 열기
+              </MenuItem>
+              <MenuItem
+                icon={<MessageSquare className="h-3.5 w-3.5" />}
+                onClick={() => {
+                  useCollab.getState().openCompose({ nodeId: menuNode.id, x: null, y: null });
+                  setMenu(null);
+                }}
+              >
+                댓글 달기
               </MenuItem>
               <MenuItem
                 icon={<Power className="h-3.5 w-3.5" />}
@@ -542,6 +626,19 @@ function Inner({ specs, readOnly }: { specs: NodeType[]; readOnly?: boolean }) {
                 }}
               >
                 여기에 메모 추가
+              </MenuItem>
+              <MenuItem
+                icon={<MapPin className="h-3.5 w-3.5" />}
+                onClick={() => {
+                  useCollab.getState().openCompose({
+                    nodeId: null,
+                    x: Math.round(menu.flow.x),
+                    y: Math.round(menu.flow.y),
+                  });
+                  setMenu(null);
+                }}
+              >
+                여기에 댓글 핀
               </MenuItem>
               <MenuItem
                 icon={<ClipboardPaste className="h-3.5 w-3.5" />}

@@ -4,6 +4,7 @@ import json
 from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Depends, Query, Response
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field, ValidationError
 from sqlalchemy import or_, select
 
@@ -16,6 +17,8 @@ from api.routers.projects import check_project_target
 from api.routers.workspaces import run_dict
 from api.schemas.graph import Graph
 from api.services import apps as svc
+from api.services import collab
+from api.services.graph_merge import merge_graphs
 from api.services.projects import hidden_project_ids
 from api.services.queue import enqueue_run
 
@@ -140,6 +143,9 @@ class DraftIn(BaseModel):
     graph: dict[str, Any]
     # 누가 고쳤는지(빌더 지표용). 화면 캔버스 자동 저장은 canvas
     source: Literal["canvas", "builder", "import"] = "canvas"
+    # v0.9 동시 편집: 내가 불러온 작업본 번호. 서버 번호와 다르면 겹치지 않는 변경은 합치고,
+    # 같은 곳을 고쳤으면 409로 충돌 목록을 돌려준다. 보내지 않으면(옛 화면) 그대로 덮어쓴다.
+    base_rev: int | None = Field(default=None, ge=0)
 
 
 def _parse_graph(raw: dict[str, Any]) -> dict[str, Any]:
@@ -151,14 +157,63 @@ def _parse_graph(raw: dict[str, Any]) -> dict[str, Any]:
         ) from exc
 
 
-@router.put("/apps/{app_id}/draft")
-def save_draft(app_id: str, body: DraftIn, ctx: AppBuilders) -> dict[str, Any]:
+def _normalized(raw: dict[str, Any] | None) -> dict[str, Any]:
+    try:
+        return Graph.model_validate(raw or {}).dump()
+    except ValidationError:
+        return dict(raw or {})
+
+
+@router.put("/apps/{app_id}/draft", response_model=None)
+def save_draft(app_id: str, body: DraftIn, ctx: AppBuilders) -> dict[str, Any] | JSONResponse:
     app = svc.get_app(ctx.db, app_id)
-    app.draft_graph = _parse_graph(body.graph)
+    # 같은 앱을 동시에 저장하는 두 요청이 서로의 번호 확인을 앞지르지 않게 행을 잠근다
+    ctx.db.refresh(app, with_for_update=True)
+    mine = _parse_graph(body.graph)
+    current = int(app.draft_rev or 0)
+    merged_now = False
+    if body.base_rev is not None and body.base_rev != current:
+        # 저장 형식이 달라 생기는 가짜 차이가 없도록 셋 다 같은 모양(Graph.dump)으로 맞춘다
+        theirs = _normalized(app.draft_graph)
+        base = collab.snapshot_graph(ctx.db, app.id, body.base_rev)
+        if base is not None:
+            base = _normalized(base)
+        if base is None or body.base_rev > current:
+            # 기준이 된 기록이 없다(너무 오래됨): 자동으로 합칠 수 없다
+            return JSONResponse(
+                status_code=409,
+                content=collab.conflict_body(
+                    rev=current,
+                    base=None,
+                    mine=mine,
+                    theirs=theirs,
+                    merged=theirs,
+                    conflicts=[],
+                    stale=True,
+                ),
+            )
+        res = merge_graphs(base, mine, theirs)
+        if res.conflicts:
+            return JSONResponse(
+                status_code=409,
+                content=collab.conflict_body(
+                    rev=current,
+                    base=base,
+                    mine=mine,
+                    theirs=theirs,
+                    merged=res.merged,
+                    conflicts=res.conflicts,
+                ),
+            )
+        mine = _parse_graph(res.merged)
+        merged_now = True
+    app.draft_graph = mine
     if body.source == "canvas":
         builder_metrics.on_canvas_edit(ctx.db, app.id)
     ctx.db.commit()
-    return svc.app_detail(ctx.db, app)
+    out = svc.app_detail(ctx.db, app)
+    out["merged"] = merged_now
+    return out
 
 
 # ---------------- 저장해 둔 테스트 입력 ----------------

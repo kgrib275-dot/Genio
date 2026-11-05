@@ -4,7 +4,9 @@ import { NodeIcon } from "@/components/canvas/NodeIcon";
 import { toneOf } from "@/components/canvas/nodeStyle";
 import { describeTiming, hasTimeoutHandle } from "@/components/canvas/humanTiming";
 import { branchHandles, hasFailHandle } from "@/components/canvas/nodeUtils";
+import type { PresenceUser } from "@/lib/api/collab";
 import type { GraphNode, NodeType, RunStep } from "@/lib/api/types";
+import { useCollab } from "@/store/collab";
 import { cn } from "@/lib/cn";
 
 export interface GenioNodeData extends Record<string, unknown> {
@@ -17,6 +19,11 @@ export interface GenioNodeData extends Record<string, unknown> {
   fanOut?: number;
   /** 들어오는 선 수(2 이상이면 갈래를 모으는 단계) */
   fanIn?: number;
+  /** v0.9: 이 단계를 보고 있는 다른 사람들(색 표시) */
+  peers?: PresenceUser[];
+  /** v0.9: 열려 있는 댓글 수와, 누르면 열 스레드 */
+  commentCount?: number;
+  commentFocusId?: string | null;
 }
 
 export type GenioFlowNode = Node<GenioNodeData, "genio">;
@@ -65,7 +72,18 @@ function summary(node: GraphNode): string {
 }
 
 export function NodeView({ data, selected }: NodeProps<GenioFlowNode>) {
-  const { node, spec, errors, highlighted, step, fanOut = 0, fanIn = 0 } = data;
+  const {
+    node,
+    spec,
+    errors,
+    highlighted,
+    step,
+    fanOut = 0,
+    fanIn = 0,
+    peers = [],
+    commentCount = 0,
+    commentFocusId = null,
+  } = data;
   const handles = branchHandles(node.type, node.data);
   const isBranching = handles.length > 0 || node.type === "condition";
   const fail = hasFailHandle(node.data);
@@ -86,7 +104,46 @@ export function NodeView({ data, selected }: NodeProps<GenioFlowNode>) {
         off && "border-dashed opacity-60 saturate-0",
       )}
       title={off ? "꺼진 단계예요. 실행할 때 건너뛰어요." : undefined}
+      style={
+        peers[0]
+          ? { outline: `2px solid ${peers[0].color}`, outlineOffset: 2, borderRadius: 14 }
+          : undefined
+      }
     >
+      {peers.length > 0 && (
+        <span
+          className="absolute bottom-1 right-1.5 z-10 flex -space-x-1"
+          data-testid={`peers-${node.id}`}
+          aria-label={`${peers.map((p) => p.name).join(", ")}님이 보는 중`}
+        >
+          {peers.slice(0, 3).map((p) => (
+            <span
+              key={p.user_id}
+              title={`${p.name}님이 ${p.editing ? "고치는" : "보는"} 중`}
+              className="inline-flex h-4 min-w-4 items-center justify-center rounded-full border border-white px-0.5 text-[9px] font-bold text-white"
+              style={{ backgroundColor: p.color }}
+            >
+              {p.name.trim().slice(0, 1)}
+            </span>
+          ))}
+        </span>
+      )}
+      {commentCount > 0 && (
+        <button
+          type="button"
+          data-testid={`comments-${node.id}`}
+          aria-label={`댓글 ${commentCount}개 보기`}
+          title="댓글 보기"
+          onClick={(e) => {
+            e.stopPropagation();
+            useCollab.getState().focusThread(commentFocusId);
+            useCollab.getState().openPanel(true);
+          }}
+          className="nodrag absolute bottom-1 left-3 z-10 inline-flex items-center gap-0.5 rounded-full bg-indigo-600 px-1.5 text-[10px] font-bold leading-4 text-white hover:bg-indigo-500"
+        >
+          💬 {commentCount}
+        </button>
+      )}
       <span className={cn("absolute inset-y-0 left-0 w-1", toneOf(spec?.category).bar)} />
       {node.type !== "input" && (
         <Handle

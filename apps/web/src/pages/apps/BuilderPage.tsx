@@ -11,6 +11,10 @@ import {
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
 import { BuilderChat } from "@/components/builder-chat/BuilderChat";
+import { CommentsPanel } from "@/components/collab/CommentsPanel";
+import { ConflictDialog } from "@/components/collab/ConflictDialog";
+import { PresenceBar } from "@/components/collab/PresenceBar";
+import { useLiveCollab } from "@/components/collab/useLiveCollab";
 import { FlowCanvas } from "@/components/canvas/FlowCanvas";
 import { NodePalette } from "@/components/canvas/NodePalette";
 import { viewportCenter } from "@/components/canvas/viewportBridge";
@@ -21,7 +25,9 @@ import { TestRunDialog } from "@/components/canvas/TestRunDialog";
 import { ErrorBox, Loading } from "@/components/ErrorBox";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/components/ui/toast-store";
-import { saveDraft, startRun, useApp, useSaveVersion, validateGraph } from "@/lib/api/apps";
+import { startRun, useApp, useSaveVersion, validateGraph } from "@/lib/api/apps";
+import { useMe } from "@/lib/api/auth";
+import { saveDraftNow } from "@/lib/collabSave";
 import { streamRunEvents } from "@/lib/api/builder";
 import { ApiError } from "@/lib/api/client";
 import { normalizeGraph, type Run, type RunStep } from "@/lib/api/types";
@@ -29,7 +35,8 @@ import { useNodeTypes } from "@/lib/api/workspace";
 import { fixRequestMessage } from "@/lib/api/v5c";
 import { setPendingPrompt } from "@/store/pendingPrompt";
 import { useCanvas } from "@/store/canvas";
-import { canEdit, useSession } from "@/store/session";
+import { useCollab } from "@/store/collab";
+import { canEdit, canManage, useSession } from "@/store/session";
 import { AppNav } from "@/pages/apps/AppNav";
 
 // 대화로 시험하기(Dify 미리 보기). 열 때만 받아 온다.
@@ -41,12 +48,11 @@ function useDraftAutosave(appId: string) {
   const [saving, setSaving] = useState(false);
   useEffect(() => {
     if (!appId || editSeq === 0) return;
-    const seq = editSeq;
     const t = setTimeout(async () => {
       setSaving(true);
       try {
-        await saveDraft(appId, useCanvas.getState().graph);
-        if (useCanvas.getState().editSeq === seq) useCanvas.getState().markSaved();
+        // 내가 불러온 작업본 번호와 함께 저장한다(남이 먼저 저장했으면 서버가 겹치지 않는 변경을 합친다)
+        await saveDraftNow(appId);
       } catch (err) {
         toast.error(err);
       } finally {
@@ -71,6 +77,10 @@ export default function BuilderPage() {
   const generalErrors = useCanvas((s) => s.generalErrors);
   const steps = useCanvas((s) => s.steps);
   const saving = useDraftAutosave(appId);
+  const me = useMe();
+  const panelOpen = useCollab((s) => s.panelOpen);
+  // 같은 앱을 연 사람들의 접속 표시·남이 저장한 흐름·댓글 알림을 받는다
+  useLiveCollab(appId, Boolean(app.data));
   const [testOpen, setTestOpen] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [run, setRun] = useState<Run | null>(null);
@@ -78,7 +88,7 @@ export default function BuilderPage() {
   const [showPalette, setShowPalette] = useState(false);
   const [logOpen, setLogOpen] = useState(false);
   // 좁은 화면(모바일·태블릿)에서는 패널을 탭으로 하나씩 보여 준다
-  const [mobileTab, setMobileTab] = useState<"chat" | "canvas" | "settings">("chat");
+  const [mobileTab, setMobileTab] = useState<"chat" | "canvas" | "settings" | "comments">("chat");
   // 실행 화면의 '빌더에게 고쳐 달라고 하기'(?fix=실행id): 빌더 챗에 고쳐 달라는 메시지를 보낸다
   const [params, setParams] = useSearchParams();
   const [promptNonce, setPromptNonce] = useState(0);
@@ -101,9 +111,22 @@ export default function BuilderPage() {
     if (app.data && loadedFor.current !== appId) {
       loadedFor.current = appId;
       useCanvas.getState().load(appId, normalizeGraph(app.data.draft_graph));
+      const rev = (app.data as { draft_rev?: number }).draft_rev;
+      useCollab.getState().start(appId, typeof rev === "number" ? rev : null, me.data?.id ?? "");
       setRun(null);
     }
-  }, [app.data, appId]);
+  }, [app.data, appId, me.data?.id]);
+
+  useEffect(() => {
+    if (me.data?.id) useCollab.setState({ me: me.data.id });
+  }, [me.data?.id]);
+
+  // 좁은 화면에서 댓글을 열면(캔버스 도구·단계 말풍선) 댓글 탭으로 옮긴다
+  useEffect(() => {
+    if (panelOpen && typeof window !== "undefined" && window.innerWidth < 1024) {
+      setMobileTab("comments");
+    }
+  }, [panelOpen]);
 
   useEffect(() => () => abortRef.current?.abort(), []);
 
@@ -122,8 +145,13 @@ export default function BuilderPage() {
 
   const flush = async () => {
     if (useCanvas.getState().dirty) {
-      await saveDraft(appId, useCanvas.getState().graph);
-      useCanvas.getState().markSaved();
+      const r = await saveDraftNow(appId);
+      if (r === "conflict")
+        throw new ApiError(
+          409,
+          "다른 사람이 같은 곳을 먼저 고쳤어요.",
+          "열린 '충돌 해결' 창에서 내 것과 상대 것을 고른 뒤 다시 시도하세요.",
+        );
     }
   };
 
@@ -194,6 +222,7 @@ export default function BuilderPage() {
         help="builder"
         right={
           <>
+            <PresenceBar />
             <span className="mr-1 hidden items-center gap-1.5 text-xs text-slate-400 sm:flex">
               <span
                 className={`h-1.5 w-1.5 rounded-full ${saving ? "animate-pulse bg-amber-400" : dirty ? "bg-amber-400" : "bg-emerald-500"}`}
@@ -222,14 +251,11 @@ export default function BuilderPage() {
                 title="지금 만든 흐름과 대화해 봐요(로그에는 남지 않아요)"
                 onClick={async () => {
                   // 바뀐 내용이 있으면 먼저 저장해 최신 작업본으로 대화한다
-                  if (useCanvas.getState().dirty) {
-                    try {
-                      await saveDraft(appId, useCanvas.getState().graph);
-                      useCanvas.getState().markSaved();
-                    } catch (err) {
-                      toast.error(err);
-                      return;
-                    }
+                  try {
+                    await flush();
+                  } catch (err) {
+                    toast.error(err);
+                    return;
                   }
                   setPreviewOpen(true);
                 }}
@@ -262,6 +288,7 @@ export default function BuilderPage() {
             ...(!readOnly ? [["chat", "빌더 챗"] as const] : []),
             ["canvas", "캔버스"] as const,
             ["settings", selected ? "설정 ●" : "설정"] as const,
+            ["comments", "댓글"] as const,
           ] as const
         ).map(([key, label]) => (
           <button
@@ -269,7 +296,10 @@ export default function BuilderPage() {
             type="button"
             role="tab"
             aria-selected={mobileTab === key}
-            onClick={() => setMobileTab(key)}
+            onClick={() => {
+              setMobileTab(key);
+              if (key === "comments") useCollab.getState().openPanel(true);
+            }}
             className={`flex-1 rounded-md px-2 py-1.5 text-[13px] font-medium ${mobileTab === key ? "bg-indigo-50 text-indigo-700" : "text-slate-500"}`}
           >
             {label}
@@ -289,7 +319,7 @@ export default function BuilderPage() {
         >
           <div className="relative flex min-h-0 flex-1">
             <div
-              className={`relative min-w-0 flex-1 bg-slate-50 lg:block ${mobileTab === "settings" ? "hidden" : "block"}`}
+              className={`relative min-w-0 flex-1 bg-slate-50 lg:block ${mobileTab === "settings" || mobileTab === "comments" ? "hidden" : "block"}`}
             >
               {!readOnly && (
                 <div className="absolute left-3 top-3 z-10">
@@ -339,6 +369,23 @@ export default function BuilderPage() {
               )}
               <FlowCanvas specs={specs} readOnly={readOnly} />
             </div>
+            {panelOpen && (
+              <div
+                className={`w-full shrink-0 lg:block lg:w-[320px] ${mobileTab === "comments" ? "block" : "hidden"}`}
+              >
+                <CommentsPanel
+                  appId={appId}
+                  canWrite={!readOnly}
+                  canDeleteAny={canManage(role)}
+                  onClose={() => {
+                    useCollab.getState().openPanel(false);
+                    useCollab.getState().setCommentMode(false);
+                    useCollab.getState().openCompose(null);
+                    if (mobileTab === "comments") setMobileTab("canvas");
+                  }}
+                />
+              </div>
+            )}
             {mobileTab === "settings" && !selected && (
               <p className="flex-1 p-6 text-center text-sm text-slate-500 lg:hidden">
                 캔버스에서 단계를 누르면 여기에서 설정을 고칠 수 있어요.
@@ -346,7 +393,7 @@ export default function BuilderPage() {
             )}
             {selected && (
               <aside
-                className={`w-full shrink-0 border-l border-slate-200 bg-white lg:block lg:w-[340px] ${mobileTab === "settings" ? "block" : "hidden"}`}
+                className={`w-full shrink-0 border-l border-slate-200 bg-white ${panelOpen ? "lg:hidden" : "lg:block"} lg:w-[340px] ${mobileTab === "settings" ? "block" : "hidden"}`}
               >
                 <NodeSettingsPanel
                   node={selected}
@@ -405,6 +452,7 @@ export default function BuilderPage() {
         canBatch={app.data?.type === "workflow"}
         onRun={(input) => void onRun(input)}
       />
+      <ConflictDialog appId={appId} />
       {previewOpen && (
         <Suspense fallback={null}>
           <PreviewChatPanel appId={appId} onClose={() => setPreviewOpen(false)} />

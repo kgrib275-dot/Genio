@@ -2,6 +2,7 @@
 // 글 안에서 **굵게**, `코드` 표기를 쓸 수 있다.
 
 import { BATCH_HELP_SECTIONS } from "@/help/content_batch";
+import { COLLAB_HELP_SECTIONS } from "@/help/content_collab";
 import { CONVENIENCE_HELP_SECTIONS } from "@/help/content_convenience";
 import { DIFY_HELP_SECTIONS } from "@/help/content_dify";
 import { EVENTS_HELP_SECTIONS } from "@/help/content_events";
@@ -496,6 +497,7 @@ export const HELP_SECTIONS: HelpSection[] = [
   ...DIFY_HELP_SECTIONS,
   ...CONVENIENCE_HELP_SECTIONS,
   ...EVENTS_HELP_SECTIONS,
+  ...COLLAB_HELP_SECTIONS,
   {
     id: "faq",
     title: "자주 묻는 질문",

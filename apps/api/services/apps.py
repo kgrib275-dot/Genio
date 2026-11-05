@@ -190,6 +190,7 @@ def app_detail(db: Session, app: App) -> dict[str, Any]:
     return {
         **app_dict(app, last.version if last else None),
         "draft_graph": app.draft_graph or starter_graph(),
+        "draft_rev": int(app.draft_rev or 0),
         "features": merged_features(app.features),
         "env_vars": public_env_vars(app.env_vars or []),
     }

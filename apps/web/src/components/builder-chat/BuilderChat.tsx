@@ -29,6 +29,7 @@ import {
 import { cn } from "@/lib/cn";
 import { isSendKey, sendHint, useEnterToSend } from "@/lib/composer";
 import { touchedNodeIds, useCanvas } from "@/store/canvas";
+import { useCollab } from "@/store/collab";
 import { takePendingPrompt } from "@/store/pendingPrompt";
 import { canManage, useSession } from "@/store/session";
 
@@ -130,7 +131,9 @@ export function BuilderChatView({
           if (ev.event === "user_message") {
             setMessages((m) => [...m, ev.data as BuilderMessage]);
           } else if (ev.event === "graph_patch") {
-            const d = ev.data as { ops?: PatchOp[]; graph?: Graph };
+            const d = ev.data as { ops?: PatchOp[]; graph?: Graph; draft_rev?: number };
+            // 빌더가 저장한 작업본 번호를 알아 둔다(다음 저장이 충돌로 오해되지 않게)
+            if (typeof d.draft_rev === "number") useCollab.getState().setRev(d.draft_rev);
             if (d.graph) {
               useCanvas
                 .getState()

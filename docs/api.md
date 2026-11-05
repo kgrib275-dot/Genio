@@ -903,3 +903,51 @@ python scripts/genio_cli.py run gk-xxxxxxxx -i name=김    # 키를 첫 인자�
 - 검증: `on_timeout`·`remind_before_hours`는 `due_hours`가 있어야 하고, `escalate`는 `timeout_escalate_to`가 있어야 하며, `timeout` 출구는 `on_timeout: "branch"`인 사람 단계에서만 쓸 수 있다(한 곳으로만 이을 수 있음). 캔버스 카드에 "⏱ 기한 …" 한 줄과 노란 '시간 초과' 출구가 보인다. 빌더의 `connect`·`add_node`는 `handle: "timeout"`을 쓸 수 있다.
 - 다시 알리기는 일마다 한 번만 보낸다(`rules.reminded`). 알림 설정이 없으면 보내지 않는다.
 - DB: 마이그레이션 `0017`이 `human_tasks.rules`(JSON)·`human_tasks.history`(JSON)를 더한다(추가만, downgrade 있음).
+
+## v0.9 동시 편집·댓글
+ADR 0013. 마이그레이션 0015(`apps.draft_rev`·`updated_by`, `draft_snapshots`, `canvas_comments`).
+
+### 작업본 번호와 저장 합치기
+- 앱의 작업본(`draft_graph`)이 **어디서든**(캔버스 저장, 빌더 에이전트 툴, 버전 되돌리기, 가져오기) 바뀌어 저장되면 `draft_rev`가 1 오르고 `updated_by`가 적힌다(`models/draft_hooks.py`가 세션 `before_flush`에서 처리). 같은 내용을 다시 저장하면 번호를 올리지 않는다.
+- 번호가 오를 때마다 그 흐름을 `draft_snapshots`에 쌓고(앱마다 최근 **20번**), 바뀌기 전 번호의 기록이 없으면 함께 남긴다.
+- 커밋이 끝난 뒤에만 `draft_changed` 알림을 보낸다(롤백하면 보내지 않는다).
+- `GET /apps/{id}`의 응답에 `draft_rev`가 들어 있다.
+
+| 요청 | 권한 | 설명 |
+|---|---|---|
+| PUT /apps/{id}/draft `{graph, source?, base_rev?}` | 제작자 이상 | `base_rev`는 내가 불러온 작업본 번호. 없으면(옛 화면) 그대로 덮어쓴다. 번호가 서버와 같으면 그대로 저장. 다르면 **3자 합치기**: 겹치지 않는 변경은 자동으로 합쳐 `200 {…, merged: true}`로 저장하고, 같은 곳을 고쳤으면 `409`. 같은 앱을 동시에 저장하는 요청은 행 잠금으로 줄을 세운다. |
+
+- 합치는 규칙(`services/graph_merge.py`): 기준(base)은 내 `base_rev` 때의 기록, 내 것(mine), 서버에 저장된 것(theirs)을 비교한다.
+  - 단계·메모: 칸(`type`, `disabled`, `data.<키>`…) 단위로 비교해 **같은 칸을 둘 다 다르게 고친 경우만** 충돌. `position`·`width`·`height`는 충돌로 보지 않고 내 것.
+  - 연결선: 한쪽만 더하거나 지우면 그대로, 같은 선을 서로 다르게 고쳤을 때만 충돌. 합친 뒤 없는 단계를 가리키는 선과 같은 연결(source·target·handle)이 겹치는 선은 지운다.
+  - 한쪽이 지운 단계를 다른 쪽이 고쳤으면 충돌(`field: "*"`, 지운 쪽 값은 `null`). 둘 다 지우면 충돌 없음. 흐름 값(`variables`)은 키 단위로 비교한다.
+- 충돌 응답(`409`): `{"detail": {"message", "hint", "conflict": {rev, stale, base, mine, theirs, merged, conflicts[{kind: node|edge|note|variable, node_id, field, label, base, mine, theirs}]}}}`.
+  - `rev`는 지금 서버 번호. `merged`는 충돌 항목을 상대 값으로 둔 합친 결과. 화면이 항목마다 고른 쪽을 반영해 `rev`를 `base_rev`로 다시 보내면 저장된다.
+  - 기준 기록이 없거나(20번 넘게 지남) 번호가 서버보다 크면 `stale: true`, `conflicts: []`: 자동으로 합칠 수 없다. 화면은 '상대 것으로 새로 불러오기' 또는 '내 것으로 덮어쓰기'(`rev`를 `base_rev`로 다시 저장)를 고르게 한다.
+- 화면 구분: 요청 헤더 `X-Genio-Client`(탭마다 다른 값)가 알림의 `client_id`로 돌아가, 내가 한 변경은 내가 무시한다.
+- 빌더 에이전트의 `graph_patch` 이벤트에 `draft_rev`가 함께 간다.
+
+### 접속 표시와 알림 스트림
+권한: 빌더를 열 수 있는 역할(소유자·관리자·제작자·운영자). 사용자 역할은 403, 다른 워크스페이스는 404.
+
+| 요청 | 설명 |
+|---|---|
+| POST /apps/{id}/presence `{node_id?, editing?, leave?}` | 10초마다 '나 여기 있어요'. 이름·색은 서버가 정한다(본문으로 속일 수 없다). `editing`은 고칠 수 있는 역할만 켜진다. `leave: true`면 목록에서 뺀다. 응답 `{users[{user_id, name, color, node_id, editing, can_edit}]}`. 30초 동안 알려 오지 않으면 목록에서 빠진다. |
+| GET /apps/{id}/presence | 지금 있는 사람 |
+| GET /apps/{id}/presence/stream?max_seconds= | SSE 한 줄기. 이벤트 `hello`, `presence {users}`, `draft_changed {rev, user_id, client_id}`, `comment_changed {action, comment_id, node_id, user_id, client_id}`. 15초마다 keep-alive. 기본 1시간 뒤 끝나며 화면이 다시 이어 받는다. |
+
+- 저장소: Redis(`genio:presence:{app}` 해시, `genio:app:{app}` pub/sub). Redis가 없으면 같은 프로세스 안에서만 전달한다(테스트·로컬).
+- 알림은 '신호'다. 놓쳐도 화면이 다시 이어질 때(`hello`) 최신 작업본을 읽어 확인한다.
+
+### 캔버스 댓글
+| 요청 | 권한 | 설명 |
+|---|---|---|
+| GET /apps/{id}/comments?status=open\|resolved\|all&node_id= | 소유자·관리자·제작자·운영자 | 스레드 목록(뿌리 댓글마다 `replies`). 앱마다 최대 2,000개 |
+| POST /apps/{id}/comments `{body≤2000, node_id?, x?, y?, parent_id?, mentions[]}` | 소유자·관리자·제작자 | 단계(`node_id`)나 캔버스 위치(`x`, `y`)에 단다. `parent_id`가 있으면 답글(단계·위치는 뿌리를 따르고, 답글에 답글은 422). 응답은 스레드 |
+| PATCH /apps/{id}/comments/{cid} `{body, mentions?}` | 쓴 사람만 | 새로 넣은 사람만 다시 알린다 |
+| DELETE /apps/{id}/comments/{cid} | 쓴 사람, 소유자·관리자 | 뿌리를 지우면 답글도 함께 |
+| POST /apps/{id}/comments/{cid}/resolve · /reopen | 소유자·관리자·제작자 | 뿌리 댓글만(답글은 422) |
+| GET /apps/{id}/collaborators | 소유자·관리자·제작자·운영자 | @멘션 후보 `[{id, name, role}]`(이메일은 보내지 않는다) |
+
+- 멘션: `mentions`는 사용자 id 목록. 이 워크스페이스에서 빌더를 열 수 있는 사람만 인정하고(중복 제거, 최대 10명) 나 자신은 알리지 않는다. 불린 사람마다 활동 기록 `comment.mention`(`target_id`=불린 사람, `meta`={app_id, comment_id})이 남고, **시스템 메일이 설정돼 있으면** 앱 빌더 링크가 든 메일을 보낸다(1분에 10통까지, 보내기에 실패해도 댓글은 저장되고 비밀값은 어디에도 남기지 않는다).
+- 다른 워크스페이스의 앱·댓글은 404. 다른 앱 주소로 이 댓글을 건드릴 수 없다.
