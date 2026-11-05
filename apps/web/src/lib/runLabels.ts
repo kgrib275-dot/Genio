@@ -7,6 +7,7 @@ export const TRIGGER: Record<string, string> = {
   chat: "챗",
   api: "API",
   schedule: "예약",
+  batch: "일괄",
 };
 
 /** 실행·단계 상태 이름(필터 선택지용) */

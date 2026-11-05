@@ -1,5 +1,6 @@
 import { Save, Trash2 } from "lucide-react";
 import { useEffect, useState, type FormEvent } from "react";
+import { BatchRunPanel } from "@/components/batch/BatchRunPanel";
 import { ErrorBox } from "@/components/ErrorBox";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
@@ -32,12 +33,15 @@ export function TestRunDialog({
   inputNode,
   onRun,
   running,
+  canBatch,
 }: {
   open: boolean;
   onClose: () => void;
   inputNode: GraphNode | undefined;
   onRun: (input: Record<string, unknown>) => void;
   running: boolean;
+  /** 흐름(워크플로우) 앱이면 '여러 건 한 번에' 탭을 보여 준다 */
+  canBatch?: boolean;
 }) {
   const appId = useCanvas((s) => s.appId);
   const saved = useTestInputs(appId, open);
@@ -46,11 +50,13 @@ export function TestRunDialog({
   const [values, setValues] = useState<Values>({});
   const [picked, setPicked] = useState("");
   const [name, setName] = useState("");
+  const [mode, setMode] = useState<"one" | "batch">("one");
 
   useEffect(() => {
     if (!open) return;
     setName("");
     setPicked("");
+    setMode("one");
   }, [open]);
 
   const collect = (): Record<string, unknown> => {
@@ -109,11 +115,13 @@ export function TestRunDialog({
       footer={
         <>
           <Button variant="ghost" onClick={onClose}>
-            취소
+            {mode === "batch" ? "닫기" : "취소"}
           </Button>
-          <Button type="submit" form="test-run" disabled={running || !inputNode}>
-            {running ? "실행 중…" : "실행하기"}
-          </Button>
+          {mode === "one" && (
+            <Button type="submit" form="test-run" disabled={running || !inputNode}>
+              {running ? "실행 중…" : "실행하기"}
+            </Button>
+          )}
         </>
       }
     >
@@ -121,8 +129,63 @@ export function TestRunDialog({
         <p className="text-sm text-slate-600">
           입력 단계가 없어요. &apos;단계 추가&apos;에서 &apos;입력&apos; 단계를 하나 넣어 주세요.
         </p>
+      ) : mode === "batch" && appId ? (
+        <div className="space-y-3">
+          <div
+            role="tablist"
+            aria-label="테스트 방식"
+            className="inline-flex rounded-lg bg-slate-100 p-1 text-sm"
+          >
+            <button
+              type="button"
+              role="tab"
+              aria-selected={false}
+              onClick={() => setMode("one")}
+              className="rounded-md px-3 py-1 text-slate-500"
+            >
+              한 건 실행
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected
+              className="rounded-md bg-white px-3 py-1 font-medium shadow-sm"
+            >
+              여러 건 한 번에
+            </button>
+          </div>
+          <BatchRunPanel
+            source={{ kind: "app", appId }}
+            note="지금 작업본(자동 저장된 흐름)으로 실행해요. 최대 200건."
+          />
+        </div>
       ) : (
         <form id="test-run" onSubmit={submit} className="space-y-3">
+          {canBatch && appId && (
+            <div
+              role="tablist"
+              aria-label="테스트 방식"
+              className="inline-flex rounded-lg bg-slate-100 p-1 text-sm"
+            >
+              <button
+                type="button"
+                role="tab"
+                aria-selected
+                className="rounded-md bg-white px-3 py-1 font-medium shadow-sm"
+              >
+                한 건 실행
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={false}
+                onClick={() => setMode("batch")}
+                className="rounded-md px-3 py-1 text-slate-500"
+              >
+                여러 건 한 번에
+              </button>
+            </div>
+          )}
           {appId && (
             <div className="rounded-lg border border-slate-200 bg-slate-50 p-2.5">
               <p className="mb-1.5 text-xs font-medium text-slate-600">저장해 둔 입력</p>

@@ -3,6 +3,8 @@ import { useEffect, useState } from "react";
 import { RotateCcw } from "lucide-react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { FailureBox, JsonView, StepRow, StoryList } from "@/components/canvas/RunPanel";
+import { inspectorSteps } from "@/components/run/inspectorSteps";
+import { ValueInspector } from "@/components/run/ValueInspector";
 import { DataView } from "@/components/DataView";
 import { ErrorBox, Loading } from "@/components/ErrorBox";
 import { ListPager, ListToolbar, NoMatch } from "@/components/ListControls";
@@ -291,6 +293,17 @@ export default function RunDetailPage() {
           </CardBody>
         </Card>
       </div>
+      {steps.some((s) => s.output && Object.keys(s.output).length > 0) && (
+        <Card className="mt-6">
+          <CardHeader
+            title="값 확인창"
+            description="단계마다 나온 값을 찾아보고, 값 끌어오기 경로({{단계.값}})를 복사해요."
+          />
+          <CardBody className="p-0">
+            <ValueInspector steps={inspectorSteps(steps, labelOf)} />
+          </CardBody>
+        </Card>
+      )}
       <StepsCard
         steps={steps}
         labelOf={labelOf}
