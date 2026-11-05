@@ -8,6 +8,7 @@ from sqlalchemy import select
 
 from api.engine import safe_http
 from api.llm.base import LlmError, Message, ToolDef
+from api.llm.chain import pop_notes
 from api.llm.registry import resolve_llm
 from api.models import App, ConnectorCredential, Run, WorkflowVersion
 from nodes import NodeError
@@ -208,7 +209,9 @@ def run_agent(
     max_iterations: int,
 ) -> dict[str, Any]:
     try:
-        llm = resolve_llm(services.db, services.workspace_id, provider, model)
+        llm = resolve_llm(
+            services.db, services.workspace_id, provider, model, fallback=services.app_fallback
+        )
     except LlmError as exc:
         raise NodeError(f"{exc.message} {exc.hint}") from None
     defs, table = build_tools(services, tools)
@@ -224,6 +227,8 @@ def run_agent(
             turn = llm.adapter.chat(model=llm.model, system=system, messages=messages, tools=defs)
         except LlmError as exc:
             raise NodeError(f"{exc.message} {exc.hint}", retryable=exc.retryable) from None
+        finally:
+            services.notes.extend(pop_notes(llm.adapter))
         services.usage.append((turn.model or llm.model, turn.input_tokens, turn.output_tokens))
         text = turn.text
         messages.append(

@@ -29,6 +29,7 @@ import {
 } from "@/lib/api/types";
 import { useSaveEnvVars, useSaveFeatures } from "@/lib/api/v2";
 import { cn } from "@/lib/cn";
+import { AppFallbackCard } from "@/components/llm/AppFallbackCard";
 import { AppNav } from "@/pages/apps/AppNav";
 import { canEdit, useSession } from "@/store/session";
 import { useSaveHandoff, type HandoffFeature } from "@/lib/api/v5a";
@@ -717,6 +718,12 @@ export default function AppFeaturesPage() {
                   onError: (err) => toast.error(err),
                 })
               }
+            />
+            <AppFallbackCard
+              appId={appId}
+              wsId={detail.workspace_id}
+              features={detail.features}
+              readOnly={readOnly}
             />
             <HandoffCard app={detail} readOnly={readOnly} />
             <EnvVarsCard app={detail} readOnly={readOnly} />

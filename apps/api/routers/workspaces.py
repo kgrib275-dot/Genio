@@ -30,7 +30,7 @@ from api.engine import pricing, safe_http
 from api.llm.base import LlmError
 from api.llm.catalog import catalog
 from api.llm.openai_adapter import azure_endpoint
-from api.llm.presets import provider_list
+from api.llm.presets import PRESETS, is_rerank, provider_list
 from api.llm.registry import PROVIDERS
 from api.market import service as market
 from api.models import (
@@ -47,6 +47,7 @@ from api.models import (
 from api.routers.common import public_origin
 from api.schemas.graph import Graph
 from api.services import limits
+from api.services.llm_keys import provider_view
 from api.services.projects import hidden_project_ids
 from nodes import NodeError, registry
 
@@ -193,19 +194,8 @@ def change_role(ws: str, member_id: str, body: RoleIn, ctx: Managers) -> dict[st
 
 # ---------------- AI 연결 ----------------
 def _provider(p: LlmProvider) -> dict[str, Any]:
-    try:
-        masked = mask(decrypt_str(p.api_key_encrypted))
-    except ValueError:
-        masked = "****"
-    return {
-        "id": p.id,
-        "provider": p.provider,
-        "label": p.label,
-        "base_url": p.base_url,
-        "default_model": p.default_model,
-        "is_default": p.is_default,
-        "api_key_masked": masked,
-    }
+    # 키 목록·돌려쓰기 방식·재정렬 전용 여부까지 담은 화면용 모양(키 원문은 없다)
+    return provider_view(p)
 
 
 @router.get("/workspaces/{ws}/llm-providers")
@@ -238,6 +228,12 @@ def add_provider(ws: str, body: ProviderIn, ctx: SecretManagers) -> dict[str, An
         raise AppError(
             422, "호환 API는 주소(base URL)가 필요해요.", "예: https://api.example.com/v1"
         )
+    if body.provider == "rerank-compatible" and not body.base_url:
+        raise AppError(
+            422,
+            "재정렬 호환 서버는 주소가 필요해요.",
+            "예: http://서버:8000 (끝에 /rerank가 없으면 붙여서 불러요)",
+        )
     if body.provider == "azure":
         if not body.base_url:
             raise AppError(
@@ -250,9 +246,11 @@ def add_provider(ws: str, body: ProviderIn, ctx: SecretManagers) -> dict[str, An
         except LlmError as exc:
             raise AppError(422, exc.message, exc.hint) from None
     existing = list(ctx.db.scalars(select(LlmProvider).where(LlmProvider.workspace_id == ws)))
-    is_default = body.is_default or not existing
+    # 재정렬 전용 연결은 '기본 연결'이 될 수 없고, 기본 연결 정하기에도 끼지 않는다
+    chat_rows = [p for p in existing if not is_rerank(p.provider)]
+    is_default = (body.is_default or not chat_rows) and not is_rerank(body.provider)
     if is_default:
-        for p in existing:
+        for p in chat_rows:
             p.is_default = False
     row = LlmProvider(
         workspace_id=ws,
@@ -281,14 +279,38 @@ class ProviderTestIn(BaseModel):
     provider: str = Field(min_length=2, max_length=30)
     api_key: str = Field(min_length=4, max_length=500)
     base_url: str | None = Field(default=None, max_length=500)
+    # 재정렬 전용 연결 시험에 쓸 모델 이름(비우면 공급자의 첫 모델)
+    model: str | None = Field(default=None, max_length=100)
 
 
-def _probe(provider: str, api_key: str, base_url: str | None) -> dict[str, Any]:
+def probe_connection(
+    provider: str, api_key: str, base_url: str | None, model: str | None = None
+) -> dict[str, Any]:
+    from api.llm import rerank
     from api.llm.probe import list_models
 
     if provider not in PROVIDERS:
         raise AppError(422, "지원하지 않는 AI 공급자예요.", "목록에서 공급자를 고르세요.")
     started = time.perf_counter()
+    if is_rerank(provider):
+        use = (model or "").strip() or PRESETS[provider].default_model
+        if not use:
+            return {
+                "ok": False,
+                "message": "재정렬 모델 이름이 없어요.",
+                "hint": "기본 모델 칸에 서버의 재정렬 모델 이름을 적어 주세요.",
+                "models": [],
+            }
+        err = rerank.probe(provider, api_key, base_url or None, use)
+        if err is not None:
+            return {"ok": False, "message": err.message, "hint": err.hint, "models": []}
+        return {
+            "ok": True,
+            "message": "연결됐어요. 재정렬 모델이 답했어요.",
+            "hint": "",
+            "models": [],
+            "ms": round((time.perf_counter() - started) * 1000),
+        }
     try:
         models = list_models(provider, api_key, base_url or None)
     except LlmError as exc:
@@ -306,7 +328,7 @@ def _probe(provider: str, api_key: str, base_url: str | None) -> dict[str, Any]:
 def test_new_provider(ws: str, body: ProviderTestIn, ctx: SecretManagers) -> dict[str, Any]:
     """저장하기 전에 키로 연결해 보고, 그 키로 쓸 수 있는 모델 목록을 돌려준다."""
     del ws, ctx
-    return _probe(body.provider, body.api_key.strip(), body.base_url)
+    return probe_connection(body.provider, body.api_key.strip(), body.base_url, body.model)
 
 
 @router.post("/workspaces/{ws}/llm-providers/{provider_id}/test")
@@ -315,7 +337,9 @@ def test_saved_provider(ws: str, provider_id: str, ctx: Builders) -> dict[str, A
     row = ctx.db.get(LlmProvider, provider_id)
     if row is None or row.workspace_id != ws:
         raise not_found("AI 연결")
-    return _probe(row.provider, decrypt_str(row.api_key_encrypted), row.base_url)
+    return probe_connection(
+        row.provider, decrypt_str(row.api_key_encrypted), row.base_url, row.default_model
+    )
 
 
 @router.delete("/workspaces/{ws}/llm-providers/{provider_id}", status_code=204)
@@ -327,7 +351,14 @@ def delete_provider(ws: str, provider_id: str, ctx: SecretManagers) -> Response:
     ctx.db.delete(row)
     ctx.db.flush()
     if was_default:
-        other = ctx.db.scalar(select(LlmProvider).where(LlmProvider.workspace_id == ws).limit(1))
+        other = next(
+            (
+                p
+                for p in ctx.db.scalars(select(LlmProvider).where(LlmProvider.workspace_id == ws))
+                if not is_rerank(p.provider)
+            ),
+            None,
+        )
         if other:
             other.is_default = True
     audit(

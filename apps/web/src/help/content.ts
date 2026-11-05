@@ -9,6 +9,7 @@ import { FILES_HELP_SECTIONS } from "@/help/content_files";
 import { EVENTS_HELP_SECTIONS } from "@/help/content_events";
 import { TRACE_HELP_SECTIONS } from "@/help/content_trace";
 import { KB_HELP_SECTIONS } from "@/help/content_kb";
+import { LLM_HELP_SECTIONS } from "@/help/content_llm";
 import { HELP_SECTIONS_TOOLS } from "@/help/content_mcp";
 
 export type HelpBlock =
@@ -502,6 +503,7 @@ export const HELP_SECTIONS: HelpSection[] = [
   ...COLLAB_HELP_SECTIONS,
   ...FILES_HELP_SECTIONS,
   ...TRACE_HELP_SECTIONS,
+  ...LLM_HELP_SECTIONS,
   {
     id: "faq",
     title: "자주 묻는 질문",

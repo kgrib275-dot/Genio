@@ -16,6 +16,7 @@ import {
   useUpdateDocument,
   useUpdateKnowledgeBase,
 } from "@/lib/api/v2";
+import { useRerankConnections } from "@/lib/api/v9llm";
 import { useProjects } from "@/lib/api/v3";
 import { cn } from "@/lib/cn";
 import { useListControls } from "@/lib/useListControls";
@@ -35,6 +36,7 @@ export function KbSettingsDialog({
   const [name, setName] = useState(kb.name);
   const [projectId, setProjectId] = useState(kb.project_id ?? "");
   const projects = useProjects(open ? ws : "");
+  const rerankConns = useRerankConnections(open ? ws : "");
   const [s, setS] = useState<KbSettings>(() => normalizeKbSettings(kb.settings));
   const r = s.retrieval;
   const num = (v: string, min: number, max: number, fallback: number) =>
@@ -252,8 +254,61 @@ export function KbSettingsDialog({
               checked={r.rerank}
               onChange={(e) => setS({ ...s, retrieval: { ...r, rerank: e.target.checked } })}
             />
-            AI로 다시 순위 매기기(정확해지지만 느리고 비용이 들어요)
+            다시 순위 매기기(정확해지지만 느리고 비용이 들 수 있어요)
           </label>
+          {r.rerank && (
+            <div className="ml-6 space-y-2">
+              <Field
+                label="재정렬 모델"
+                htmlFor="kb-rerank-conn"
+                hint="전용 모델을 고르면 AI로 재정렬하는 것보다 보통 빠르고 정확해요. 전용 모델이 실패하면 AI로 대신 재정렬해요."
+              >
+                <Select
+                  id="kb-rerank-conn"
+                  value={r.rerank_connection ?? ""}
+                  onChange={(e) =>
+                    setS({
+                      ...s,
+                      retrieval: { ...r, rerank_connection: e.target.value, rerank_model: "" },
+                    })
+                  }
+                >
+                  <option value="">AI(대화 모델)로 재정렬</option>
+                  {(rerankConns.data ?? []).map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.label} · {c.provider}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+              {r.rerank_connection ? (
+                <Field label="모델 이름(비우면 연결의 기본 모델)" htmlFor="kb-rerank-model">
+                  <Input
+                    id="kb-rerank-model"
+                    placeholder={
+                      (rerankConns.data ?? []).find((c) => c.id === r.rerank_connection)
+                        ?.default_model ?? ""
+                    }
+                    value={r.rerank_model ?? ""}
+                    onChange={(e) =>
+                      setS({ ...s, retrieval: { ...r, rerank_model: e.target.value } })
+                    }
+                  />
+                </Field>
+              ) : (
+                (rerankConns.data ?? []).length === 0 && (
+                  <p className="text-xs text-slate-500">
+                    재정렬 전용 연결이 아직 없어요. 관리 &gt; AI 모델에서 '재정렬 전용'(Cohere·Jina·
+                    Voyage 등)을 추가하면 여기서 고를 수 있어요.
+                  </p>
+                )
+              )}
+              <p className="text-xs text-slate-500">
+                비용은 공급자마다 달라요. 검색 1,000번에 대략 1~2달러 안팎인 곳이 많아요(요금은
+                공급자 안내를 확인하세요).
+              </p>
+            </div>
+          )}
         </fieldset>
         <ErrorBox error={update.error} />
       </div>

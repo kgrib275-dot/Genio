@@ -5,6 +5,9 @@ from typing import Any
 import httpx
 
 from api.llm.base import (
+    KIND_AUTH,
+    KIND_OUTAGE,
+    KIND_RATE_LIMIT,
     ChatTurn,
     LlmError,
     Message,
@@ -39,18 +42,32 @@ class GoogleAdapter:
                 "AI 서버에 연결하지 못했어요.",
                 "네트워크를 확인하고 다시 시도하세요.",
                 retryable=True,
+                kind=KIND_OUTAGE,
             ) from exc
         if resp.status_code in (401, 403):
             raise LlmError(
                 "AI 연결 키가 올바르지 않아요.",
                 "워크스페이스 설정에서 Google 키를 다시 등록하세요.",
+                kind=KIND_AUTH,
             )
         if resp.status_code == 404:
             raise LlmError(
                 "모델을 찾을 수 없어요.", "모델 이름을 확인하세요(예: gemini-2.0-flash)."
             )
         if resp.status_code == 429:
-            raise LlmError("AI 요청이 너무 많아요.", "잠시 후 다시 시도하세요.", retryable=True)
+            raise LlmError(
+                "AI 요청이 너무 많아요.",
+                "잠시 후 다시 시도하세요.",
+                retryable=True,
+                kind=KIND_RATE_LIMIT,
+            )
+        if resp.status_code >= 500:
+            raise LlmError(
+                "AI 서버에서 오류가 났어요.",
+                "잠시 후 다시 시도하세요.",
+                retryable=True,
+                kind=KIND_OUTAGE,
+            )
         if resp.status_code >= 400:
             raise LlmError("AI가 요청을 처리하지 못했어요.", "모델 이름과 단계 설정을 확인하세요.")
         data = resp.json()

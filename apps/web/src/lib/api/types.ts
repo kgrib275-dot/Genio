@@ -212,6 +212,8 @@ export interface ProviderPreset {
   needs_base_url: boolean;
   embedding: boolean;
   vision: boolean;
+  /** v0.9: 재정렬 전용 공급자(대화·임베딩에는 쓰지 않는다) */
+  rerank?: boolean;
 }
 
 export interface LlmProvider {
@@ -693,6 +695,9 @@ export interface KbSettings {
     score_threshold: number;
     vector_weight: number;
     rerank: boolean;
+    /** v0.9: 재정렬 전용 모델 연결 id·모델 이름(비우면 AI로 재정렬) */
+    rerank_connection?: string;
+    rerank_model?: string;
   };
 }
 

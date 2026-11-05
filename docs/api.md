@@ -1030,3 +1030,57 @@ ADR 0013. 마이그레이션 0015(`apps.draft_rev`·`updated_by`, `draft_snapsho
 **보내는 조건**: 켜져 있고 필수 칸이 찬 서비스만. `sample_rate`(실행 id로 정해서 같은 실행은 늘 같은 결정), `only_failed`(실패한 실행만)를 통과한 서비스에만 보낸다. 받을 서비스가 하나도 없으면 큐에 올리지도 않는다. 실패는 기록만 남기고(비밀값 없음) 실행에는 영향이 없다. 모든 호출은 `safe_http`를 거친다(사설 IP 차단).
 
 감사 기록: `tracing.update`(켠 서비스 종류, 내용 포함 여부).
+
+
+## v0.9 키 분산·공급자 폴백·재정렬 모델 (ADR 0013)
+
+### 키 여러 개 (AI 연결 하나에)
+- 마이그레이션 0018: `llm_providers.extra_keys`(JSON, 더 둔 키 `[{id, label, key_encrypted, weight, disabled}]`), `key_strategy`(`failover`|`round_robin`|`weighted`), `primary_weight`.
+- `GET /workspaces/{ws}/llm-providers`(제작자 이상)는 이제 `{..., rerank, key_strategy, keys[{id, label, masked, weight, disabled, primary, position, calls, errors, last_error, cooldown_seconds}]}`를 돌려준다. 키 값은 `****abcd`뿐이고, 첫 키 `primary`(기본 키)는 끄거나 지울 수 없다.
+
+| 요청 | 권한 | 설명 |
+|---|---|---|
+| PATCH /workspaces/{ws}/llm-providers/{id} `{key_strategy?, primary_weight?}` | 소유자·관리자 | 돌려쓰기 방식·기본 키 비중(1~10) |
+| POST /workspaces/{ws}/llm-providers/{id}/keys `{label?, api_key, weight?}` | 소유자·관리자 | 키 더하기(암호화 저장, 연결당 최대 10개 → 넘으면 409). 감사 기록에는 키 값 대신 id·이름만 |
+| PATCH .../keys/{key_id} `{label?, weight?, disabled?}` | 소유자·관리자 | 이름·비중·끄기(기본 키는 끌 수 없음 409) |
+| DELETE .../keys/{key_id} | 소유자·관리자 | 키 지우기(기본 키는 지울 수 없음 409) |
+| POST .../keys/{key_id}/test | 제작자 이상 | 키 하나만 연결 테스트. 성공하면 쉬던 키를 바로 다시 쓴다 |
+
+- 호출 순서: failover=목록 순서, round_robin=호출마다 시작 키를 한 칸씩 돌림, weighted=비중으로 무작위 순서(키마다 한 번씩).
+- 오류 종류(`LlmError.kind`): `auth`·`rate_limit`·`outage`·`content_filter`·`context_length`·`other`. 어댑터(openai·anthropic·google)가 분류한다.
+- `rate_limit`이면 그 키를 60초, `auth`이면 1시간(또는 키 테스트 성공 때까지) 쉬게 하고 같은 호출을 다음 키로 다시 한다(최대 5번). `outage`·요청 오류는 키가 원인이 아니라 바꾸지 않는다.
+- 쉬는 시간·호출 수·실패 수는 Redis(없으면 프로세스 메모리)에 둔다(`llm/keypool.py`).
+- 실행 단계 기록에 "키 1번을 쓸 수 없어 키 2번으로 바꿔 다시 시도했어요."가 남는다.
+
+### 공급자 간 자동 전환
+- 워크스페이스 설정: `workspace.settings.llm_fallback = {enabled, links[{provider_id, model}], triggers{outage, rate_limit, content_filter, context_length, auth}}`. 기본 조건은 outage·rate_limit만 켜짐.
+- 앱별 설정: `app.features.llm_fallback = {mode: inherit|off|custom, links, triggers}`(`PATCH /apps/{id}/features`). `custom`은 워크스페이스 설정이 꺼져 있어도 이 앱에서 동작한다.
+
+| 요청 | 권한 | 설명 |
+|---|---|---|
+| GET /workspaces/{ws}/llm-fallback | 제작자 이상 | `{enabled, links[{provider_id, label, provider, model, missing}], triggers, default_triggers, connections[{id, label, provider, default_model, key_count}]}`(재정렬 전용 연결은 목록에 없다) |
+| PUT /workspaces/{ws}/llm-fallback `{enabled, links[], triggers{}}` | 소유자·관리자 | 저장. 연결은 이 워크스페이스의 대화 연결만, 중복 없이 최대 5곳. 켰는데 비어 있으면 422 |
+| POST /workspaces/{ws}/llm-fallback/test | 소유자·관리자 | 기본 연결이 실패한 것처럼 만들어(첫 연결은 실제로 부르지 않음) 대신 답하는 연결을 본다. `{ok, message, answered_by{label, provider, model}, trail[{label, model, status: failed|skipped|answered, error}], notes[], simulated}`. 순서가 없거나 켜진 조건이 없으면 422 |
+
+- 적용 범위: `resolve_llm(purpose="chat")`가 만드는 모든 호출 — AI 단계, 에이전트, 빌더, 대화 요약, 질문 만들기, 지식 검색의 AI 재정렬. 임베딩은 키만 돌려 쓰고 다른 공급자로 넘어가지 않는다.
+- 넘어가는 조건: 기본 연결의 키를 모두 써 본 뒤 오류 종류가 켜진 조건에 맞을 때. `auth`는 켜져 있을 때만.
+- 건너뛰기: JSON 출력(`model_supports_json`)·이미지(`model_supports_vision`)·도구 호출(`provider_supports_tools`; Google 어댑터는 도구 대화 미지원)이 필요한 호출은 지원하는 연결로만 넘어간다. 다른 공급자로 넘어갈 때 대화의 공급자 원본(`native`)은 뺀다.
+- 답의 글자가 이미 나가기 시작했다면 키도 연결도 바꾸지 않고 오류를 낸다.
+- 비용·사용량은 실제로 답한 모델 기준이다. AI 단계 출력에 `model_used`(실제 모델)가 새로 생겼다. 실행 단계 기록에 "대체 연결(○○)로 답했어요."가 남는다.
+
+### 재정렬 전용 모델
+- 공급자 키: `cohere-rerank`·`jina-rerank`·`voyage-rerank`·`rerank-compatible`(`GET /llm/providers`에서 `rerank: true`, 묶음 `재정렬 전용`). 대화·임베딩 연결로 고를 수 없고 기본 연결·자동 전환 순서·모델 카탈로그에도 들어가지 않는다. 키 여러 개 돌려쓰기는 그대로 쓸 수 있다.
+- 호출 모양(`llm/rerank.py`):
+
+| 공급자 | 요청 | 응답 | 문서로 확인한 정도 |
+|---|---|---|---|
+| Cohere | `POST {base}/v2/rerank` `{model, query, documents[str], top_n}` | `{results:[{index, relevance_score}]}` | 공식 문서 페이지는 검색에서 확인하지 못했고, Cohere 문서를 인용한 제3자 문서(Vercel AI Gateway 등)로 엔드포인트·필드·응답을 확인. `top_n`은 제3자 문서에서 보지 못했지만 공개된 Cohere 요청 형식 |
+| Jina | `POST {base}/v1/rerank` `{model, query, documents[str], top_n}` | `{results:[{index, relevance_score}]}` | 제3자 문서만(공식 페이지 미확인) |
+| Voyage | `POST {base}/v1/rerank` `{model, query, documents[str], top_k}` | `{data:[{index, relevance_score}]}` | Voyage 문서를 인용한 자료로 엔드포인트·`top_k`·`data` 응답 확인(공식 레퍼런스 페이지는 열지 못함) |
+| 호환 서버 | `POST {주소}/rerank`(주소 끝이 `rerank`면 그대로) Cohere 형식 | `results` 또는 `data`, `relevance_score` 또는 `score` | 형식 가정(실제 vLLM·TEI 서버로는 확인 못 함) |
+
+  응답은 `results`/`data`, `relevance_score`/`score` 이름을 모두 읽고, 인덱스 범위·중복을 걸러낸다. 실제 키로는 어느 공급자도 호출해 보지 못했다.
+- 한도: 한 번에 문서 100개, 문서마다 2,000자, 응답 2MB, 30초. 오류는 두 줄 한국어(키 오류·한도·서버 오류·주소 오류·읽지 못함)이고 키는 들어가지 않는다.
+- 지식베이스 설정: `retrieval.rerank_connection`(재정렬 전용 연결 id)·`retrieval.rerank_model`. 저장할 때 연결이 이 워크스페이스의 재정렬 전용 연결이 아니면 422. 설정되어 있고 `rerank`가 켜져 있으면 검색 결과를 전용 모델로 줄 세우고 결과에 `rerank_score`가 붙는다(`score`는 검색 점수 그대로). 전용 모델 호출이 실패하면 AI(LLM) 재정렬로 이어 가고, 그것도 안 되면 검색 순서 그대로 돌려준다. 검색 시험·검색 튜닝·`knowledge_search` 단계가 같은 경로를 쓴다.
+- `GET /workspaces/{ws}/rerank-connections`(제작자 이상): 재정렬 전용 연결 목록(키 없음).
+- 연결 테스트: `POST /workspaces/{ws}/llm-providers/test`에 `model`을 줄 수 있다. 재정렬 전용 연결은 문서 두 개로 한 번 재정렬해 본다.

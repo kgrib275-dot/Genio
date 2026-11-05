@@ -18,14 +18,26 @@ if TYPE_CHECKING:
     from api.llm.vision import ImageInput
 
 
+# 오류 종류(v0.9): 키 돌려쓰기·공급자 자동 전환이 무엇을 할지 정한다
+KIND_AUTH = "auth"  # 키가 틀리거나 권한이 없음
+KIND_RATE_LIMIT = "rate_limit"  # 요청이 너무 많거나 사용 한도(쿼터)를 넘음
+KIND_OUTAGE = "outage"  # 연결 실패·시간 초과·서버 오류(5xx)
+KIND_CONTENT_FILTER = "content_filter"  # 안전 정책으로 답하지 않음
+KIND_CONTEXT = "context_length"  # 입력이 모델이 받을 수 있는 길이를 넘음
+KIND_OTHER = "other"
+
+
 class LlmError(Exception):
     """사용자에게 보여도 되는 한국어 오류. 공급자 원문·키는 담지 않는다."""
 
-    def __init__(self, message: str, hint: str, *, retryable: bool = False) -> None:
+    def __init__(
+        self, message: str, hint: str, *, retryable: bool = False, kind: str = KIND_OTHER
+    ) -> None:
         super().__init__(message)
         self.message = message
         self.hint = hint
         self.retryable = retryable
+        self.kind = kind
 
 
 @dataclass

@@ -137,8 +137,12 @@ export interface LlmProbe {
 
 export function useTestNewLlm(ws: string) {
   return useMutation({
-    mutationFn: (v: { provider: string; api_key: string; base_url?: string | null }) =>
-      api.post<LlmProbe>(`/workspaces/${ws}/llm-providers/test`, v),
+    mutationFn: (v: {
+      provider: string;
+      api_key: string;
+      base_url?: string | null;
+      model?: string;
+    }) => api.post<LlmProbe>(`/workspaces/${ws}/llm-providers/test`, v),
   });
 }
 

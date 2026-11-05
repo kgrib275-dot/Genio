@@ -24,6 +24,25 @@ from api.services.queue import enqueue_document
 from nodes import NodeError
 
 router = APIRouter(tags=["knowledge"])
+
+
+def _check_rerank_connection(db: Any, kb: KnowledgeBase) -> None:
+    """재정렬 연결은 이 워크스페이스의 '재정렬 전용' 연결이어야 한다(아니면 두 줄 오류)."""
+    from api.llm.presets import is_rerank
+    from api.models import LlmProvider
+
+    cid = str(svc.kb_settings(kb)["retrieval"].get("rerank_connection") or "")
+    if not cid:
+        return
+    row = db.get(LlmProvider, cid)
+    if row is None or row.workspace_id != kb.workspace_id or not is_rerank(row.provider):
+        raise AppError(
+            422,
+            "재정렬 모델로 고른 AI 연결을 찾지 못했어요.",
+            "관리 > AI 모델에서 '재정렬 전용' 연결을 만든 뒤 다시 고르세요.",
+        )
+
+
 WsViewers = Annotated[Ctx, Depends(require_role(VIEW_RUNS))]
 WsBuilders = Annotated[Ctx, Depends(require_role(EDIT_APPS))]
 KbViewers = Annotated[Ctx, Depends(require_role(VIEW_RUNS, via="kb"))]
@@ -309,6 +328,7 @@ def update_kb(kb_id: str, body: KbPatch, ctx: KbBuilders) -> dict[str, Any]:
             svc.patch_kb_settings(kb, body.settings)
         except pipe.PipelineError as exc:
             raise AppError(422, exc.message, exc.hint) from exc
+        _check_rerank_connection(ctx.db, kb)
     if body.project_id is not None:
         check_project_target(ctx, kb.workspace_id, body.project_id)
         kb.project_id = body.project_id or None

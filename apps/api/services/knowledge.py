@@ -3,6 +3,7 @@
 import html
 import io
 import json
+import logging
 import math
 import re
 from typing import Any
@@ -19,6 +20,8 @@ from api.llm.registry import resolve_llm
 from api.models import Chunk, Document, KnowledgeBase
 from api.services import storage
 from nodes import NodeError
+
+log = logging.getLogger("genio.knowledge")
 
 ALLOWED_MIME = {
     "application/pdf": "pdf",
@@ -216,6 +219,9 @@ KB_DEFAULTS: dict[str, Any] = {
         "score_threshold": 0.0,
         "vector_weight": 0.7,
         "rerank": False,
+        # v0.9: 재정렬 전용 모델 연결(AI 연결 id)과 모델 이름. 비우면 AI(LLM)로 재정렬한다
+        "rerank_connection": "",
+        "rerank_model": "",
     },
 }
 
@@ -275,6 +281,8 @@ def merged_settings(kb: KnowledgeBase, patch: dict[str, Any]) -> dict[str, Any]:
     r["score_threshold"] = max(0.0, min(float(r["score_threshold"]), 1.0))
     r["vector_weight"] = max(0.0, min(float(r["vector_weight"]), 1.0))
     r["rerank"] = bool(r["rerank"])
+    r["rerank_connection"] = str(r.get("rerank_connection") or "").strip()[:36]
+    r["rerank_model"] = str(r.get("rerank_model") or "").strip()[:100]
     return cur
 
 
@@ -414,11 +422,54 @@ def _allowed_docs(
     }
 
 
+def _dedicated_rerank(
+    db: Session,
+    workspace_id: str,
+    connection_id: str,
+    model: str,
+    query: str,
+    items: list[tuple[Chunk, float]],
+) -> tuple[list[tuple[Chunk, float]], dict[str, float]] | None:
+    """재정렬 전용 모델(v0.9). 연결이 없거나 호출이 실패하면 None → AI(LLM) 재정렬로 이어 간다."""
+    from api.llm.rerank import rerank_documents
+    from api.models import LlmProvider
+
+    row = db.get(LlmProvider, connection_id)
+    if row is None or row.workspace_id != workspace_id:
+        return None
+    try:
+        ranked_idx = rerank_documents(row, model, query, [c.content for c, _ in items])
+    except LlmError as exc:
+        log.warning("재정렬 전용 모델 호출 실패(kb 검색, %s)", exc.message)
+        return None
+    seen = {r.index for r in ranked_idx}
+    order = [r.index for r in ranked_idx] + [i for i in range(len(items)) if i not in seen]
+    scores = {items[r.index][0].id: round(r.score, 4) for r in ranked_idx}
+    return [items[i] for i in order], scores
+
+
 def _rerank(
+    db: Session,
+    workspace_id: str,
+    query: str,
+    items: list[tuple[Chunk, float]],
+    *,
+    connection_id: str = "",
+    model: str = "",
+) -> tuple[list[tuple[Chunk, float]], dict[str, float]]:
+    """(다시 줄 세운 목록, 조각별 재정렬 점수). 점수는 재정렬 전용 모델을 썼을 때만 있다."""
+    if len(items) < 2:
+        return items, {}
+    if connection_id:
+        done = _dedicated_rerank(db, workspace_id, connection_id, model, query, items)
+        if done is not None:
+            return done
+    return _llm_rerank(db, workspace_id, query, items), {}
+
+
+def _llm_rerank(
     db: Session, workspace_id: str, query: str, items: list[tuple[Chunk, float]]
 ) -> list[tuple[Chunk, float]]:
-    if len(items) < 2:
-        return items
     listing = "\n".join(f"[{i}] {c.content[:300]}" for i, (c, _) in enumerate(items))
     try:
         llm = resolve_llm(db, workspace_id, "default")
@@ -551,8 +602,16 @@ def search(
         key=lambda x: x[1],
         reverse=True,
     )[: max(k, 1) * (3 if use_rerank else 1)]
+    rerank_scores: dict[str, float] = {}
     if use_rerank:
-        ranked = _rerank(db, workspace_id, query, ranked)
+        ranked, rerank_scores = _rerank(
+            db,
+            workspace_id,
+            query,
+            ranked,
+            connection_id=str(cfg.get("rerank_connection") or ""),
+            model=str(cfg.get("rerank_model") or ""),
+        )
     ranked = ranked[:k]
     out = []
     for c, score in ranked:
@@ -565,6 +624,7 @@ def search(
                 "content": c.parent_content or c.content,
                 "matched": c.content,
                 "score": round(score, 4),
+                **({"rerank_score": rerank_scores[c.id]} if c.id in rerank_scores else {}),
                 "metadata": {
                     k: v
                     for k, v in ((d.doc_metadata if d else {}) or {}).items()

@@ -12,6 +12,12 @@ from typing import Any
 import anthropic
 
 from api.llm.base import (
+    KIND_AUTH,
+    KIND_CONTENT_FILTER,
+    KIND_CONTEXT,
+    KIND_OTHER,
+    KIND_OUTAGE,
+    KIND_RATE_LIMIT,
     ChatTurn,
     LlmError,
     Message,
@@ -32,31 +38,57 @@ _EFFORT_MODEL = re.compile(r"^claude-(opus|sonnet|haiku|fable)-5")
 def _map_error(exc: Exception) -> LlmError:
     if isinstance(exc, anthropic.AuthenticationError):
         return LlmError(
-            "AI 연결 키가 올바르지 않아요.", "워크스페이스 설정에서 Anthropic 키를 다시 등록하세요."
+            "AI 연결 키가 올바르지 않아요.",
+            "워크스페이스 설정에서 Anthropic 키를 다시 등록하세요.",
+            kind=KIND_AUTH,
         )
     if isinstance(exc, anthropic.PermissionDeniedError):
         return LlmError(
-            "이 키로는 해당 모델을 쓸 수 없어요.", "키 권한을 확인하거나 다른 모델을 고르세요."
+            "이 키로는 해당 모델을 쓸 수 없어요.",
+            "키 권한을 확인하거나 다른 모델을 고르세요.",
+            kind=KIND_AUTH,
         )
     if isinstance(exc, anthropic.NotFoundError):
         return LlmError("모델을 찾을 수 없어요.", "모델 이름을 확인하세요(예: claude-sonnet-5-5).")
     if isinstance(exc, anthropic.RateLimitError):
-        return LlmError("AI 요청이 너무 많아요.", "잠시 후 다시 시도하세요.", retryable=True)
-    if isinstance(exc, anthropic.BadRequestError):
         return LlmError(
-            "AI가 요청 형식을 받아들이지 않았어요.", "모델 이름과 단계 설정을 확인하세요."
+            "AI 요청이 너무 많아요.",
+            "잠시 후 다시 시도하세요.",
+            retryable=True,
+            kind=KIND_RATE_LIMIT,
+        )
+    if isinstance(exc, anthropic.BadRequestError):
+        text = str(exc).lower()
+        too_long = "prompt is too long" in text or ("context" in text and "exceed" in text)
+        return LlmError(
+            "AI가 요청 형식을 받아들이지 않았어요.",
+            "모델 이름과 단계 설정을 확인하세요.",
+            kind=KIND_CONTEXT if too_long else KIND_OTHER,
         )
     if isinstance(exc, anthropic.APIConnectionError):
         return LlmError(
-            "AI 서버에 연결하지 못했어요.", "네트워크를 확인하고 다시 시도하세요.", retryable=True
+            "AI 서버에 연결하지 못했어요.",
+            "네트워크를 확인하고 다시 시도하세요.",
+            retryable=True,
+            kind=KIND_OUTAGE,
         )
     if isinstance(exc, anthropic.APIStatusError):
-        return LlmError("AI 서버에서 오류가 났어요.", "잠시 후 다시 시도하세요.", retryable=True)
+        status = int(getattr(exc, "status_code", 0) or 0)
+        return LlmError(
+            "AI 서버에서 오류가 났어요.",
+            "잠시 후 다시 시도하세요.",
+            retryable=True,
+            kind=KIND_OUTAGE if status >= 500 else KIND_OTHER,
+        )
     return LlmError("AI 호출 중 문제가 생겼어요.", "잠시 후 다시 시도하세요.")
 
 
 def _refusal() -> LlmError:
-    return LlmError("AI가 이 요청에는 답하지 않았어요.", "요청 내용을 바꿔서 다시 시도하세요.")
+    return LlmError(
+        "AI가 이 요청에는 답하지 않았어요.",
+        "요청 내용을 바꿔서 다시 시도하세요.",
+        kind=KIND_CONTENT_FILTER,
+    )
 
 
 class AnthropicAdapter:

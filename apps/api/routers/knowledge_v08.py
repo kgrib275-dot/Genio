@@ -280,9 +280,11 @@ def run_tuning(kb_id: str, body: RunIn, ctx: KbBuilders) -> dict[str, Any]:
     kb = _tunable(ctx, kb_id)
     if body.include_rerank and not body.confirm_rerank:
         n = len(kb_tuning.tuning_of(kb)["questions"])
+        dedicated = bool(svc.kb_settings(kb)["retrieval"].get("rerank_connection"))
+        who = "재정렬 전용 모델을" if dedicated else "AI를"
         raise AppError(
             422,
-            f"재정렬을 켜면 AI를 약 {n * len(kb_tuning.METHODS)}번 더 불러 비용이 들어요.",
+            f"재정렬을 켜면 {who} 약 {n * len(kb_tuning.METHODS)}번 더 불러 비용이 들 수 있어요.",
             "비용을 확인했다면 '비용을 알고 실행'을 체크한 뒤 다시 실행하세요.",
         )
     result = kb_tuning.run(ctx.db, kb, include_rerank=body.include_rerank)
