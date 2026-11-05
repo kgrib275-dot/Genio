@@ -1,0 +1,221 @@
+app:
+  description: 지원하지 않는 단계가 섞인 흐름
+  icon: 🧪
+  icon_background: '#FFEAD5'
+  mode: workflow
+  name: 혼합 흐름
+kind: app
+version: 0.1.5
+workflow:
+  conversation_variables: []
+  environment_variables: []
+  features: {}
+  graph:
+    edges:
+    - id: e1
+      source: s
+      sourceHandle: source
+      target: tool1
+      targetHandle: target
+      type: custom
+    - id: e2
+      source: tool1
+      sourceHandle: source
+      target: iter
+      targetHandle: target
+      type: custom
+    - id: e3
+      source: iter
+      sourceHandle: source
+      target: multi
+      targetHandle: target
+      type: custom
+    - id: e4
+      source: multi
+      sourceHandle: source
+      target: end
+      targetHandle: target
+      type: custom
+    - id: e5
+      source: iter-start
+      sourceHandle: source
+      target: iter-llm
+      targetHandle: target
+      type: custom
+    nodes:
+    - data:
+        title: 시작
+        type: start
+        variables:
+        - label: 주제들
+          required: true
+          type: paragraph
+          variable: topics
+      id: s
+      position:
+        x: 0
+        y: 100
+      type: custom
+    - data:
+        provider_id: tavily
+        provider_name: tavily
+        provider_type: builtin
+        title: 웹 검색
+        tool_label: Tavily Search
+        tool_name: tavily_search
+        tool_parameters:
+          query:
+            type: mixed
+            value: '{{#s.topics#}}'
+        type: tool
+      id: tool1
+      position:
+        x: 300
+        y: 100
+      type: custom
+    - data:
+        desc: ''
+        error_handle_mode: terminated
+        is_parallel: false
+        iterator_selector:
+        - s
+        - topics
+        output_selector:
+        - iter-llm
+        - text
+        start_node_id: iter-start
+        title: 주제마다 요약
+        type: iteration
+      id: iter
+      position:
+        x: 600
+        y: 100
+      type: custom
+    - data:
+        isInIteration: true
+        iteration_id: iter
+        title: ''
+        type: iteration-start
+      id: iter-start
+      parentId: iter
+      position:
+        x: 24
+        y: 68
+      type: custom-iteration-start
+    - data:
+        isInIteration: true
+        iteration_id: iter
+        model:
+          completion_params:
+            temperature: 0.5
+          mode: chat
+          name: gpt-4o-mini
+          provider: openai
+        prompt_template:
+        - id: ip1
+          role: user
+          text: '다음 주제를 한 줄로 요약하세요: {{#iter.item#}}'
+        title: 한 줄 요약
+        type: llm
+      id: iter-llm
+      parentId: iter
+      position:
+        x: 200
+        y: 68
+      type: custom
+    - data:
+        desc: ''
+        error_handle_mode: terminated
+        iterator_selector:
+        - s
+        - topics
+        output_selector:
+        - m2
+        - output
+        start_node_id: m1
+        title: 여러 단계 반복
+        type: iteration
+      id: multi
+      position:
+        x: 900
+        y: 100
+      type: custom
+    - data:
+        isInIteration: true
+        iteration_id: multi
+        title: ''
+        type: iteration-start
+      id: m1
+      parentId: multi
+      position:
+        x: 24
+        y: 68
+      type: custom-iteration-start
+    - data:
+        isInIteration: true
+        iteration_id: multi
+        template: '{{ arg1 }}'
+        title: 첫 번째
+        type: template-transform
+        variables:
+        - value_selector:
+          - multi
+          - item
+          variable: arg1
+      id: m2
+      parentId: multi
+      position:
+        x: 200
+        y: 68
+      type: custom
+    - data:
+        isInIteration: true
+        iteration_id: multi
+        template: '{{ arg1 }}'
+        title: 두 번째
+        type: template-transform
+        variables:
+        - value_selector:
+          - m2
+          - output
+          variable: arg1
+      id: m3
+      parentId: multi
+      position:
+        x: 400
+        y: 68
+      type: custom
+    - data:
+        desc: ''
+        outputs:
+        - value_selector:
+          - iter
+          - output
+          variable: summaries
+        - value_selector:
+          - tool1
+          - text
+          variable: search
+        title: 끝
+        type: end
+      id: end
+      position:
+        x: 1200
+        y: 100
+      type: custom
+    - data:
+        author: 홍길동
+        desc: ''
+        height: 88
+        selected: false
+        showAuthor: true
+        text: '{"root":{"children":[{"children":[{"detail":0,"format":0,"mode":"normal","style":"","text":"검색 결과를 요약하는 실험용 흐름","type":"text","version":1}],"direction":"ltr","format":"","indent":0,"type":"paragraph","version":1}],"direction":"ltr","format":"","indent":0,"type":"root","version":1}}'
+        theme: blue
+        title: ''
+        type: ''
+        width: 240
+      id: note1
+      position:
+        x: 0
+        y: -120
+      type: custom-note

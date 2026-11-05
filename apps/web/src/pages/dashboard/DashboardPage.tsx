@@ -16,6 +16,7 @@ import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "rea
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { PageContainer } from "@/app/Layout";
 import { AppIcon, Avatar } from "@/components/AppIcon";
+import { DifyImportDialog } from "@/components/dify/DifyImportDialog";
 import { ProjectDialog, ProjectDot } from "@/components/projects/ProjectDialog";
 import { ErrorBox, Loading } from "@/components/ErrorBox";
 import { ListPager, ListToolbar, NoMatch } from "@/components/ListControls";
@@ -181,12 +182,14 @@ function TemplateRow({ projectId }: { projectId?: string }) {
   );
 }
 
-/** 내보낸 앱 파일(JSON)을 올려 새 앱으로 가져온다. */
+/** 내보낸 앱 파일(JSON)이나 Dify 앱 파일(.yml)을 올려 새 앱으로 가져온다. */
 function ImportAppButton({ projectId }: { projectId?: string }) {
   const ws = useSession((s) => s.workspaceId);
   const importApp = useImportApp(ws);
   const navigate = useNavigate();
   const fileRef = useRef<HTMLInputElement>(null);
+  const [menu, setMenu] = useState(false);
+  const [difyOpen, setDifyOpen] = useState(false);
   return (
     <>
       <input
@@ -229,14 +232,58 @@ function ImportAppButton({ projectId }: { projectId?: string }) {
           });
         }}
       />
-      <Button
-        size="sm"
-        variant="outline"
-        disabled={importApp.isPending}
-        onClick={() => fileRef.current?.click()}
-      >
-        <Upload className="h-4 w-4" /> 앱 가져오기
-      </Button>
+      <div className="relative">
+        <Button
+          size="sm"
+          variant="outline"
+          disabled={importApp.isPending}
+          aria-haspopup="menu"
+          aria-expanded={menu}
+          onClick={() => setMenu((v) => !v)}
+        >
+          <Upload className="h-4 w-4" /> 앱 가져오기
+        </Button>
+        {menu && (
+          <>
+            <button
+              type="button"
+              aria-label="메뉴 닫기"
+              className="fixed inset-0 z-10 cursor-default"
+              onClick={() => setMenu(false)}
+            />
+            <div
+              role="menu"
+              className="absolute right-0 z-20 mt-1.5 w-64 overflow-hidden rounded-xl border border-slate-200 bg-white py-1 shadow-lift"
+            >
+              <button
+                type="button"
+                role="menuitem"
+                className="block w-full px-4 py-2.5 text-left hover:bg-slate-50"
+                onClick={() => {
+                  setMenu(false);
+                  fileRef.current?.click();
+                }}
+              >
+                <span className="block text-sm font-medium text-slate-800">제니오 파일</span>
+                <span className="block text-xs text-slate-500">내보내기로 받은 .json 파일</span>
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                className="block w-full px-4 py-2.5 text-left hover:bg-slate-50"
+                onClick={() => {
+                  setMenu(false);
+                  setDifyOpen(true);
+                }}
+              >
+                <span className="block text-sm font-medium text-slate-800">Dify에서 가져오기</span>
+                <span className="block text-xs text-slate-500">Dify 내보내기(DSL) .yml 파일</span>
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+      <DifyImportDialog open={difyOpen} onClose={() => setDifyOpen(false)} projectId={projectId} />
     </>
   );
 }

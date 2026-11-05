@@ -692,3 +692,56 @@ DB 변경 없음: 지식베이스 설정(`knowledge_bases.settings` JSON)과 문
 - 템플릿: `tpl_inquiry_zendesk_slack`(병렬), `tpl_order_sms_notify`(병렬), `tpl_shopify_orders_mail`.
 - `safe_http` 응답 헤더 허용 목록에 `mcp-session-id`가 추가됐다.
 - 새 의존성: `PyYAML>=6`.
+
+## v0.8 Dify 앱 가져오기 (ADR 0012)
+| 메서드·경로 | 권한 | 설명 |
+|---|---|---|
+| POST /workspaces/{ws}/apps/import-dify | 소유자·관리자·제작자 | multipart `file`(`.yml`·`.yaml`·`.json`, 2MB 이하)와 선택 `project_id`, 또는 JSON `{text, project_id?}`. 새 앱(초안)과 변환 보고서를 돌려준다(201) |
+
+응답 `{app, report}`:
+- `app`: 만들어진 앱 상세(`draft_graph` 포함). 앱은 늘 초안이다.
+- `report`: `{mode, dify_version, converted[{node, label, dify_type, genio_type}], needs_attention[{node, label, message}], unsupported[{node, label, dify_type, message}], warnings[], validation_errors[{node, message}], stats{converted, needs_attention, unsupported, validation_errors}}`. `validation_errors`는 변환 뒤 검증기를 한 번 돌린 결과이고, 가져오기를 막지 않는다.
+
+오류(두 줄 문구): 422 YAML을 읽지 못함·Dify 파일이 아님·별칭(`*a`) 사용·지원하지 않는 앱 종류(`rag-pipeline` 등)·단계 300개 초과, 413 2MB 초과, 404 없는 프로젝트, 403 권한 없음.
+
+보안: `yaml.safe_load` 기반 로더에 별칭을 금지했다(부풀리기 공격 방지). 비밀 환경 값(`secret`)과 웹 요청 인증 키는 옮기지 않고 보고서에 '다시 넣어 주세요'로 적는다.
+
+### 앱 종류 → 제니오 앱
+| Dify `app.mode` | 제니오 | 내용 |
+|---|---|---|
+| `workflow` | 흐름 앱(workflow) | `workflow.graph`를 단계·연결로 변환 |
+| `advanced-chat`(챗플로우) | 챗 앱(chat) | 같은 변환 + 입력 단계의 첫 칸이 `message`(= `sys.query`) |
+| `chat`(챗봇) | 챗 앱 | `model_config`로 입력 → (지식 검색) → AI 답변 → 결과 흐름을 만든다 |
+| `agent-chat` | 챗 앱 | 입력 → (지식 검색) → 에이전트 → 결과 |
+| `completion` | 흐름 앱 | 입력 칸(`user_input_form`) → AI 답변 한 단계로 바꾸고 알림을 남긴다 |
+| 그 밖(`rag-pipeline` 등) | — | 422 |
+
+### 단계 대응표 (Dify `data.type` → 제니오)
+| Dify | 제니오 | 비고 |
+|---|---|---|
+| `start` | `input`(id `n1`) | 변수 → 입력 칸(text-input·paragraph·select→글, number→숫자, checkbox→참거짓, file·file-list→파일). select의 선택지는 이름에 적는다 |
+| `llm` | `llm` | 시스템/사용자 메시지 → `system`/`prompt`, `{{#context#}}` → 지식 검색 결과, memory → 대화 기억, vision → `images`, 온도. 모델 이름은 메모로 남기고 기본 AI 연결을 쓴다 |
+| `knowledge-retrieval` | `knowledge_search` | 지식베이스는 옮겨지지 않아 `kb_id`를 비운다(보고서에 안내). top_k·점수 기준은 옮긴다 |
+| `if-else` | `condition` | 비교 연산자를 조건식으로(`contains`·`start with`·`is`·`=`·`>`·`empty`·`in` 등). `and`/`or` 지원. 출구 `false` → `else` |
+| `code` | `code` | python3·javascript. `def main(...)`/`function main({...})`를 부르는 줄을 덧붙인다 |
+| `http-request` | `http` | method·url·params(주소 뒤에 붙임)·headers·json/raw 본문. 폼 본문은 JSON으로. 인증 키는 안 옮김 |
+| `template-transform` | `template` | 변수 이름을 `{{단계.값}}` 경로로 바꿈 |
+| `question-classifier` | `question_classifier` | 분류 id를 출구 이름으로 그대로 쓴다 |
+| `parameter-extractor` | `parameter_extractor` | 형식 string·number·bool·array를 옮김 |
+| `variable-aggregator`(옛 이름 `variable-assigner`) | `variable_aggregator` | 그룹 기능은 옮기지 못함 |
+| `assigner` | `variable_assigner` | over-write·set·append·extend·clear. 계산형 연산(`+=` 등)은 옮기지 못함 |
+| `document-extractor` | `document_extractor` | |
+| `list-operator` | `list_operator` | 거르기는 첫 조건만, 정렬·개수 제한 |
+| `answer`·`end` | `output` | `end`의 여러 출력은 "이름: 값" 줄로 |
+| `iteration` | `iteration` | 안에 단계가 하나(llm·template-transform·http-request)일 때만. `{{#반복.item#}}` → `{{item}}` |
+| `loop` | `loop` | 같은 조건. 멈춤 조건은 옮기지 못함 |
+| `agent` | `agent` | 지시·요청·최대 횟수. 도구는 옮기지 못함 |
+| `human-input` | `approval`(승인/반려 갈래) | 입력 칸이 있으면 `ask_person`. 버튼은 앞의 둘만 승인·반려로 |
+| `tool`·`trigger-*`·그 밖 | 꺼 둔 `template` 자리 표시 | 연결을 그대로 남겨 흐름 모양을 보이게 하고 `unsupported`에 적는다 |
+| 캔버스 메모(`custom-note`) | 메모(`notes`) | Lexical JSON이면 글자만 |
+
+변수 참조: `{{#노드.값#}}`·`value_selector`를 `{{노드.값}}`으로 바꾼다. `sys.query` → `{{n1.message}}`, `sys.files`·시작 파일 값 → 입력 단계의 파일 칸, `env.x` → `{{env.x}}`, `conversation.x` → `{{conv.x}}`. 값 이름이 다른 곳은 함께 바꾼다(`knowledge-retrieval.result` → `context`, `http-request.status_code` → `status`, `iteration.output` → `results`). `sys.user_id` 같은 제니오에 없는 시스템 값은 빈 값으로 바꾸고 알린다.
+
+앱 기능: `opening_statement`·`suggested_questions`·`suggested_questions_after_answer`(→ 이어질 질문)·`retriever_resource`(→ 출처)·`speech_to_text`/`text_to_speech`·`file_upload`·`sensitive_word_avoidance`(키워드 방식 → 금지어)를 옮긴다. 환경 변수는 앱 환경 값으로(비밀은 값 없이). 대화 변수의 처음 값은 옮기지 않는다.
+
+확인 한계: 시험 자료는 Dify DSL(0.1.x)을 알고 있는 대로 직접 쓴 것이다. 실제 Dify에서 내보낸 파일로는 아직 확인하지 못했다.
