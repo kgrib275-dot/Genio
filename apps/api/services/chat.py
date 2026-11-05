@@ -141,15 +141,31 @@ def citations_from_steps(db: Session, run_id: str) -> list[dict[str, Any]]:
             continue
         for r in results:
             if isinstance(r, dict) and "chunk_id" in r:
-                out.append(
-                    {
-                        "index": len(out) + 1,
-                        "filename": r.get("filename", ""),
-                        "content": str(r.get("content", ""))[:500],
-                        "score": r.get("score"),
-                    }
-                )
+                cite: dict[str, Any] = {
+                    "index": len(out) + 1,
+                    "filename": r.get("filename", ""),
+                    "content": str(r.get("content", ""))[:500],
+                    "score": r.get("score"),
+                }
+                img = r.get("image")
+                if isinstance(img, dict) and img.get("file_id"):
+                    # v0.9 이미지 색인: 그림 조각이면 썸네일을 보여 줄 수 있게 참조를 싣는다
+                    cite["image"] = {k: img.get(k) for k in ("file_id", "caption", "page", "kb_id")}
+                out.append(cite)
     return out[:8]
+
+
+def _cites_for_client(
+    db: Session, conv: Conversation, cites: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
+    """보낼 인용: 그림이 있고 누구나 열 수 있는 배포의 대화라면 24시간 서명 주소(image.url)를 붙인다."""
+    if not any(isinstance(c.get("image"), dict) for c in cites) or not conv.deployment_id:
+        return cites
+    from api.services.kb_images import with_image_urls
+
+    dep = db.get(Deployment, conv.deployment_id)
+    token = dep.public_token if dep is not None and dep.access == "public" else None
+    return with_image_urls(cites, token)
 
 
 def follow_up_questions(db: Session, workspace_id: str, question: str, answer: str) -> list[str]:
@@ -553,7 +569,7 @@ def _check_run(
             payload["files"] = run_files.with_public_links(made, app.id, run_id)
     events_out: list[Event] = [("moderated" if was_moderated else "answer", payload)]
     if cites:
-        events_out.append(("citations", cites))
+        events_out.append(("citations", _cites_for_client(db, conv, cites)))
     if status == "waiting_approval":
         # 챗 화면은 이 신호를 받으면 지난 메시지를 주기적으로 다시 읽어 늦게 온 결과를 보여 준다
         events_out.append(("pending", {"run_id": run_id, "message": answer}))

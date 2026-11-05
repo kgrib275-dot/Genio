@@ -37,6 +37,8 @@ DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.docu
 PPTX_MIME = "application/vnd.openxmlformats-officedocument.presentationml.presentation"
 XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 ALLOWED_MIME.update({DOCX_MIME: "docx", PPTX_MIME: "pptx", XLSX_MIME: "xlsx", "text/html": "html"})
+# v0.9: 그림 파일(PNG·JPG·WEBP)은 '이미지 설명' 단계가 켜져 있을 때만 검색 조각이 된다
+ALLOWED_MIME.update({"image/png": "image", "image/jpeg": "image", "image/webp": "image"})
 EXTENSIONS = {
     ".pdf": "pdf",
     ".txt": "txt",
@@ -47,6 +49,10 @@ EXTENSIONS = {
     ".xlsx": "xlsx",
     ".html": "html",
     ".htm": "html",
+    ".png": "image",
+    ".jpg": "image",
+    ".jpeg": "image",
+    ".webp": "image",
 }
 MAX_SHEET_ROWS = 5000
 
@@ -108,6 +114,8 @@ def _xlsx_text(content: bytes) -> str:
 
 def extract_text(content: bytes, filename: str, mime: str) -> str:
     kind = kind_of(filename, mime)
+    if kind == "image":
+        return ""  # 그림은 글이 없다. '이미지 설명' 단계가 그림을 글로 바꾼다.
     if kind == "pdf":
         try:
             reader = PdfReader(io.BytesIO(content))
@@ -310,7 +318,8 @@ def _pieces(text: str, cfg: dict[str, Any]) -> list[tuple[str, str | None]]:
 
 
 def process_document(db: Session, document_id: str) -> None:
-    """문서 처리 순서(v0.6 kb_pipeline)대로 꺼내기 → 정리 → 나누기 → 꼬리표 → 임베딩·저장."""
+    """문서 처리 순서(v0.6 kb_pipeline)대로 꺼내기 → 정리 → 나누기 → (번역·요약) → 꼬리표 → (이미지 설명) → 저장."""
+    from api.services import kb_images
     from api.services.kb_pipeline import PipelineError, run_pipeline
 
     doc = db.get(Document, document_id)
@@ -336,14 +345,33 @@ def process_document(db: Session, document_id: str) -> None:
         pieces = result.pieces
         if not pieces:
             raise ValueError(
-                "문서에서 글자를 찾지 못했어요. 스캔 이미지 PDF는 아직 지원하지 않아요."
+                "문서에서 글자를 찾지 못했어요. 스캔 이미지 PDF는 '이미지 설명'을 켜면 읽어 볼 수 있어요."
             )
         vectors = _embed(db, kb.workspace_id, [p.content for p in pieces], kb.embedding_model)
+        # 새 결과가 준비된 뒤에야 예전 조각·그림을 지운다(실패하면 예전 것이 남는다)
+        old_images = kb_images.delete_document_images(db, doc)
         db.execute(delete(Chunk).where(Chunk.document_id == doc.id))
+        image_ids: list[str] = []
+        image_files: dict[int, str] = {}
+        for n, img in enumerate(result.images):
+            f = kb_images.store_image(
+                db, kb.workspace_id, kb_images.image_file_name(kb.id, doc.id, n, img), img
+            )
+            image_files[n] = f.id
+            image_ids.append(f.id)
         for i, (piece, vec) in enumerate(zip(pieces, vectors, strict=True)):
             meta: dict[str, Any] = {"index": i, "filename": doc.filename}
             if piece.question is not None:
                 meta.update({"qa": True, "question": piece.question, "answer": piece.answer})
+            if piece.kind == "image" and piece.image_index is not None:
+                meta.update(
+                    {
+                        "kind": "image",
+                        "file_id": image_files.get(piece.image_index),
+                        "caption": piece.caption,
+                        "page": piece.page,
+                    }
+                )
             db.add(
                 Chunk(
                     document_id=doc.id,
@@ -356,10 +384,21 @@ def process_document(db: Session, document_id: str) -> None:
                     metadata_=meta,
                 )
             )
-        if result.metadata:
-            doc.doc_metadata = {**(doc.doc_metadata or {}), **result.metadata}
+        extra: dict[str, Any] = {}
+        if image_ids:
+            extra[kb_images.IMG_META_KEY] = image_ids
+        if result.image_report:
+            extra[kb_images.IMG_REPORT_KEY] = result.image_report
+        if result.usage:
+            extra["_ai_usage"] = {
+                "calls": len(result.usage),
+                "input_tokens": sum(u[1] for u in result.usage),
+                "output_tokens": sum(u[2] for u in result.usage),
+            }
+        doc.doc_metadata = {**(doc.doc_metadata or {}), **result.metadata, **extra}
         doc.status = "ready"
         db.commit()
+        storage.purge(old_images)
     except LlmError as exc:
         db.rollback()
         doc.status = "failed"
@@ -633,6 +672,19 @@ def search(
                 **(
                     {"question": c.metadata_.get("question"), "answer": c.metadata_.get("answer")}
                     if (c.metadata_ or {}).get("qa")
+                    else {}
+                ),
+                **(
+                    {
+                        "kind": "image",
+                        "image": {
+                            "file_id": c.metadata_.get("file_id"),
+                            "caption": c.metadata_.get("caption"),
+                            "page": c.metadata_.get("page"),
+                            "kb_id": c.kb_id,
+                        },
+                    }
+                    if (c.metadata_ or {}).get("kind") == "image" and c.metadata_.get("file_id")
                     else {}
                 ),
             }

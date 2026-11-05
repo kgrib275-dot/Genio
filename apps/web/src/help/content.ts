@@ -9,6 +9,7 @@ import { FILES_HELP_SECTIONS } from "@/help/content_files";
 import { EVENTS_HELP_SECTIONS } from "@/help/content_events";
 import { TRACE_HELP_SECTIONS } from "@/help/content_trace";
 import { KB_HELP_SECTIONS } from "@/help/content_kb";
+import { KBCANVAS_HELP_SECTIONS } from "@/help/content_kbcanvas";
 import { LLM_HELP_SECTIONS } from "@/help/content_llm";
 import { HELP_SECTIONS_TOOLS } from "@/help/content_mcp";
 
@@ -504,6 +505,7 @@ export const HELP_SECTIONS: HelpSection[] = [
   ...FILES_HELP_SECTIONS,
   ...TRACE_HELP_SECTIONS,
   ...LLM_HELP_SECTIONS,
+  ...KBCANVAS_HELP_SECTIONS,
   {
     id: "faq",
     title: "자주 묻는 질문",

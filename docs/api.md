@@ -1084,3 +1084,52 @@ ADR 0013. 마이그레이션 0015(`apps.draft_rev`·`updated_by`, `draft_snapsho
 - 지식베이스 설정: `retrieval.rerank_connection`(재정렬 전용 연결 id)·`retrieval.rerank_model`. 저장할 때 연결이 이 워크스페이스의 재정렬 전용 연결이 아니면 422. 설정되어 있고 `rerank`가 켜져 있으면 검색 결과를 전용 모델로 줄 세우고 결과에 `rerank_score`가 붙는다(`score`는 검색 점수 그대로). 전용 모델 호출이 실패하면 AI(LLM) 재정렬로 이어 가고, 그것도 안 되면 검색 순서 그대로 돌려준다. 검색 시험·검색 튜닝·`knowledge_search` 단계가 같은 경로를 쓴다.
 - `GET /workspaces/{ws}/rerank-connections`(제작자 이상): 재정렬 전용 연결 목록(키 없음).
 - 연결 테스트: `POST /workspaces/{ws}/llm-providers/test`에 `model`을 줄 수 있다. 재정렬 전용 연결은 문서 두 개로 한 번 재정렬해 본다.
+
+## v0.9 지식 처리 캔버스·이미지 색인
+
+문서 처리 순서가 8단계로 늘고(`kb.settings.pipeline`), 단계마다 결과를 돌려줘 화면의 '처리 캔버스'가 숫자와 미리 보기를 그린다. 이미지 색인은 DB 구조를 바꾸지 않는다(그림 파일은 워크스페이스 파일, 설명은 조각 메타데이터).
+
+### 처리 순서(8단계)
+순서는 고정: `extract → clean → split → translate → summarize → metadata → image → store`. 예전 5단계로 저장된 설정은 빠진 단계를 기본값으로 채워 읽는다.
+
+| 단계 | 켜기 | 설정 | 비고 |
+|---|---|---|---|
+| translate(번역) | 기본 꺼짐 | `target_language`(기본 영어, 30자) | 조각·부모 문단마다 AI 한 번. 한 번에 최대 200개 |
+| summarize(요약 붙이기) | 기본 꺼짐 | 없음 | 조각마다 한 줄 요약을 검색용 글 앞에 붙임. 최대 200개 |
+| image(이미지 설명) | 기본 꺼짐 | `max_images` 1~20(기본 20), `min_size` 50~2000(기본 100) | 그림 한 장마다 비전 모델 한 번 |
+
+- 질문·답(`chunk_mode=qa`) 방식에서는 번역·요약 붙이기를 건너뛴다(로그에 안내).
+- AI 단계는 이번 달 AI 사용 한도(`monthly_budget_usd`)를 이미 넘었으면 **건너뛴다**(문서는 글만 처리됨, 단계 결과 `skipped`에 이유). 이 단계들의 AI 비용은 실행 비용 합계에 들어가지 않는다(문서 꼬리표 `_ai_usage`에 호출 수·토큰만 남김).
+
+### 요청
+| 요청 | 권한 | 설명 |
+|---|---|---|
+| GET /knowledge-pipeline-templates | 로그인한 누구나 | 처리 순서 모음 4가지 `[{id, name, description, settings{pipeline[8], chunk_mode, chunk_size…}}]`: `general`(일반 문서), `rules`(규정집, 머리글·바닥글 제거 + 부모-자식), `faq`(FAQ 표, 질문·답), `minutes`(회의록, 파일 이름의 날짜를 `날짜` 꼬리표로) |
+| POST /knowledge-bases/{id}/preview | 제작자 이상 | (v0.6) 저장 없이 돌려 본다. 응답에 `stages`·`ai_calls`가 더해졌다 |
+| GET /knowledge-bases/{id}/image-estimate?max_images=&min_size= | 제작자 이상 | 앞의 100개 문서 기준 `{documents, scanned, partial, images, vision_calls, estimated_cost_usd, model, model_ok, message, enabled, budget_message}`. 실제 AI는 부르지 않는다. 외부 지식베이스는 409 |
+| GET /knowledge-bases/{id}/images/{file_id} | 운영자 이상 | 지식베이스 그림 파일(이 지식베이스 것만, 아니면 404) |
+| GET·HEAD /public/apps/{token}/kb-images/{file_id}?exp=&sig= | 서명 또는 로그인 | 공개 챗의 그림. 서명(24시간)이 맞으면 로그인 없이, 아니면 로그인한 사용자가 배포 접근 규칙을 통과해야 한다. 배포가 공개가 아니면 서명만으로는 안 열린다. 같은 워크스페이스의 지식베이스 그림만(아니면 404). 허용 IP 제한은 전역 가드가 막는다 |
+
+### 미리 보기 응답 `stages`
+단계 이름 → 결과(없는 값은 빠질 수 있다). 미리 보기는 아무것도 저장하지 않고, AI 단계는 앞의 3조각(그림 3장)에만 AI를 부른다.
+
+| 단계 | 값 |
+|---|---|
+| extract | `chars`, `kind`, `sample` |
+| clean | `enabled`, `before_chars`, `after_chars`, `before_sample`, `after_sample` |
+| split | `chunks`, `mode`, `samples[]` |
+| translate | `enabled`, `language`, `calls`, `calls_full`(전부 돌릴 때), `estimated_cost_usd`(전체 어림), `samples[{before, after}]`, `cut`, `skipped` |
+| summarize | `calls`, `calls_full`, `estimated_cost_usd`, `samples[{summary}]`, `skipped` |
+| metadata | `enabled`, `tags` |
+| image | `found`, `images`, `described`, `failed`, `calls`, `calls_full`, `estimated_cost_usd`, `model`, `too_small`, `too_big`, `unsupported`, `duplicates`, `truncated`, `cut`, `errors[]`, `skipped` |
+| store | `chunks` |
+
+`chunks[]`에는 `kind`(`text`|`image`)가 붙고, 그림 조각은 `image{caption, page, index}`와 150KB 이하면 `thumb`(data URL)이 붙는다. 글 조각은 앞의 50개, 그림 조각은 모두 보여 준다.
+
+### 이미지 색인
+- 뽑는 곳: PDF(쪽마다, 200쪽까지), DOCX·XLSX(문서 안 미디어), PPTX(슬라이드마다, `page`=슬라이드 번호), 올린 PNG·JPG·WEBP 파일(한 장). 문서당 `max_images`장, `min_size` 미만·5MB 초과·그림이 아닌 파일·같은 그림(SHA-256)은 뺀다. 읽지 못하는 문서는 그림 0장으로 처리한다(문서 처리는 계속).
+- 설명: 비전을 지원하는 모델이 `이 그림을 검색에 쓸 수 있게 한국어로 2~3문장으로 설명하고, 그림 속 글자는 그대로 옮겨 적어 주세요`에 답한다. 기본 모델이 그림을 못 읽으면 같은 워크스페이스의 다른 연결에서 비전 모델을 찾는다(없으면 이 단계만 건너뜀, 두 줄 안내). 연속 3번 실패하면 남은 그림은 건너뛴다.
+- 저장: 그림 파일은 워크스페이스 파일로 두며(`files.filename=kbimg/{kb}/{doc}/{n}.{확장자}`, v0.8 파일 저장소 설정을 따름) 설명은 조각(`content="[그림 3쪽] …"`, 메타데이터 `kind="image"`, `file_id`, `caption`, `page`)이 된다. 문서 꼬리표의 `_image_files`(그림 파일 id), `_image_report`는 밑줄 키라 화면·검색에는 안 보인다. 다시 나누면 새 결과를 만든 뒤 예전 그림 파일을 지우고, 문서·지식베이스를 지우면 그림 파일도 지운다.
+- 문서 목록 응답에 `image_report{found, images, described, failed, calls, truncated, skipped}`(그림 색인을 안 돌렸으면 null)가 붙는다. 조각 목록에는 `kind`, `image_file_id`, `page`가 붙는다.
+- 검색 결과(`knowledge_search` 단계의 `results[]`, 검색 시험)에 그림 조각은 `kind:"image"`와 `image{file_id, caption, page, kb_id}`가 붙는다. 챗 인용(`citations`)에도 `image`가 실리고, **누구나 열 수 있는 배포**에서는 보낼 때 24시간 서명 주소 `image.url`을 붙인다(저장된 인용에는 주소를 남기지 않고, 지난 대화를 다시 열 때 새로 서명한다). 멤버 전용 배포·빌더 시험은 `url` 없이 `image.kb_id`로 로그인 상태에서 불러온다.
+- 서명 주소: `HMAC-SHA256(GENIO_SECRET_KEY, "kbimg\n{token}\n{file_id}\n{exp}")`(v0.9 실행 결과 파일의 서명과 이름이 겹치지 않게 접두어 `kbimg`를 쓴다).

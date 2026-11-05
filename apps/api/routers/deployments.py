@@ -43,6 +43,7 @@ from api.services.app_config import merged_features
 from api.services.chat import ChatRequest, input_fields, run_chat, start_chat, start_handoff
 from api.services.files import save_upload
 from api.services.ip_access import normalize as normalize_ips
+from api.services.kb_images import with_image_urls
 from api.services.queue import enqueue_run
 
 router = APIRouter(tags=["deployments"])
@@ -545,7 +546,9 @@ def public_session_messages(
             "content": m.content,
             "created_at": m.created_at,
             "feedback": m.feedback,
-            "citations": m.citations or [],
+            "citations": with_image_urls(
+                m.citations or [], dep.public_token if dep.access == "public" else None
+            ),
             "moderated": bool(m.moderated),
             "annotated": m.annotation_id is not None,
         }

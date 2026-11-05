@@ -1,6 +1,7 @@
 import { Eye, EyeOff, Pencil, Plus, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { ErrorBox, Loading } from "@/components/ErrorBox";
+import { KbImage } from "@/components/knowledge/KbImage";
 import { ListPager, ListToolbar, NoMatch } from "@/components/ListControls";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -459,6 +460,9 @@ export function MetadataDialog({
   );
 }
 
+/** v0.9 이미지 색인: 그림 설명 조각이면 kind와 그림 파일 id가 붙는다 */
+type KbChunkImage = { kind?: string; image_file_id?: string | null; page?: number | null };
+
 export function ChunksDialog({
   doc,
   onClose,
@@ -507,6 +511,7 @@ export function ChunksDialog({
           >
             <div className="mb-1.5 flex flex-wrap items-center gap-2 text-xs text-slate-400">
               <Badge tone="indigo">#{c.index + 1}</Badge>
+              {(c as KbChunkImage).kind === "image" && <Badge tone="green">그림 설명</Badge>}
               <span>{c.char_count}자</span>
               {!c.enabled && <Badge>검색에서 뺌</Badge>}
               {editable && (
@@ -562,6 +567,17 @@ export function ChunksDialog({
               </div>
             ) : (
               <p className="whitespace-pre-wrap text-slate-700">{c.content}</p>
+            )}
+            {(c as KbChunkImage).image_file_id && editing?.id !== c.id && (
+              <div className="mt-2">
+                <KbImage
+                  image={{
+                    file_id: (c as KbChunkImage).image_file_id as string,
+                    kb_id: doc.kb_id,
+                    caption: c.content,
+                  }}
+                />
+              </div>
             )}
             {c.parent_content && editing?.id !== c.id && (
               <details className="mt-2 text-xs text-slate-500">
