@@ -35,6 +35,7 @@ const HelpPage = lazy(() => import("@/pages/help/HelpPage"));
 const SettingsPage = lazy(() => import("@/pages/settings/SettingsPage"));
 const ProjectsBoardPage = lazy(() => import("@/pages/projects/ProjectsBoardPage"));
 const NotFoundPage = lazy(() => import("@/pages/NotFoundPage"));
+const ApiDocsPage = lazy(() => import("@/pages/apidocs/ApiDocsPage"));
 const TermsPage = lazy(() =>
   import("@/pages/legal/LegalPage").then((m) => ({ default: m.TermsPage })),
 );
@@ -56,6 +57,7 @@ export default function App() {
             <Route path="/invite/:token" element={<InviteAcceptPage />} />
             <Route path="/share/:token" element={<SharePage />} />
             <Route path="/t/:token" element={<TaskLinkPage />} />
+            <Route path="/api-docs" element={<ApiDocsPage />} />
             <Route path="/terms" element={<TermsPage />} />
             <Route path="/privacy" element={<PrivacyPage />} />
             <Route

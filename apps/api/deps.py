@@ -77,6 +77,30 @@ def get_optional_user(request: Request, db: DbDep) -> User | None:
 _PASSWORD_CHANGE_OK = ("/api/v1/me", "/api/v1/me/password")
 
 
+PUBLIC_APP_PREFIX = "/api/v1/public/apps/"
+# 썸네일은 메신저 로봇이 가져가므로 IP 제한에서 뺀다(제한이 있는 앱은 기본 그림만 나간다)
+IP_GUARD_EXEMPT_TAILS = ("share-image",)
+
+
+def public_ip_guard(request: Request, db: DbDep) -> None:
+    """배포 주소(/public/apps/{token}/…)에 허용 IP가 정해져 있으면, 그 주소에서 온 요청만 통과시킨다.
+
+    앱 전체(전역) 의존성이라 나중에 생기는 공개 경로도 자동으로 막힌다.
+    """
+    path = request.url.path
+    if not path.startswith(PUBLIC_APP_PREFIX):
+        return
+    token, _, tail = path[len(PUBLIC_APP_PREFIX) :].partition("/")
+    if not token or tail.rstrip("/") in IP_GUARD_EXEMPT_TAILS:
+        return
+    from api.routers.common import client_ip
+    from api.services.ip_access import allowed_ips_of, blocked_error, ip_allowed
+
+    entries = allowed_ips_of(db, token)
+    if entries and not ip_allowed(client_ip(request), entries):
+        raise blocked_error()
+
+
 def get_current_user(request: Request, db: DbDep) -> User:
     user = get_optional_user(request, db)
     if user is None:

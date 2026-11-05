@@ -13,6 +13,7 @@ import { useParams, useSearchParams } from "react-router-dom";
 import { BuilderChat } from "@/components/builder-chat/BuilderChat";
 import { FlowCanvas } from "@/components/canvas/FlowCanvas";
 import { NodePalette } from "@/components/canvas/NodePalette";
+import { viewportCenter } from "@/components/canvas/viewportBridge";
 import { NodeSettingsPanel } from "@/components/canvas/NodeSettingsPanel";
 import { defaultData } from "@/components/canvas/nodeUtils";
 import { RunPanel } from "@/components/canvas/RunPanel";
@@ -305,6 +306,21 @@ export default function BuilderPage() {
                     <div className="mt-2 w-72 rounded-xl border border-slate-200 bg-white shadow-lift">
                       <NodePalette
                         types={specs}
+                        onInsertSnippet={(s) => {
+                          const r = useCanvas
+                            .getState()
+                            .insertSnippet(
+                              { nodes: s.graph.nodes, edges: s.graph.edges },
+                              viewportCenter(),
+                            );
+                          setShowPalette(false);
+                          if (r.pasted)
+                            toast.success(
+                              s.reselect.length || s.outer_refs.length
+                                ? `'${s.name}'을 끼워 넣었어요. 빨간 테두리 단계에서 고르는 칸을 다시 골라 주세요.`
+                                : `'${s.name}'을 끼워 넣었어요. 끌어서 자리를 옮길 수 있어요.`,
+                            );
+                        }}
                         onAdd={(t) => {
                           const n = graph.nodes.length;
                           useCanvas

@@ -1,5 +1,15 @@
-import { Copy, Download, GitCompare, Palette, RotateCcw, UserCheck } from "lucide-react";
+import {
+  Copy,
+  Download,
+  GitCompare,
+  Palette,
+  RotateCcw,
+  ShieldCheck,
+  UserCheck,
+} from "lucide-react";
 import { VersionDiffView } from "@/components/VersionDiffView";
+import { IpEditor } from "@/components/deploy/IpEditor";
+import type { DeploymentWithIps } from "@/lib/api/ipAccess";
 import { useEffect, useState, type FormEvent } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { JsonView } from "@/components/canvas/RunPanel";
@@ -233,6 +243,7 @@ function DeploymentsCard({ appId, editable }: { appId: string; editable: boolean
   const versions = useVersions(appId);
   const create = useCreateDeploymentWithUsers(appId);
   const [editingAccess, setEditingAccess] = useState<string | null>(null);
+  const [editingIps, setEditingIps] = useState<string | null>(null);
   const [users, setUsers] = useState<string[]>([]);
   const remove = useDeleteDeployment(appId);
   const [channel, setChannel] = useState<Channel>("share_link");
@@ -348,6 +359,19 @@ function DeploymentsCard({ appId, editable }: { appId: string; editable: boolean
                   <UserCheck className="h-3.5 w-3.5" /> 쓸 수 있는 사람
                 </Button>
               )}
+              {(d as DeploymentWithIps).allowed_ips?.length ? (
+                <Badge tone="amber">IP 제한 {(d as DeploymentWithIps).allowed_ips?.length}곳</Badge>
+              ) : null}
+              {editable && (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  aria-expanded={editingIps === d.id}
+                  onClick={() => setEditingIps(editingIps === d.id ? null : d.id)}
+                >
+                  <ShieldCheck className="h-3.5 w-3.5" /> IP 제한
+                </Button>
+              )}
               {editable && d.channel !== "api" && (
                 <Button
                   size="sm"
@@ -381,6 +405,13 @@ function DeploymentsCard({ appId, editable }: { appId: string; editable: boolean
               </>
             )}
             {d.channel === "api" && <CopyRow label="API 주소(POST, SSE)" value={d.api_url} />}
+            {editingIps === d.id && (
+              <IpEditor
+                appId={appId}
+                dep={d as DeploymentWithIps}
+                onClose={() => setEditingIps(null)}
+              />
+            )}
             {editingAccess === d.id && (
               <AccessEditor
                 appId={appId}

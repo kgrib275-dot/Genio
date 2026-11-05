@@ -194,6 +194,8 @@ class Deployment(Base):
     created_at: Mapped[datetime] = _created()
     # v0.4: 위젯 모양(색·위치·인사말 등)
     appearance: Mapped[dict[str, Any]] = mapped_column(JsonType, default=dict, server_default="{}")
+    # v0.8: 이 주소(IPv4·IPv6·CIDR)에서만 열 수 있다. 비어 있으면 제한 없음
+    allowed_ips: Mapped[list[str]] = mapped_column(JsonType, default=list, server_default="[]")
 
 
 class Run(Base):
@@ -667,6 +669,24 @@ class HumanTask(Base):
     completed_by: Mapped[str | None] = mapped_column(
         ForeignKey("users.id", name="human_tasks_completed_by_fkey"), nullable=True
     )
+
+
+class Snippet(Base):
+    """스니펫(v0.8): 자주 쓰는 단계 묶음. 캔버스에서 골라 저장하고 다른 흐름에 끼워 넣는다."""
+
+    __tablename__ = "snippets"
+    id: Mapped[str] = _id()
+    workspace_id: Mapped[str] = mapped_column(
+        ForeignKey("workspaces.id", ondelete="CASCADE"), index=True
+    )
+    name: Mapped[str] = mapped_column(String(100))
+    description: Mapped[str] = mapped_column(Text, default="", server_default="")
+    # {"nodes": [...], "edges": [...]} — 연결 정보·지식베이스 같은 고르기 값은 비워 둔다
+    graph: Mapped[dict[str, Any]] = mapped_column(JsonType, default=dict, server_default="{}")
+    created_by: Mapped[str | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    created_at: Mapped[datetime] = _created()
 
 
 class ErrorEvent(Base):

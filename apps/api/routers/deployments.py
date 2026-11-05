@@ -42,6 +42,7 @@ from api.services import apps as app_svc
 from api.services.app_config import merged_features
 from api.services.chat import ChatRequest, input_fields, run_chat, start_chat, start_handoff
 from api.services.files import save_upload
+from api.services.ip_access import normalize as normalize_ips
 from api.services.queue import enqueue_run
 
 router = APIRouter(tags=["deployments"])
@@ -68,6 +69,8 @@ class Appearance(BaseModel):
     share_title: str = Field(default="", max_length=60)
     share_description: str = Field(default="", max_length=160)
     share_image: str = Field(default="", max_length=64)
+    # v0.8: 웹앱 로고(파일 id). 공유 화면·위젯 머리에 보인다
+    share_logo: str = Field(default="", max_length=64)
 
 
 def appearance_of(d: Deployment) -> dict[str, Any]:
@@ -99,6 +102,7 @@ def _dep(d: Deployment, version: int | None, origin: str) -> dict[str, Any]:
         "widget_snippet": f'<script src="{origin}/api/v1/public/apps/{d.public_token}/widget.js" async></script>',
         "api_url": f"{origin}/api/v1/public/apps/{d.public_token}/chat",
         "appearance": appearance_of(d),
+        "allowed_ips": [str(x) for x in (d.allowed_ips or [])],
     }
 
 
@@ -109,6 +113,8 @@ class DeploymentIn(BaseModel):
     # v0.5: 특정 사용자(워크스페이스 멤버 user id). 역할과 함께 쓰면 둘 중 하나만 맞아도 된다
     allowed_users: list[str] = Field(default_factory=list, max_length=500)
     version: int | None = None
+    # v0.8: 허용 IP·대역(비우면 제한 없음)
+    allowed_ips: list[str] = Field(default_factory=list, max_length=100)
 
 
 def _members_only(db: Session, workspace_id: str, user_ids: list[str]) -> list[str]:
@@ -170,6 +176,7 @@ def create_deployment(
         access=body.access,
         allowed_roles=list(body.allowed_roles) if body.access == "roles" else [],
         allowed_users=users,
+        allowed_ips=normalize_ips(body.allowed_ips),
     )
     ctx.db.add(dep)
     app.status = "published"
@@ -204,6 +211,8 @@ class DeploymentPatch(BaseModel):
     access: Literal["workspace", "roles", "public"] | None = None
     allowed_roles: list[Role] | None = None
     allowed_users: list[str] | None = Field(default=None, max_length=500)
+    # v0.8: 허용 IP·대역. []이면 제한을 푼다
+    allowed_ips: list[str] | None = Field(default=None, max_length=100)
 
 
 @router.patch("/deployments/{deployment_id}")
@@ -214,7 +223,31 @@ def update_deployment(
     if dep is None:
         raise not_found("배포")
     app = ctx.db.get(App, dep.app_id)
+    if body.allowed_ips is not None:
+        ips = normalize_ips(body.allowed_ips)
+        if ips != list(dep.allowed_ips or []):
+            dep.allowed_ips = ips
+            if app is not None:
+                audit(
+                    ctx.db,
+                    workspace_id=app.workspace_id,
+                    user_id=ctx.user.id,
+                    action="app.deploy_ips",
+                    target_type="deployment",
+                    target_id=dep.id,
+                    meta={"count": len(ips)},
+                )
     if body.appearance is not None:
+        if body.appearance.share_logo and app is not None:
+            from api.services.share_meta import MAX_LOGO_BYTES, logo_ok
+
+            logo = ctx.db.get(StoredFile, body.appearance.share_logo)
+            if not logo_ok(logo, app.workspace_id):
+                raise AppError(
+                    422,
+                    "로고로 쓸 수 없는 그림이에요.",
+                    f"PNG·JPG·WEBP 그림을 {MAX_LOGO_BYTES // (1024 * 1024)}MB 이하로 올려 주세요.",
+                )
         if body.appearance.share_image and app is not None:
             from api.services.share_meta import MAX_IMAGE_BYTES, image_ok
 

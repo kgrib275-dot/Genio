@@ -42,13 +42,17 @@ export default function SharePage() {
   if (!info) return null;
   const look = appearanceOf(info.appearance);
   const title = look.title || info.name;
+  // 앱 관리자가 올린 로고(없으면 앱 아이콘)
+  const logoUrl = look.share_logo
+    ? `/api/v1/public/apps/${token}/share-logo?v=${look.share_logo}`
+    : null;
 
   if (!info.can_use) {
     const needLogin = info.requires_login && !loggedIn;
     return (
       <div className="flex h-[100dvh] flex-col bg-slate-50">
         <header className="flex shrink-0 items-center gap-3 border-b border-slate-200 bg-white px-3 py-2.5 sm:px-4">
-          <AppIcon name={info.name} icon={info.icon} size="sm" />
+          <AppIcon name={info.name} icon={info.icon} size="sm" logoUrl={logoUrl} />
           <p className="min-w-0 flex-1 truncate text-sm font-semibold">{title}</p>
         </header>
         <div className="mx-auto w-full max-w-md p-6 text-sm">
@@ -84,6 +88,7 @@ export default function SharePage() {
           token={token}
           title={title}
           icon={info.icon}
+          logoUrl={logoUrl}
           description={info.description}
           fields={info.input_fields}
           accent={look.primary_color}
@@ -97,6 +102,7 @@ export default function SharePage() {
       <ChatView
         title={title}
         icon={info.icon}
+        logoUrl={logoUrl}
         description={info.description}
         features={info.features ?? {}}
         inputFields={info.input_fields}

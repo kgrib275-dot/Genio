@@ -24,6 +24,9 @@ DEFAULT_DESCRIPTION = (
 DEFAULT_IMAGE = Path(__file__).resolve().parent.parent / "assets" / "og-default.png"
 IMAGE_MIMES = ("image/png", "image/jpeg", "image/webp", "image/gif")
 MAX_IMAGE_BYTES = 2 * 1024 * 1024
+# 웹앱 로고(v0.8): 투명 배경을 쓰는 PNG·WEBP·JPG, 1MB 이하
+LOGO_MIMES = ("image/png", "image/jpeg", "image/webp")
+MAX_LOGO_BYTES = 1 * 1024 * 1024
 TITLE_MAX = 60
 DESCRIPTION_MAX = 160
 
@@ -42,12 +45,22 @@ def image_ok(f: StoredFile | None, workspace_id: str) -> bool:
     )
 
 
+def logo_ok(f: StoredFile | None, workspace_id: str) -> bool:
+    return (
+        f is not None
+        and f.workspace_id == workspace_id
+        and f.mime in LOGO_MIMES
+        and 0 < f.size <= MAX_LOGO_BYTES
+    )
+
+
 def public_deployment(db: Session, token: str) -> tuple[Deployment, App] | None:
     """누구나 열 수 있는 배포만 돌려준다(멤버 전용·없는 링크는 None)."""
     if not token or token == "-":  # noqa: S105 - "-"는 일반 소개를 뜻하는 자리표시자
         return None
     dep = db.scalar(select(Deployment).where(Deployment.public_token == token))
-    if dep is None or dep.access != "public":
+    # 누구나 열 수 있고 IP 제한이 없는 배포만(제한이 있는 앱의 이름·소개는 메신저에 내보내지 않는다)
+    if dep is None or dep.access != "public" or dep.allowed_ips:
         return None
     app = db.get(App, dep.app_id)
     return (dep, app) if app is not None else None

@@ -1,6 +1,6 @@
-import { Copy, KeyRound, Plus, Trash2 } from "lucide-react";
+import { BookOpen, Copy, KeyRound, Plus, Trash2 } from "lucide-react";
 import { useState } from "react";
-import { useParams } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
 import { ErrorBox, Loading } from "@/components/ErrorBox";
 import { ListPager, ListToolbar, NoMatch } from "@/components/ListControls";
 import { Button } from "@/components/ui/button";
@@ -192,6 +192,15 @@ export default function AppApiPage() {
           <CardHeader
             title="사용 방법"
             description="요청 헤더에 Authorization: Bearer 키 를 붙여요. 키는 서버에만 두세요."
+            action={
+              <Link
+                to="/api-docs"
+                target="_blank"
+                className="inline-flex items-center gap-1 text-xs font-medium text-indigo-600 hover:underline"
+              >
+                <BookOpen className="h-3.5 w-3.5" /> 공개 API 문서 전체 보기
+              </Link>
+            }
           />
           <CardBody className="space-y-4 text-sm">
             <div className="space-y-1.5">

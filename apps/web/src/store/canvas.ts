@@ -3,6 +3,7 @@ import { create } from "zustand";
 import {
   addNote as addNoteOp,
   autoLayout,
+  centerOffset,
   copySelection,
   emptyHistory,
   pasteClip,
@@ -129,6 +130,11 @@ interface CanvasState {
   copy: () => number;
   paste: () => { pasted: number; skipped: number };
   duplicate: () => { pasted: number; skipped: number };
+  /** 스니펫(저장해 둔 단계 묶음)을 새 id로 끼워 넣고, 한가운데를 center에 놓은 뒤 고른 상태로 둔다 */
+  insertSnippet: (
+    clip: Clip,
+    center: { x: number; y: number },
+  ) => { pasted: number; skipped: number };
   toggleDisabledSelected: () => void;
   deleteSelected: () => void;
   autoArrange: () => void;
@@ -296,6 +302,18 @@ export const useCanvas = create<CanvasState>((set, get) => ({
     const clip = copySelection(graph, ids);
     if (!clip) return { pasted: 0, skipped: 0 };
     const r = pasteClip(graph, clip);
+    if (r.newIds.length) {
+      get().edit(() => r.graph);
+      set({
+        selectedIds: r.newIds,
+        selectedId: r.newIds.length === 1 ? (r.newIds[0] ?? null) : null,
+      });
+    }
+    return { pasted: r.newIds.length, skipped: r.skipped };
+  },
+
+  insertSnippet: (clip, center) => {
+    const r = pasteClip(get().graph, clip, centerOffset(clip, center));
     if (r.newIds.length) {
       get().edit(() => r.graph);
       set({

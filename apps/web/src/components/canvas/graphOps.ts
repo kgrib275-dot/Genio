@@ -91,6 +91,22 @@ export function pasteClip(graph: Graph, clip: Clip, offset = { x: 40, y: 40 }): 
   };
 }
 
+const SNIPPET_NODE_W = 240; // 단계 카드 너비(w-60)
+const SNIPPET_NODE_H = 110; // 단계 카드의 보통 높이
+
+/** 단계 묶음(스니펫 등)의 한가운데가 center에 오도록 옮길 거리. 붙여넣기 offset으로 쓴다. */
+export function centerOffset(
+  clip: Clip,
+  center: { x: number; y: number },
+): { x: number; y: number } {
+  if (clip.nodes.length === 0) return { x: 0, y: 0 };
+  const xs = clip.nodes.map((n) => n.position.x);
+  const ys = clip.nodes.map((n) => n.position.y);
+  const cx = (Math.min(...xs) + Math.max(...xs) + SNIPPET_NODE_W) / 2;
+  const cy = (Math.min(...ys) + Math.max(...ys) + SNIPPET_NODE_H) / 2;
+  return { x: Math.round(center.x - cx), y: Math.round(center.y - cy) };
+}
+
 // ---------------- 끄기·켜기 ----------------
 /** 고른 단계를 끄거나 켠다. 하나라도 켜져 있으면 모두 끄고, 모두 꺼져 있으면 모두 켠다. */
 export function toggleDisabled(graph: Graph, ids: string[]): Graph {
