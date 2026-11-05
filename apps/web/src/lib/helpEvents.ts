@@ -9,6 +9,16 @@ export function openHelp(tab: "help" | "feedback" = "help", message = ""): boole
   return ev.defaultPrevented;
 }
 
+/** 전체 검색창(Ctrl+K)을 연다(Layout이 듣고 있다). */
+export function openPalette(): void {
+  window.dispatchEvent(new CustomEvent("genio:open-palette"));
+}
+
+/** 단축키 보기 창을 연다(Layout이 듣고 있다). */
+export function openShortcuts(): void {
+  window.dispatchEvent(new CustomEvent("genio:open-shortcuts"));
+}
+
 /** 첫 로그인 화면 투어를 다시 보여 준다(Layout이 듣고 있다). */
 export function startTour(): void {
   window.dispatchEvent(new CustomEvent("genio:start-tour"));

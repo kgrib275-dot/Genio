@@ -104,6 +104,13 @@ def send_verify_mail(db: Session, user: User, request: Request) -> None:
     )
 
 
+@router.get("/me/ip")
+def my_ip(request: Request, user: CurrentUser) -> dict[str, str]:
+    """지금 요청한 곳의 IP(배포 IP 제한에 쓰는 것과 같은 방식으로 구한다). 허용 목록에 넣을 때 쓴다."""
+    del user
+    return {"ip": client_ip(request)}
+
+
 @router.get("/auth/config")
 def auth_config(db: DbDep) -> dict[str, bool]:
     """로그인 전 화면이 알아야 하는 설정(가입 허용 여부). 비밀은 없다."""

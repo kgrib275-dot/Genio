@@ -55,6 +55,8 @@ import { isSendKey, sendHint, useEnterToSend } from "@/lib/composer";
 export interface ChatViewProps {
   title: string;
   icon?: string;
+  /** v0.8 웹앱 로고(올린 그림 주소). 없으면 앱 아이콘 */
+  logoUrl?: string | null;
   description?: string;
   features: PublicFeatures;
   inputFields: PublicApp["input_fields"];
@@ -78,6 +80,7 @@ const NEAR_BOTTOM = 80;
 export function ChatView({
   title,
   icon,
+  logoUrl,
   description,
   features,
   inputFields,
@@ -610,7 +613,7 @@ export function ChatView({
             <History className="h-[18px] w-[18px]" />
           </button>
         )}
-        <AppIcon name={title} icon={icon} size="sm" />
+        <AppIcon name={title} icon={icon} size="sm" logoUrl={logoUrl} />
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-semibold text-slate-900">{title}</p>
           {!narrow && description && (
@@ -708,7 +711,7 @@ export function ChatView({
                       narrow ? "pt-6" : "pt-12",
                     )}
                   >
-                    <AppIcon name={title} icon={icon} size="lg" />
+                    <AppIcon name={title} icon={icon} size="lg" logoUrl={logoUrl} />
                     <p className="mt-3 text-lg font-bold text-slate-900">{title}</p>
                     <div className="mt-1.5 max-w-md text-sm text-slate-600">
                       {features.opening_statement ? (

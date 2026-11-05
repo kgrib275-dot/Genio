@@ -2,6 +2,7 @@
 import {
   Copy,
   Keyboard,
+  Layers,
   Map as MapIcon,
   Network,
   Power,
@@ -12,6 +13,7 @@ import {
 } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { cn } from "@/lib/cn";
+import { CANVAS_SHORTCUTS, MOD } from "@/lib/shortcuts";
 
 function Tool({
   label,
@@ -44,20 +46,7 @@ function Tool({
   );
 }
 
-const isMac = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform);
-const MOD = isMac ? "⌘" : "Ctrl";
-
-const SHORTCUTS: [string, string][] = [
-  [`${MOD} + C / V`, "복사 / 붙여넣기"],
-  [`${MOD} + D`, "복제"],
-  ["D", "단계 끄기·켜기"],
-  ["Delete", "지우기"],
-  [`${MOD} + Z`, "되돌리기"],
-  [`${MOD} + Shift + Z, ${MOD} + Y`, "다시 하기"],
-  ["Shift + 끌기", "여러 개 고르기"],
-  [`${MOD} + 누르기`, "하나씩 더 고르기"],
-  ["오른쪽 클릭", "단계 메뉴"],
-];
+const SHORTCUTS = CANVAS_SHORTCUTS;
 
 function ShortcutHelp({ onClose }: { onClose: () => void }) {
   const ref = useRef<HTMLDivElement>(null);
@@ -119,6 +108,7 @@ export function CanvasToolbar({
   onRedo,
   onToggleDisabled,
   onDuplicate,
+  onSaveSnippet,
   onArrange,
   onToggleMinimap,
 }: {
@@ -133,6 +123,7 @@ export function CanvasToolbar({
   onRedo: () => void;
   onToggleDisabled: () => void;
   onDuplicate: () => void;
+  onSaveSnippet: () => void;
   onArrange: () => void;
   onToggleMinimap: () => void;
 }) {
@@ -167,6 +158,13 @@ export function CanvasToolbar({
             </Tool>
             <Tool label={`복제 (${MOD}+D)`} onClick={onDuplicate} disabled={!hasSelection}>
               <Copy className="h-4 w-4" />
+            </Tool>
+            <Tool
+              label="고른 단계를 스니펫으로 저장"
+              onClick={onSaveSnippet}
+              disabled={!hasSelection}
+            >
+              <Layers className="h-4 w-4" />
             </Tool>
           </span>
           <Tool label="자동 정렬" onClick={onArrange}>

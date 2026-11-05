@@ -6,7 +6,7 @@ from contextlib import asynccontextmanager
 from typing import Any
 
 from anyio import to_thread
-from fastapi import FastAPI, Request
+from fastapi import Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy import text
@@ -15,10 +15,12 @@ from api.config import get_settings
 from api.core.errors import install_error_handlers
 from api.core.sentry import init_sentry
 from api.db import Base, SessionLocal, engine
+from api.deps import public_ip_guard
 from api.market.service import ensure_market_nodes, sync_catalog
 from api.routers import (
     account,
     admin,
+    apidocs,
     apps,
     apps_v02,
     auth,
@@ -39,8 +41,10 @@ from api.routers import (
     projects,
     runs,
     samples,
+    search,
     service,
     share_meta,
+    snippets,
     tasks,
     tracing,
     triggers,
@@ -85,7 +89,12 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     yield
 
 
-app = FastAPI(title="Genio API", version="0.1.0", lifespan=lifespan)
+app = FastAPI(
+    title="Genio API",
+    version="0.1.0",
+    lifespan=lifespan,
+    dependencies=[Depends(public_ip_guard)],
+)
 install_error_handlers(app)
 
 
@@ -157,8 +166,11 @@ for r in (
     onboarding,
     projects,
     samples,
+    search,
     service,
     share_meta,
+    snippets,
+    apidocs,
     mcp,
     ops,
     tasks,

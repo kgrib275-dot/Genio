@@ -13,7 +13,7 @@ import {
   type NodeChange,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import { Copy, ClipboardPaste, Power, Settings2, StickyNote, Trash2 } from "lucide-react";
+import { Copy, ClipboardPaste, Layers, Power, Settings2, StickyNote, Trash2 } from "lucide-react";
 import {
   useCallback,
   useEffect,
@@ -28,7 +28,10 @@ import { CanvasToolbar } from "@/components/canvas/CanvasToolbar";
 import { NodeView, type GenioFlowNode } from "@/components/canvas/NodeView";
 import { fanCounts } from "@/components/canvas/nodeUtils";
 import { NoteView, type NoteFlowNode } from "@/components/canvas/NoteView";
+import { copySelection, type Clip } from "@/components/canvas/graphOps";
 import { DRAG_TYPE } from "@/components/canvas/NodePalette";
+import { SnippetSaveDialog } from "@/components/canvas/SnippetDialogs";
+import { registerViewportCenter } from "@/components/canvas/viewportBridge";
 import { defaultData } from "@/components/canvas/nodeUtils";
 import { toast } from "@/components/ui/toast-store";
 import type { NodeType } from "@/lib/api/types";
@@ -106,10 +109,22 @@ function Inner({ specs, readOnly }: { specs: NodeType[]; readOnly?: boolean }) {
   const canRedo = useCanvas((s) => s.history.future.length > 0);
   const [selNotes, setSelNotes] = useState<string[]>([]);
   const [menu, setMenu] = useState<Menu | null>(null);
+  const [snippetClip, setSnippetClip] = useState<Clip | null>(null);
   const [minimap, setMinimap] = useState(readMinimap);
   const wrapRef = useRef<HTMLDivElement>(null);
   const { screenToFlowPosition, fitView, getNodes, getNodesBounds, getViewport, setViewport } =
     useReactFlow();
+
+  // 단계 추가 패널(캔버스 밖)이 스니펫을 '지금 보이는 화면 한가운데'에 놓을 수 있게 알려 둔다
+  useEffect(() => {
+    registerViewportCenter(() => {
+      const rect = wrapRef.current?.getBoundingClientRect();
+      return rect
+        ? screenToFlowPosition({ x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 })
+        : { x: 200, y: 160 };
+    });
+    return () => registerViewportCenter(null);
+  }, [screenToFlowPosition]);
 
   const dark = useIsDark();
   const specMap = useMemo(() => new Map(specs.map((s) => [s.type, s])), [specs]);
@@ -280,6 +295,11 @@ function Inner({ specs, readOnly }: { specs: NodeType[]; readOnly?: boolean }) {
     duplicate: () => reportPaste(useCanvas.getState().duplicate()),
     toggle: () => useCanvas.getState().toggleDisabledSelected(),
     remove: () => useCanvas.getState().deleteSelected(),
+    saveSnippet: () => {
+      const { graph: g, selectedIds: ids, selectedId: one } = useCanvas.getState();
+      const clip = copySelection(g, ids.length ? ids : one ? [one] : []);
+      if (clip) setSnippetClip(clip);
+    },
     undo: () => useCanvas.getState().undo(),
     redo: () => useCanvas.getState().redo(),
     arrange: () => {
@@ -429,6 +449,7 @@ function Inner({ specs, readOnly }: { specs: NodeType[]; readOnly?: boolean }) {
         onRedo={actions.redo}
         onToggleDisabled={actions.toggle}
         onDuplicate={actions.duplicate}
+        onSaveSnippet={actions.saveSnippet}
         onArrange={actions.arrange}
         onToggleMinimap={() =>
           setMinimap((v) => {
@@ -441,6 +462,7 @@ function Inner({ specs, readOnly }: { specs: NodeType[]; readOnly?: boolean }) {
           })
         }
       />
+      <SnippetSaveDialog clip={snippetClip} onClose={() => setSnippetClip(null)} />
       {menu && (
         <div
           role="menu"
@@ -487,6 +509,15 @@ function Inner({ specs, readOnly }: { specs: NodeType[]; readOnly?: boolean }) {
                 }}
               >
                 복사
+              </MenuItem>
+              <MenuItem
+                icon={<Layers className="h-3.5 w-3.5" />}
+                onClick={() => {
+                  actions.saveSnippet();
+                  setMenu(null);
+                }}
+              >
+                스니펫으로 저장{selCount > 1 ? ` (${selCount}개)` : ""}
               </MenuItem>
               <div className="my-1 h-px bg-slate-100" />
               <MenuItem

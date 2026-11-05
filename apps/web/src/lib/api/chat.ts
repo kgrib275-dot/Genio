@@ -29,6 +29,8 @@ export interface Appearance {
   share_description: string;
   /** 썸네일로 올린 파일 id(없으면 기본 그림) */
   share_image: string;
+  /** v0.8 웹앱 로고로 올린 파일 id(없으면 기본 아이콘) */
+  share_logo: string;
 }
 
 export const DEFAULT_APPEARANCE: Appearance = {
@@ -43,6 +45,7 @@ export const DEFAULT_APPEARANCE: Appearance = {
   share_title: "",
   share_description: "",
   share_image: "",
+  share_logo: "",
 };
 
 export const HEX_COLOR = /^#[0-9a-fA-F]{6}$/;

@@ -3,6 +3,7 @@
 import {
   ArrowLeft,
   GraduationCap,
+  Keyboard,
   LifeBuoy,
   MessageSquare,
   Search,
@@ -19,7 +20,7 @@ import type { HelpSection } from "@/help/content";
 import { HelpSectionView } from "@/help/HelpView";
 import { useSendFeedback, type FeedbackKind } from "@/lib/api/onboarding";
 import { cn } from "@/lib/cn";
-import { searchHelp, startTour } from "@/lib/helpEvents";
+import { openPalette, openShortcuts, searchHelp, startTour } from "@/lib/helpEvents";
 import { useSession } from "@/store/session";
 
 type Tab = "help" | "feedback";
@@ -202,6 +203,26 @@ export function HelpWidget({ hideButton = false }: { hideButton?: boolean }) {
                       className="inline-flex items-center justify-center gap-1 rounded-lg border border-slate-200 px-2 py-2 text-xs text-slate-700 hover:bg-slate-50"
                     >
                       <Sparkles className="h-3.5 w-3.5" /> 화면 안내 다시 보기
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setOpen(false);
+                        openShortcuts();
+                      }}
+                      className="inline-flex items-center justify-center gap-1 rounded-lg border border-slate-200 px-2 py-2 text-xs text-slate-700 hover:bg-slate-50"
+                    >
+                      <Keyboard className="h-3.5 w-3.5" /> 단축키 보기
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setOpen(false);
+                        openPalette();
+                      }}
+                      className="inline-flex items-center justify-center gap-1 rounded-lg border border-slate-200 px-2 py-2 text-xs text-slate-700 hover:bg-slate-50"
+                    >
+                      <Search className="h-3.5 w-3.5" /> 전체 검색
                     </button>
                   </div>
                 </div>

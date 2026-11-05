@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { cn } from "@/lib/cn";
 
 const PALETTE = [
@@ -20,13 +21,30 @@ export function AppIcon({
   name,
   icon,
   size = "md",
+  logoUrl,
 }: {
   name: string;
   icon?: string | null;
   size?: "sm" | "md" | "lg";
+  /** v0.8 웹앱 로고(올린 그림 주소). 불러오지 못하면 기본 아이콘을 쓴다 */
+  logoUrl?: string | null;
 }) {
   const dims = { sm: "h-7 w-7 text-sm", md: "h-10 w-10 text-lg", lg: "h-12 w-12 text-xl" }[size];
   const emoji = icon && icon !== "🤖" ? icon : null;
+  const [broken, setBroken] = useState(false);
+  useEffect(() => setBroken(false), [logoUrl]);
+  if (logoUrl && !broken)
+    return (
+      <img
+        src={logoUrl}
+        alt=""
+        onError={() => setBroken(true)}
+        className={cn(
+          "inline-block shrink-0 rounded-xl border border-slate-200 bg-white object-contain p-0.5",
+          dims,
+        )}
+      />
+    );
   return (
     <span
       aria-hidden

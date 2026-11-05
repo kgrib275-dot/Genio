@@ -774,5 +774,6 @@ def test_web_source_uses_configured_file_storage(
         b = next(d for d in db.query(Document).all() if d.filename == "B 쪽.txt")
         assert b.storage == "disk" and b.storage_key != old_key
         assert "새 내용" in storage.read_content(b).decode()
+    assert old_key is not None
     assert not any(p.name == old_key.split("/")[-1] for p in (tmp_path / "files").rglob("*"))
     storage._build.cache_clear()

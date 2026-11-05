@@ -1,6 +1,7 @@
 import { X } from "lucide-react";
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 import { cn } from "@/lib/cn";
+import { useFocusTrap } from "@/lib/useFocusTrap";
 
 /** 가운데 뜨는 대화상자. 좁은 화면(모바일)에서는 아래에서 올라오는 시트 모양이 된다. */
 export function Dialog({
@@ -18,6 +19,10 @@ export function Dialog({
   footer?: ReactNode;
   wide?: boolean;
 }) {
+  const boxRef = useRef<HTMLDivElement>(null);
+  const bodyRef = useRef<HTMLDivElement>(null);
+  // Tab이 창 밖으로 나가지 않게 가두고, 닫으면 열기 전 자리로 포커스를 돌려준다
+  useFocusTrap(boxRef, open, bodyRef);
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
@@ -36,9 +41,11 @@ export function Dialog({
       }}
     >
       <div
+        ref={boxRef}
         role="dialog"
         aria-modal="true"
         aria-label={title}
+        tabIndex={-1}
         className={cn(
           "flex max-h-[92vh] w-full flex-col rounded-t-2xl bg-white shadow-xl sm:max-h-[85vh] sm:rounded-2xl",
           wide ? "sm:max-w-2xl" : "sm:max-w-md",
@@ -55,7 +62,9 @@ export function Dialog({
             <X className="h-4 w-4" />
           </button>
         </div>
-        <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">{children}</div>
+        <div ref={bodyRef} className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
+          {children}
+        </div>
         {footer && (
           <div className="flex flex-wrap justify-end gap-2 border-t border-slate-100 px-5 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
             {footer}

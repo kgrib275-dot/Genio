@@ -762,3 +762,82 @@ DB 변경 없음: 지식베이스 설정(`knowledge_bases.settings` JSON)과 문
   - `POST /run` 헤더 `X-Sandbox-Key`, 본문 `{"language":"python|javascript","code":str,"inputs":{...},"timeout":1~60}` → `{"ok":true,"result":{...}}` 또는 `{"ok":false,"kind":"error|timeout|memory|output","error":str}`(HTTP 200). 인증 실패 401, 키 미설정 503(`kind:"config"`), 본문 1MB 초과 413, 형식 오류 422, 동시 실행 초과 429(`kind:"busy"`).
   - 제니오 쪽은 `GENIO_SANDBOX_URL`이 있을 때만 이 서버를 부르고, 없으면 지금처럼 서버 안에서 실행한다. 사용자가 고른 주소는 절대 쓰지 않는다(운영자가 정한 환경 값만).
 - **오류 수집(Sentry)** — `SENTRY_DSN`이 있을 때만 켜진다. 사용자·요청 정보와 지역 변수는 보내지 않고 글 속 비밀값은 `****`로 가린다.
+
+## v0.8 검색창·스니펫·웹앱 로고·IP 제한·공개 API 문서
+
+마이그레이션 `0014`(추가만): `snippets` 테이블, `deployments.allowed_ips`(JSON 목록, 기본 `[]`). `0013`은 다른 작업의 것이다.
+
+### 전체 검색창(Ctrl+K)
+| 요청 | 권한 | 설명 |
+|---|---|---|
+| GET /workspaces/{ws}/search?q=&limit= | 워크스페이스 멤버 | 앱·프로젝트·지식베이스·데이터 표·연결 정보·마켓·화면(메뉴)을 묶음별로. `limit`은 묶음마다(1~20, 기본 6), `q`는 100자까지. 검색어가 비면 화면 바로 가기만 |
+
+- 응답: `{query, groups:[{kind, label, items:[{id, title, subtitle, to, icon?}]}]}`. `to`는 화면 주소다.
+- 역할에 맞는 것만 나온다.
+  - 사용자(member): 배포된 앱만(공유 화면 주소 `/share/…`). 지식베이스·연결 정보·관리 화면은 없다.
+  - 운영자: 지식베이스와 앱 실행 화면. 연결 정보는 없다.
+  - 제작자 이상: 연결 정보와 빌더. 관리 화면은 소유자·관리자만.
+  - 비공개 프로젝트 안의 항목은 볼 수 없는 사람에게 존재도 드러내지 않는다. 연결 정보는 이름만, 비밀값은 없다.
+- 검색어의 `%`·`_`는 글자 그대로 찾는다.
+
+### 스니펫(단계 묶음)
+| 요청 | 권한 | 설명 |
+|---|---|---|
+| GET /workspaces/{ws}/snippets | 워크스페이스 멤버 | 목록(그래프 없이). `node_count`, `node_types`, `reselect`, `outer_refs` |
+| GET /workspaces/{ws}/snippets/{id} | 워크스페이스 멤버 | 하나(그래프 포함) |
+| POST /workspaces/{ws}/snippets `{name, description?, nodes, edges}` | 제작자 이상 | 저장. 워크스페이스당 200개, 한 묶음 단계 50개까지 |
+| PATCH /workspaces/{ws}/snippets/{id} `{name?, description?}` | 제작자 이상 | 이름·설명 |
+| DELETE /workspaces/{ws}/snippets/{id} | 제작자 이상 | 지우기(이미 끼워 넣은 단계는 그대로) |
+
+저장할 때 서버가 정리한다.
+- 고른 단계끼리 이어진 연결만 남긴다. 시작(input) 단계는 넣을 수 없다(422).
+- `credential_id`·`kb_id`·`table_id`·`app_id`·`assignee_user_id`·`file_id`는 비운다(`reselect`에 칸 이름을 남긴다).
+- 고르지 않은 바깥 단계의 값 `{{n5.text}}`는 `{{__outer.n5.text}}`로 바꾼다. 끼워 넣은 흐름에 같은 id의 단계가 있어도 엉뚱한 값이 조용히 이어지지 않고 검사에서 '없는 단계'로 드러난다.
+- 끼워 넣기는 화면(캔버스)이 새 id로 바꿔 한가운데에 놓는다(붙여넣기와 같은 함수).
+- 활동 기록: `snippet.create`·`snippet.update`·`snippet.delete`.
+
+### 웹앱 로고
+- `deployments.appearance.share_logo`(파일 id). 올릴 때는 `POST /workspaces/{ws}/files` 뒤 `PATCH /deployments/{id}`로 `appearance.share_logo`를 넣는다.
+- 허용: PNG·JPG·WEBP, 1MB 이하, 같은 워크스페이스의 파일. 아니면 422(두 줄).
+- 공개 경로 `GET|HEAD /public/apps/{token}/share-logo`가 그림을 준다(`Cache-Control: public, max-age=300`, `nosniff`). 로고가 없으면 404이고 화면은 기본 아이콘을 쓴다. IP 제한이 있으면 이 경로도 막힌다.
+
+### IP 접근 제한
+| 요청 | 권한 | 설명 |
+|---|---|---|
+| PATCH /deployments/{id} `{allowed_ips:[…]}` | 제작자 이상 | 허용 IPv4·IPv6·CIDR 목록. `[]`이면 제한 없음. 최대 50개 |
+| POST /apps/{id}/deployments `{…, allowed_ips}` | 제작자 이상 | 처음부터 제한을 걸어 배포 |
+| GET /me/ip | 로그인한 사용자 | 지금 요청한 곳의 IP. 제한을 넣을 때 '내 IP 추가'가 쓴다 |
+
+- 한 대 주소는 `/32`(IPv6는 `/128`) 없이 저장한다. 호스트 비트가 있는 CIDR(`203.0.113.5/24`)은 대역(`203.0.113.0/24`)으로 정리한다. 잘못된 값은 422(두 줄).
+- 요청한 사람의 IP는 `client_ip()`로 구한다. 믿을 수 있는 프록시(`GENIO_TRUSTED_PROXIES`)가 붙인 `X-Forwarded-For`의 오른쪽부터 처음 만나는 믿을 수 없는 주소를 쓰므로, 바깥에서 헤더를 꾸며도 우회할 수 없다. `::ffff:1.2.3.4`는 IPv4로 본다. 주소를 알 수 없으면 제한이 있을 때 거절한다.
+- 막으면 403 `이 주소에서는 이 앱을 열 수 없어요.`(두 줄). 허용 목록은 알려 주지 않는다.
+- 적용 범위: `/api/v1/public/apps/{token}/…` 전체(앱 정보·챗·실행 폼·결과·대화 기록·파일 올리기·피드백·위젯 스크립트·일괄 실행·로고). 앱 전체(전역) 의존성 `public_ip_guard`라 새로 생기는 공개 경로도 자동 적용된다. 제외: `share-image`(메신저 로봇이 가져가는 썸네일). 서비스 API(키)·웹훅·MCP는 이 제한과 별개다.
+- 제한이 있는 배포는 메신저 링크 미리보기에도 앱 이름·소개가 나가지 않고 일반 소개만 나간다.
+- 활동 기록: `app.deploy_ips`(`{count}`). 같은 값을 다시 저장하면 기록하지 않는다.
+
+### 공개 API 문서(OpenAPI)와 명령줄 도구
+| 요청 | 권한 | 설명 |
+|---|---|---|
+| GET /openapi-public.json | 로그인 불필요 | 밖에서 부를 수 있는 API만 담은 OpenAPI 3 문서(5분 캐시) |
+
+- 담는 경로: `/api/v1/public/apps/{token}/…`(공유 링크 앱), `/api/v1/service/…`(서비스 API·MCP), `/api/v1/hooks/{token}`(외부에서 받기). 묶음 이름(tags)은 서버가 붙인다: 공유 링크 앱(챗·입력 폼), 서비스 API(앱 API 키), 외부에서 받기(웹훅), MCP 서버.
+- 담지 않는 것: `/workspaces`, `/auth`, `/admin`, 실행 승인 같은 내부·관리 경로, 썸네일·로고·위젯 스크립트·미리보기 HTML. 쓰는 스키마만 `components.schemas`에 남긴다.
+- 화면 `/api-docs`(로그인 없이 열림, 앱의 API 화면과 사용설명서에서 링크)가 이 문서를 방식·주소·매개변수·보내는 내용·응답·curl 예시로 보여 준다.
+- 명령줄 도구 `scripts/genio_cli.py`(파이썬 표준 라이브러리만): 앱 API 키 하나가 앱 하나에 묶여 있어 '앱 목록'은 없다.
+
+```bash
+export GENIO_URL=https://genio.example.com   # 기본값 http://127.0.0.1:5190
+export GENIO_API_KEY=gk-xxxxxxxx
+python scripts/genio_cli.py info                          # GET  /service/parameters
+python scripts/genio_cli.py run -i city=도쿄 -i days:=3   # POST /service/workflows/run (끝까지 기다림)
+python scripts/genio_cli.py chat "휴가 규정 알려줘" -c <conversation_id>   # POST /service/chat-messages
+python scripts/genio_cli.py runs --limit 5 --status failed   # GET /service/runs ('기록 읽기' 권한)
+python scripts/genio_cli.py run-status <run_id>          # GET /service/runs/{id}
+python scripts/genio_cli.py run gk-xxxxxxxx -i name=김    # 키를 첫 인자로 줘도 된다
+```
+- 입력값: `이름=글`은 글, `이름:=JSON`은 JSON 값. `--json`은 결과를 그대로 출력.
+- 오류는 서버의 `{message, hint}`를 두 줄로 보여 주고, 종료 코드는 0 성공 · 1 API 오류 · 2 사용법 오류.
+
+### 공통 화면 부품
+- 모든 대화상자(`components/ui/dialog.tsx`)는 Tab 키를 창 안에 가두고, 열릴 때 본문 첫 입력으로 포커스를 옮기며, 닫으면 열기 전 자리로 돌려준다(`lib/useFocusTrap.ts`).
+- 단축키는 `lib/shortcuts.ts`가 한곳에서 관리한다. 단축키 보기(Shift+?)와 캔버스 도움말이 같은 목록을 쓴다.

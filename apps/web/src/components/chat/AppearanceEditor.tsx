@@ -18,6 +18,8 @@ import { useSession } from "@/store/session";
 
 const THUMB_MAX_BYTES = 2 * 1024 * 1024;
 const THUMB_TYPES = ["image/png", "image/jpeg", "image/webp", "image/gif"];
+const LOGO_MAX_BYTES = 1 * 1024 * 1024;
+const LOGO_TYPES = ["image/png", "image/jpeg", "image/webp"];
 
 /** 링크를 붙였을 때 메신저에 뜨는 모습(카드) 미리 보기 */
 function SharePreviewCard({
@@ -52,10 +54,12 @@ function MiniPreview({
   look,
   widget,
   appName,
+  logoUrl,
 }: {
   look: Appearance;
   widget: boolean;
   appName: string;
+  logoUrl?: string | null;
 }) {
   const side = look.position === "left" ? "left-3" : "right-3";
   return (
@@ -78,7 +82,11 @@ function MiniPreview({
             )}
           >
             <div className="flex items-center gap-1 border-b border-slate-100 px-2 py-1.5 text-[10px] font-semibold text-slate-700">
-              <span className="h-3 w-3 rounded bg-[color:var(--chat-accent)]" />
+              {logoUrl ? (
+                <img src={logoUrl} alt="" className="h-3 w-3 rounded object-contain" />
+              ) : (
+                <span className="h-3 w-3 rounded bg-[color:var(--chat-accent)]" />
+              )}
               <span className="truncate">{look.title || appName}</span>
             </div>
             <div className="space-y-1 p-2">
@@ -108,7 +116,10 @@ function MiniPreview({
         </>
       ) : (
         <div className="absolute inset-x-3 bottom-3 top-12 rounded-lg border border-slate-200 bg-white p-2 shadow">
-          <p className="text-[10px] font-semibold text-slate-700">{look.title || appName}</p>
+          <p className="flex items-center gap-1 text-[10px] font-semibold text-slate-700">
+            {logoUrl && <img src={logoUrl} alt="" className="h-3 w-3 rounded object-contain" />}
+            {look.title || appName}
+          </p>
           <div className="mt-2 space-y-1">
             <div className="ml-auto h-3 w-20 rounded-full bg-[color:var(--chat-accent)]" />
             <div className="h-3 w-28 rounded-full bg-slate-100" />
@@ -145,6 +156,9 @@ export function AppearanceEditor({
   const fileRef = useRef<HTMLInputElement>(null);
   const [localThumb, setLocalThumb] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
+  const logoRef = useRef<HTMLInputElement>(null);
+  const [localLogo, setLocalLogo] = useState<string | null>(null);
+  const [uploadingLogo, setUploadingLogo] = useState(false);
   const [look, setLook] = useState<Appearance>(() => appearanceOf(initial));
   const [colorText, setColorText] = useState(look.primary_color);
   const save = useUpdateAppearance(appId);
@@ -156,6 +170,35 @@ export function AppearanceEditor({
     (look.share_image && shareToken
       ? `/api/v1/public/apps/${shareToken}/share-image?v=${look.share_image}`
       : "/og-image.png");
+
+  const logoUrl =
+    localLogo ??
+    (look.share_logo && shareToken
+      ? `/api/v1/public/apps/${shareToken}/share-logo?v=${look.share_logo}`
+      : null);
+
+  async function pickLogo(file: File | undefined) {
+    if (!file) return;
+    if (!LOGO_TYPES.includes(file.type)) {
+      toast.error("PNG·JPG·WEBP 그림만 로고로 쓸 수 있어요. 다른 그림 파일을 골라 주세요.");
+      return;
+    }
+    if (file.size > LOGO_MAX_BYTES) {
+      toast.error("로고 그림이 너무 커요(최대 1MB). 크기를 줄여서 다시 올려 주세요.");
+      return;
+    }
+    setUploadingLogo(true);
+    try {
+      const saved = await uploadWorkspaceFile(ws, file);
+      set("share_logo", saved.id);
+      setLocalLogo(URL.createObjectURL(file));
+    } catch (err) {
+      toast.error(err);
+    } finally {
+      setUploadingLogo(false);
+      if (logoRef.current) logoRef.current.value = "";
+    }
+  }
 
   async function pickThumb(file: File | undefined) {
     if (!file) return;
@@ -243,6 +286,53 @@ export function AppearanceEditor({
                 색 코드가 맞지 않아요. #과 6자리(예: #4f46e5)로 적어 주세요.
               </p>
             )}
+          </Field>
+          <Field
+            label="웹앱 로고"
+            htmlFor={`logo-${deploymentId}`}
+            hint="정사각형에 가까운 PNG·JPG·WEBP, 1MB 이하. 챗 화면 머리와 위젯에 앱 아이콘 대신 보여요."
+          >
+            <div className="flex flex-wrap items-center gap-2">
+              {logoUrl && (
+                <img
+                  src={logoUrl}
+                  alt="올린 로고 미리 보기"
+                  className="h-9 w-9 rounded-lg border border-slate-200 bg-white object-contain p-0.5"
+                />
+              )}
+              <input
+                ref={logoRef}
+                id={`logo-${deploymentId}`}
+                type="file"
+                accept={LOGO_TYPES.join(",")}
+                className="sr-only"
+                onChange={(e) => void pickLogo(e.target.files?.[0])}
+              />
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={uploadingLogo}
+                onClick={() => logoRef.current?.click()}
+              >
+                <ImagePlus className="h-3.5 w-3.5" />{" "}
+                {uploadingLogo ? "올리는 중…" : look.share_logo ? "로고 바꾸기" : "로고 올리기"}
+              </Button>
+              {look.share_logo && (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  className="text-red-600"
+                  onClick={() => {
+                    set("share_logo", "");
+                    setLocalLogo(null);
+                  }}
+                >
+                  <Trash2 className="h-3.5 w-3.5" /> 기본 아이콘으로
+                </Button>
+              )}
+            </div>
           </Field>
           <Field label="머리 제목(비우면 앱 이름)" htmlFor={`title-${deploymentId}`}>
             <Input
@@ -416,7 +506,7 @@ export function AppearanceEditor({
         </div>
         <div>
           <p className="mb-1 text-xs font-medium text-slate-500">미리 보기</p>
-          <MiniPreview look={look} widget={widget} appName={appName} />
+          <MiniPreview look={look} widget={widget} appName={appName} logoUrl={logoUrl} />
         </div>
       </div>
       <ErrorBox error={save.error} />

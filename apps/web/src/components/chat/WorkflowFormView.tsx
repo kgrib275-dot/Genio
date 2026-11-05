@@ -23,6 +23,7 @@ export function WorkflowFormView({
   token,
   title,
   icon,
+  logoUrl,
   description,
   fields,
   accent,
@@ -31,6 +32,8 @@ export function WorkflowFormView({
   token: string;
   title: string;
   icon?: string;
+  /** v0.8 웹앱 로고(올린 그림 주소). 없으면 앱 아이콘 */
+  logoUrl?: string | null;
   description?: string;
   fields: Field[];
   accent?: string;
@@ -100,7 +103,7 @@ export function WorkflowFormView({
   return (
     <div className="flex h-full flex-col bg-slate-50" style={style}>
       <header className="flex shrink-0 items-center gap-3 border-b border-slate-200 bg-white px-3 py-2.5 sm:px-4">
-        <AppIcon name={title} icon={icon} size="sm" />
+        <AppIcon name={title} icon={icon} size="sm" logoUrl={logoUrl} />
         <p className="min-w-0 flex-1 truncate text-sm font-semibold">{title}</p>
         {headerActions}
       </header>

@@ -15,6 +15,7 @@ import {
   PanelLeftOpen,
   Plug,
   Plus,
+  Search,
   Settings,
   Shield,
   Store,
@@ -28,6 +29,8 @@ import { Avatar } from "@/components/AppIcon";
 import { ErrorBox, Loading } from "@/components/ErrorBox";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { HelpWidget } from "@/components/help/HelpWidget";
+import { CommandPalette } from "@/components/palette/CommandPalette";
+import { ShortcutsDialog } from "@/components/palette/ShortcutsDialog";
 import { ProjectDialog, ProjectDot } from "@/components/projects/ProjectDialog";
 import { GuidedTour } from "@/components/tour/GuidedTour";
 import { stepsFor } from "@/components/tour/tourSteps";
@@ -39,6 +42,7 @@ import { useOpenTaskCount } from "@/lib/api/v5a";
 import type { Me, Role } from "@/lib/api/types";
 import { useProjects } from "@/lib/api/v3";
 import { cn } from "@/lib/cn";
+import { IS_MAC, isHelpKey, isPaletteKey, isTypingTarget } from "@/lib/shortcuts";
 import { rememberEnterToSend } from "@/lib/composer";
 import { canManage, canViewRuns, useSession } from "@/store/session";
 import { applyFontSize, applyTheme } from "@/store/theme";
@@ -148,12 +152,14 @@ function SidebarBody({
   inApp,
   onTogglePin,
   onNavigate,
+  onSearch,
 }: {
   me: Me | undefined;
   compact: boolean;
   inApp: boolean;
   onTogglePin?: () => void;
   onNavigate?: () => void;
+  onSearch?: () => void;
 }) {
   const { workspaceId, role, setWorkspace } = useSession();
   const openTasks = useOpenTaskCount(workspaceId);
@@ -162,6 +168,30 @@ function SidebarBody({
   const current = workspaces.find((w) => w.id === workspaceId);
   return (
     <>
+      {onSearch && (
+        <div className={cn("pb-2", compact ? "px-2" : "px-3")}>
+          <button
+            type="button"
+            onClick={onSearch}
+            aria-label="전체 검색 열기"
+            title={`전체 검색 (${IS_MAC ? "⌘" : "Ctrl"} + K)`}
+            className={cn(
+              "flex w-full items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 text-sm text-slate-500 transition-colors hover:border-slate-300 hover:bg-slate-100",
+              compact ? "justify-center p-2" : "px-2.5 py-2",
+            )}
+          >
+            <Search className="h-4 w-4 shrink-0" aria-hidden />
+            {!compact && (
+              <>
+                <span className="flex-1 text-left">검색</span>
+                <kbd className="rounded border border-slate-200 bg-white px-1.5 py-0.5 font-mono text-[10px] text-slate-500">
+                  {IS_MAC ? "⌘ K" : "Ctrl K"}
+                </kbd>
+              </>
+            )}
+          </button>
+        </div>
+      )}
       {!compact && (
         <div className="px-3 pb-3">
           <label className="mb-1 block px-1 text-[11px] font-medium text-slate-400">
@@ -437,6 +467,36 @@ export function Layout() {
   // 화면을 옮기면 모바일 메뉴를 닫는다
   useEffect(() => setDrawerOpen(false), [pathname]);
 
+  // v0.8 전체 검색창(Ctrl/⌘+K)과 단축키 보기(Shift+?)
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (isPaletteKey(e)) {
+        e.preventDefault();
+        setShortcutsOpen(false);
+        setPaletteOpen((v) => !v);
+      } else if (isHelpKey(e) && !isTypingTarget(e.target)) {
+        e.preventDefault();
+        setPaletteOpen(false);
+        setShortcutsOpen(true);
+      }
+    };
+    const onPalette = () => setPaletteOpen(true);
+    const onShortcuts = () => {
+      setPaletteOpen(false);
+      setShortcutsOpen(true);
+    };
+    window.addEventListener("keydown", onKey);
+    window.addEventListener("genio:open-palette", onPalette);
+    window.addEventListener("genio:open-shortcuts", onShortcuts);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("genio:open-palette", onPalette);
+      window.removeEventListener("genio:open-shortcuts", onShortcuts);
+    };
+  }, []);
+
   // v0.6 첫 로그인 화면 투어: 대시보드에서 한 번 보여 주고, '화면 안내 다시 보기'로 다시 연다
   const saveOnboarding = useSaveOnboarding();
   const [touring, setTouring] = useState(false);
@@ -476,6 +536,14 @@ export function Layout() {
           <Menu className="h-5 w-5" />
         </button>
         <Logo />
+        <button
+          type="button"
+          aria-label="전체 검색 열기"
+          className="ml-auto rounded-md p-1.5 text-slate-600 hover:bg-slate-100"
+          onClick={() => setPaletteOpen(true)}
+        >
+          <Search className="h-5 w-5" />
+        </button>
       </header>
 
       {drawerOpen && (
@@ -502,6 +570,10 @@ export function Layout() {
               compact={false}
               inApp={false}
               onNavigate={() => setDrawerOpen(false)}
+              onSearch={() => {
+                setDrawerOpen(false);
+                setPaletteOpen(true);
+              }}
             />
           </aside>
         </div>
@@ -522,6 +594,7 @@ export function Layout() {
           compact={compact}
           inApp={inApp}
           onTogglePin={() => setPinnedOpen((v) => !v)}
+          onSearch={() => setPaletteOpen(true)}
         />
       </aside>
 
@@ -537,6 +610,8 @@ export function Layout() {
         )}
       </main>
       <HelpWidget hideButton={inApp} />
+      <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
+      <ShortcutsDialog open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
       {touring && (
         <GuidedTour
           steps={stepsFor(role)}
