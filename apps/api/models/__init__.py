@@ -9,6 +9,7 @@ from api.models.entities import (
     AuthToken,
     BuilderMessage,
     BuilderSession,
+    CanvasComment,
     Chunk,
     ConnectorCredential,
     ConnectorDefinition,
@@ -17,6 +18,7 @@ from api.models.entities import (
     DataTable,
     Deployment,
     Document,
+    DraftSnapshot,
     ErrorEvent,
     HumanTask,
     Installation,
@@ -50,6 +52,7 @@ __all__ = [
     "AuthToken",
     "BuilderMessage",
     "BuilderSession",
+    "CanvasComment",
     "Chunk",
     "ConnectorCredential",
     "ConnectorDefinition",
@@ -58,6 +61,7 @@ __all__ = [
     "DataTable",
     "Deployment",
     "Document",
+    "DraftSnapshot",
     "ErrorEvent",
     "HumanTask",
     "Installation",
@@ -81,3 +85,6 @@ __all__ = [
     "WorkflowVersion",
     "Workspace",
 ]
+
+# 작업본 번호·기록 훅(세션 이벤트)을 등록한다
+from api.models import draft_hooks  # noqa: F401

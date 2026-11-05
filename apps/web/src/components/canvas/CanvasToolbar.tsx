@@ -4,6 +4,7 @@ import {
   Keyboard,
   Layers,
   Map as MapIcon,
+  MessageSquare,
   Network,
   Power,
   Redo2,
@@ -111,6 +112,9 @@ export function CanvasToolbar({
   onSaveSnippet,
   onArrange,
   onToggleMinimap,
+  commentsOpen,
+  commentMode,
+  onToggleComments,
 }: {
   readOnly?: boolean;
   canUndo: boolean;
@@ -126,6 +130,10 @@ export function CanvasToolbar({
   onSaveSnippet: () => void;
   onArrange: () => void;
   onToggleMinimap: () => void;
+  /** v0.9 댓글: 패널이 열려 있는지, 캔버스에 핀을 꽂는 중인지 */
+  commentsOpen?: boolean;
+  commentMode?: boolean;
+  onToggleComments?: () => void;
 }) {
   const [help, setHelp] = useState(false);
   return (
@@ -179,6 +187,15 @@ export function CanvasToolbar({
       >
         <MapIcon className="h-4 w-4" />
       </Tool>
+      {onToggleComments && (
+        <Tool
+          label={commentMode ? "댓글 핀 꽂기 끄기" : commentsOpen ? "댓글 닫기" : "댓글 보기"}
+          onClick={onToggleComments}
+          active={Boolean(commentsOpen || commentMode)}
+        >
+          <MessageSquare className="h-4 w-4" />
+        </Tool>
+      )}
       <span className="relative hidden sm:block">
         <Tool label="단축키" onClick={() => setHelp((v) => !v)} active={help}>
           <Keyboard className="h-4 w-4" />

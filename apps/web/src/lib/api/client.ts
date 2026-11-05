@@ -128,12 +128,19 @@ export interface RequestOptions {
   form?: FormData;
   signal?: AbortSignal;
   auth?: boolean;
+  /** 추가로 붙일 헤더(예: 동시 편집에서 어느 탭인지 알리는 X-Genio-Client) */
+  headers?: Record<string, string>;
+  /** 탭을 닫는 순간에도 요청이 끝까지 가게 한다(떠남 알림 등 작은 요청용) */
+  keepalive?: boolean;
 }
 
 /** 인증 헤더를 붙여 요청하고, 401이면 토큰을 한 번 갱신해 다시 보낸다. 응답 원본을 돌려준다. */
 export async function rawRequest(path: string, opts: RequestOptions = {}): Promise<Response> {
   const send = async (): Promise<Response> => {
-    const headers: Record<string, string> = opts.auth === false ? {} : authHeaders();
+    const headers: Record<string, string> = {
+      ...(opts.auth === false ? {} : authHeaders()),
+      ...(opts.headers ?? {}),
+    };
     let body: BodyInit | undefined;
     if (opts.form) {
       body = opts.form;
@@ -146,6 +153,7 @@ export async function rawRequest(path: string, opts: RequestOptions = {}): Promi
       headers,
       body,
       signal: opts.signal,
+      keepalive: opts.keepalive,
     });
   };
   let res: Response;

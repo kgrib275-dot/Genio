@@ -286,7 +286,10 @@ def _agent(
                 metrics.on_builder_ops(sess, len(ops))
                 changed_since_validate = True
                 db.refresh(app)
-                emit("graph_patch", {"ops": ops, "graph": app.draft_graph})
+                emit(
+                    "graph_patch",
+                    {"ops": ops, "graph": app.draft_graph, "draft_rev": app.draft_rev},
+                )
             if call.name == "validate" and outcome_ok and result.get("valid"):
                 changed_since_validate = False
                 metrics.on_validate_ok(sess)

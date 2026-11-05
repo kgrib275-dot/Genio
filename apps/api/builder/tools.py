@@ -179,6 +179,7 @@ class BuilderToolbox:
         self.app = app
         self.user_id = user_id
         self.validated_ok = False
+        db.info.setdefault("actor_id", user_id)  # 작업본 번호 기록용(v0.9)
 
     # ----- 그래프 저장 -----
     def graph(self) -> Graph:
