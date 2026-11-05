@@ -4,6 +4,7 @@
 import { BATCH_HELP_SECTIONS } from "@/help/content_batch";
 import { CONVENIENCE_HELP_SECTIONS } from "@/help/content_convenience";
 import { DIFY_HELP_SECTIONS } from "@/help/content_dify";
+import { EVENTS_HELP_SECTIONS } from "@/help/content_events";
 import { KB_HELP_SECTIONS } from "@/help/content_kb";
 import { HELP_SECTIONS_TOOLS } from "@/help/content_mcp";
 
@@ -494,6 +495,7 @@ export const HELP_SECTIONS: HelpSection[] = [
   ...KB_HELP_SECTIONS,
   ...DIFY_HELP_SECTIONS,
   ...CONVENIENCE_HELP_SECTIONS,
+  ...EVENTS_HELP_SECTIONS,
   {
     id: "faq",
     title: "자주 묻는 질문",
