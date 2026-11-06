@@ -8,6 +8,7 @@ import re
 
 from api.core.errors import AppError
 
+MAX_PASSWORD_BYTES = 72
 COMMON = {
     "12345678",
     "123456789",
@@ -38,8 +39,9 @@ COMMON = {
 def password_problem(pw: str, email: str | None = None) -> str | None:
     if len(pw) < 8:
         return "비밀번호는 8자 이상이어야 해요."
-    if len(pw) > 128:
-        return "비밀번호는 128자까지 쓸 수 있어요."
+    if len(pw.encode("utf-8")) > MAX_PASSWORD_BYTES:
+        # bcrypt는 앞 72바이트만 보므로, 더 길게 정해도 뒤쪽은 의미가 없다
+        return "비밀번호가 너무 길어요. 영문·숫자 기준 72자(한글은 24자) 이하로 정해 주세요."
     if not re.search(r"[A-Za-z]", pw) or not re.search(r"[0-9]", pw):
         return "비밀번호에 영문과 숫자를 모두 넣어 주세요."
     if pw.lower() in COMMON:

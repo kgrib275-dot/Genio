@@ -29,4 +29,6 @@ def sign(app_id: str, file_id: str, *, ttl: int = LINK_TTL_SECONDS) -> dict[str,
 def verify(app_id: str, file_id: str, sig: str, exp: int) -> bool:
     if exp < int(time.time()) or exp > int(time.time()) + LINK_TTL_SECONDS + 60:
         return False
-    return hmac.compare_digest(_mac(app_id, file_id, exp), str(sig))
+    return hmac.compare_digest(
+        _mac(app_id, file_id, exp).encode(), str(sig).encode("utf-8", "ignore")
+    )

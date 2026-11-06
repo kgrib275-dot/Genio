@@ -38,7 +38,7 @@ def totp(secret: str, at: float | None = None) -> str:
 
 def verify(secret: str, code: str, at: float | None = None, window: int = 1) -> bool:
     """앞뒤 30초(window=1)까지 맞으면 통과. 시계가 조금 어긋나도 된다."""
-    code = "".join(ch for ch in str(code) if ch.isdigit())
+    code = "".join(ch for ch in str(code) if ch in "0123456789")
     if len(code) != DIGITS:
         return False
     now = int((at if at is not None else time.time()) // PERIOD)

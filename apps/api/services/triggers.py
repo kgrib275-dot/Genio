@@ -335,7 +335,7 @@ def verify_signature(
     if abs(current - sent) > SIGNATURE_TOLERANCE_SECONDS:
         return "보낸 시각이 5분 넘게 차이 나요(다시 보내기 공격 방지)"
     expected = sign(secret, ts, body)
-    if not hmac.compare_digest(expected, sig.strip()):
+    if not hmac.compare_digest(expected.encode(), sig.strip().encode("utf-8", "ignore")):
         return "서명이 맞지 않아요"
     return None
 

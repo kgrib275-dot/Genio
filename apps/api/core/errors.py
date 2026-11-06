@@ -24,9 +24,20 @@ class AppError(Exception):
         self.errors = errors
 
 
+def eul_reul(word: str) -> str:
+    """받침에 맞춰 '을'/'를'을 붙인다(한글이 아니면 '을(를)')."""
+    last = word.strip()[-1:] or " "
+    code = ord(last) - 0xAC00
+    if not 0 <= code <= 11171:
+        return f"{word}을(를)"
+    return f"{word}{'을' if code % 28 else '를'}"
+
+
 def not_found(what: str) -> AppError:
     return AppError(
-        404, f"{what}을(를) 찾을 수 없어요.", "주소가 맞는지 확인하거나 목록에서 다시 선택하세요."
+        404,
+        f"{eul_reul(what)} 찾을 수 없어요.",
+        "주소가 맞는지 확인하거나 목록에서 다시 선택하세요.",
     )
 
 

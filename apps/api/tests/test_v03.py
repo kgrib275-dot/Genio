@@ -64,7 +64,7 @@ def test_change_password(client: TestClient, team: Team) -> None:
         json={"current_password": PASSWORD, "new_password": "newpass123"},
         headers=team.h("member"),
     )
-    assert ok.json() == {"ok": True}
+    assert ok.json()["ok"] is True and ok.json()["access_token"] and ok.json()["refresh_token"]
     assert (
         client.post(
             "/api/v1/auth/login", json={"email": "member@test.local", "password": PASSWORD}

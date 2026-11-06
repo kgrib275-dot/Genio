@@ -437,7 +437,9 @@ def verify_signature(
 ) -> bool:
     if exp < int(now if now is not None else time.time()):
         return False
-    return hmac.compare_digest(_sig(token, file_id, exp), sig or "")
+    return hmac.compare_digest(
+        _sig(token, file_id, exp).encode(), (sig or "").encode("utf-8", "ignore")
+    )
 
 
 def with_image_urls(citations: list[dict[str, Any]], token: str | None) -> list[dict[str, Any]]:

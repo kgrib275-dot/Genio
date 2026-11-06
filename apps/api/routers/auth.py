@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 from api.config import get_settings
 from api.core import ratelimit
 from api.core.audit import audit
-from api.core.errors import AppError, not_found
+from api.core.errors import AppError
 from api.core.password_policy import check_password
 from api.core.security import (
     create_short_token,
@@ -21,13 +21,15 @@ from api.core.security import (
     needs_rehash,
     verify_password,
 )
-from api.deps import CurrentUser, DbDep
+from api.deps import CurrentUser, DbDep, get_optional_user
 from api.models import Invitation, Membership, Organization, User, Workspace
 from api.routers.common import client_ip
 from api.services import accounts, mailer, system
 from api.services.apps import slugify
 
 router = APIRouter(tags=["auth"])
+# 없는 계정으로 로그인할 때도 같은 시간이 걸리게 하려는 자리 해시(실제 비밀번호가 아님)
+TIMING_HASH = hash_password("timing-dummy-Passw0rd")
 
 
 class SignupIn(BaseModel):
@@ -52,7 +54,8 @@ class RefreshIn(BaseModel):
 
 class AcceptIn(BaseModel):
     name: str = Field(min_length=1, max_length=100)
-    password: str = Field(min_length=8, max_length=128)
+    # 새 계정이거나 로그인하지 않은 채 수락할 때 쓴다. 이미 로그인한 본인 계정이면 비워도 된다.
+    password: str = Field(default="", max_length=128)
     # 새 계정을 만드는 초대 수락이면 약관 동의가 필요하다(이미 있는 계정은 넘어감)
     agree_terms: bool = False
     agree_privacy: bool = False
@@ -178,7 +181,12 @@ def login(body: LoginIn, request: Request, db: DbDep) -> dict[str, Any]:
     ):
         raise _too_many(max(1, window // 60))
     user = db.scalar(select(User).where(User.email == email))
-    if user is None or not verify_password(body.password, user.password_hash):
+    if user is None:
+        verify_password(body.password, TIMING_HASH)  # 응답 시간 차이로 계정 유무를 알 수 없게
+        ok = False
+    else:
+        ok = verify_password(body.password, user.password_hash)
+    if user is None or not ok:
         ratelimit.add_fail(key_ip, window)
         ratelimit.add_fail(key_email, window)
         raise AppError(
@@ -213,7 +221,11 @@ def refresh(body: RefreshIn, request: Request, db: DbDep) -> dict[str, str]:
 def _invitation(db: Session, token: str) -> Invitation:
     inv = db.scalar(select(Invitation).where(Invitation.token == token))
     if inv is None:
-        raise not_found("초대")
+        raise AppError(
+            404,
+            "초대 링크를 찾을 수 없어요.",
+            "받은 링크가 끝까지 복사됐는지 확인하거나, 관리자에게 새 초대를 요청하세요.",
+        )
     return inv
 
 
@@ -245,6 +257,7 @@ def accept_invitation(token: str, body: AcceptIn, request: Request, db: DbDep) -
             410, "초대 기간이 지났어요.", "관리자에게 초대를 다시 보내 달라고 요청하세요."
         )
     user = db.scalar(select(User).where(User.email == inv.email.lower()))
+    current = get_optional_user(request, db)
     if user is None:
         agreements = _require_agreement(body.agree_terms, body.agree_privacy)
         check_password(body.password, inv.email)
@@ -258,10 +271,33 @@ def accept_invitation(token: str, body: AcceptIn, request: Request, db: DbDep) -
         )
         db.add(user)
         db.flush()
-    elif not verify_password(body.password, user.password_hash):
-        raise AppError(
-            401, "이미 있는 계정의 비밀번호가 맞지 않아요.", "기존 비밀번호를 입력하세요."
-        )
+    elif current is not None and current.id == user.id:
+        pass  # 이미 (2단계 인증까지 거쳐) 로그인한 본인이면 비밀번호를 다시 묻지 않는다
+    else:
+        # 비밀번호를 시험하는 통로가 되지 않게 로그인과 같은 시도 제한을 건다
+        s = get_settings()
+        email = inv.email.lower()
+        key_ip, key_email = f"login:{email}:{client_ip(request)}", f"login:{email}"
+        window = s.genio_login_lock_seconds
+        if (
+            ratelimit.fail_count(key_ip, window) >= s.genio_login_max_fails
+            or ratelimit.fail_count(key_email, window) >= s.genio_login_max_fails_per_email
+        ):
+            raise _too_many(max(1, window // 60))
+        if not verify_password(body.password, user.password_hash):
+            ratelimit.add_fail(key_ip, window)
+            ratelimit.add_fail(key_email, window)
+            raise AppError(
+                401, "이미 있는 계정의 비밀번호가 맞지 않아요.", "기존 비밀번호를 입력하세요."
+            )
+        ratelimit.clear_fails(key_ip)
+        if user.totp_enabled:
+            # 비밀번호만으로 토큰을 내주면 2단계 인증을 건너뛰게 된다
+            raise AppError(
+                409,
+                "이 계정은 2단계 인증을 쓰고 있어요.",
+                "먼저 로그인 화면에서 인증 코드까지 넣어 로그인한 뒤, 같은 초대 링크를 다시 열어 주세요.",
+            )
     exists = db.scalar(
         select(Membership).where(
             Membership.user_id == user.id, Membership.workspace_id == inv.workspace_id
@@ -406,7 +442,9 @@ class PasswordIn(BaseModel):
 
 
 @router.post("/me/password")
-def change_password(body: PasswordIn, user: CurrentUser, db: DbDep) -> dict[str, bool]:
+def change_password(
+    body: PasswordIn, request: Request, user: CurrentUser, db: DbDep
+) -> dict[str, Any]:
     if not verify_password(body.current_password, user.password_hash):
         raise AppError(400, "지금 비밀번호가 맞지 않아요.", "한/영 키를 확인하고 다시 입력하세요.")
     if body.current_password == body.new_password:
@@ -423,4 +461,7 @@ def change_password(body: PasswordIn, user: CurrentUser, db: DbDep) -> dict[str,
         target_id=user.id,
     )
     db.commit()
-    return {"ok": True}
+    # 비밀번호를 바꾸면 (도난됐을 수 있는) 다른 기기의 로그인은 모두 끊는다. 이 기기는 새 토큰으로 이어 쓴다.
+    current = getattr(request.state, "session_id", None)
+    accounts.revoke_all(db, user, keep=current)
+    return {"ok": True, **accounts.issue_tokens(db, user, request, current)}

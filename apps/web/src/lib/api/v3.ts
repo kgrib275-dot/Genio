@@ -1,7 +1,14 @@
 // v0.3: 개인 설정·프로젝트 API 훅
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { api } from "@/lib/api/client";
-import type { Me, Preferences, Project, ProjectColor, ProjectsOverview } from "@/lib/api/types";
+import { api, setTokens } from "@/lib/api/client";
+import type {
+  Me,
+  Preferences,
+  Project,
+  ProjectColor,
+  ProjectsOverview,
+  Tokens,
+} from "@/lib/api/types";
 import { DEFAULT_PREFERENCES } from "@/lib/api/types";
 
 export function preferencesOf(me: Me | undefined): Preferences {
@@ -21,9 +28,19 @@ export function useChangePassword() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (v: { current_password: string; new_password: string }) =>
-      api.post<{ ok: boolean }>("/me/password", v),
-    // 임시 비밀번호를 바꾼 뒤에는 '먼저 바꾸세요' 화면이 사라지도록 내 정보를 다시 읽는다
-    onSuccess: () => void qc.invalidateQueries({ queryKey: ["me"] }),
+      api.post<{ ok: boolean } & Partial<Tokens>>("/me/password", v),
+    onSuccess: (res) => {
+      // 비밀번호를 바꾸면 다른 기기의 로그인은 끊기고, 이 기기는 새 토큰으로 이어 쓴다
+      if (res.access_token && res.refresh_token) {
+        setTokens({
+          access_token: res.access_token,
+          refresh_token: res.refresh_token,
+          token_type: res.token_type ?? "bearer",
+        });
+      }
+      // 임시 비밀번호를 바꾼 뒤에는 '먼저 바꾸세요' 화면이 사라지도록 내 정보를 다시 읽는다
+      void qc.invalidateQueries({ queryKey: ["me"] });
+    },
   });
 }
 

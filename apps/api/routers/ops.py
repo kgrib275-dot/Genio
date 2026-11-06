@@ -49,6 +49,11 @@ def list_errors(
     return error_log.recent(db, limit)
 
 
+def _csv_safe(value: str) -> str:
+    """엑셀에서 =,+,-,@로 시작하는 칸을 수식으로 실행하지 않게 앞에 '를 붙인다."""
+    return "'" + value if value[:1] in ("=", "+", "-", "@", chr(9), chr(13)) else value
+
+
 def _clean_meta(meta: Any) -> str:
     if not isinstance(meta, dict):
         return ""
@@ -108,7 +113,7 @@ def export_audit(
             ]
             if needle and needle not in " ".join(line).lower():
                 continue
-            w.writerow(line)
+            w.writerow([_csv_safe(c) for c in line])
             yield buf.getvalue()
             buf.seek(0)
             buf.truncate(0)

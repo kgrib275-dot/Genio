@@ -47,12 +47,18 @@ ANY_MEMBER: tuple[Role, ...] = ROLES
 DbDep = Annotated[Session, Depends(get_db, scope="function")]
 
 
+_QUERY_TOKEN_PATHS = ("/stream", "/events")
+
+
 def _bearer(request: Request) -> str | None:
     auth = request.headers.get("authorization", "")
     if auth.lower().startswith("bearer "):
         return auth[7:].strip()
-    # SSE 등 헤더를 못 붙이는 경우를 위한 보조 경로
-    return request.query_params.get("access_token")
+    # SSE(EventSource)처럼 헤더를 못 붙이는 스트림 경로에서만 주소창 토큰을 받는다.
+    # 일반 요청에서 받으면 브라우저 기록·접속 기록·Referer로 토큰이 새기 쉽다.
+    if request.method == "GET" and request.url.path.endswith(_QUERY_TOKEN_PATHS):
+        return request.query_params.get("access_token")
+    return None
 
 
 def get_optional_user(request: Request, db: DbDep) -> User | None:

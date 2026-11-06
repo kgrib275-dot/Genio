@@ -313,7 +313,7 @@ export default function RunDetailPage() {
         <Card className="mt-6">
           <CardHeader
             title="값 확인창"
-            description="단계마다 나온 값을 찾아보고, 값 끌어오기 경로({{단계.값}})를 복사해요."
+            description="단계마다 나온 값을 찾아보고, 다른 단계에서 쓸 수 있게 값 끌어오기 경로를 복사해요."
           />
           <CardBody className="p-0">
             <ValueInspector steps={inspectorSteps(steps, labelOf)} />

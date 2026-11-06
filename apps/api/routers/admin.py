@@ -475,6 +475,17 @@ def reset_member_2fa(ws: str, member_id: str, ctx: Managers) -> dict[str, Any]:
             409, "내 2단계 인증은 여기서 끄지 않아요.", "내 설정 > 보안에서 끄거나 바꾸세요."
         )
     _guard_target_role(ctx, m.role, "2단계 인증을 끌")
+    others = ctx.db.scalar(
+        select(func.count())
+        .select_from(Membership)
+        .where(Membership.user_id == m.user_id, Membership.workspace_id != ws)
+    )
+    if others:
+        raise AppError(
+            409,
+            "다른 워크스페이스에도 속한 계정이라 2단계 인증을 끌 수 없어요.",
+            "본인이 복구 코드로 로그인해 내 설정 > 보안에서 다시 설정하도록 안내하세요.",
+        )
     u = ctx.db.get(User, m.user_id)
     if u is None:
         raise not_found("멤버")

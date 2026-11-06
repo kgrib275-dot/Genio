@@ -3,7 +3,7 @@
 설계서 §7을 구체화한 계약이다. 백엔드와 프런트는 이 문서를 기준으로 맞춘다.
 
 ## 공통
-- 인증: `Authorization: Bearer <access_token>`. SSE처럼 헤더를 못 붙이면 `?access_token=` 쿼리도 받는다.
+- 인증: `Authorization: Bearer <access_token>`. SSE처럼 헤더를 못 붙이는 스트림 경로(`…/stream`, `…/events`의 GET)에서만 `?access_token=` 쿼리도 받는다.
 - ID는 모두 UUID 문자열. 시간은 ISO 8601(UTC).
 - 오류 응답 형식(모든 4xx/5xx):
   ```json
@@ -25,7 +25,7 @@
 | POST | `/auth/login` | 없음 | `{email, password}` (이메일 형식 검사 없음) | `Tokens` |
 | POST | `/auth/refresh` | 없음 | `{refresh_token}` | `Tokens` |
 | GET | `/auth/invitations/{token}` | 없음 | | `{email, role, workspace_name, expired, accepted}` |
-| POST | `/auth/invitations/{token}/accept` | 없음 | `{name, password}` | `Tokens` (계정이 있으면 비밀번호 확인 후 멤버 추가) |
+| POST | `/auth/invitations/{token}/accept` | 없음 | `{name, password?}` | `Tokens` (계정이 있으면 비밀번호 확인 후 멤버 추가 — 로그인과 같은 시도 제한, 2단계 인증 계정은 409. 초대받은 계정으로 로그인한 채 보내면 비밀번호 없이 수락) |
 | GET | `/me` | 로그인 | | `{id, email, name, workspaces: [{id, name, slug, role}]}` |
 | GET | `/workspaces/{ws}/members` | 모든 역할 | | `[{id, user_id, email, name, role}]` (id = membership id) |
 | POST | `/workspaces/{ws}/invitations` | owner, admin | `{email, role}` | `{id, email, role, token, expires_at, accept_url}` |
@@ -288,7 +288,7 @@ settings = {
 ## 개인 설정
 `GET /me` 응답에 `preferences: {theme: "light"|"dark"|"system", font_size: "normal"|"large", default_workspace_id: string|null, enter_to_send: bool}` 추가.
 | PATCH | `/me` | 로그인 | `{name?, preferences?: {theme?, font_size?, default_workspace_id?, enter_to_send?}}` | `/me`와 같은 형식 |
-| POST | `/me/password` | 로그인 | `{current_password, new_password(8자+)}` | `{ok}` (지금 비밀번호가 틀리면 400) |
+| POST | `/me/password` | 로그인 | `{current_password, new_password(8자+)}` | `{ok, access_token, refresh_token}` (지금 비밀번호가 틀리면 400. 이 기기를 뺀 모든 로그인을 끊고 새 토큰을 준다. 72바이트 넘는 비밀번호는 거절) |
 
 ## 프로젝트
 워크스페이스 안에서 앱·지식베이스를 묶는 단위. `visibility="private"`이면 만든 사람·프로젝트 멤버·소유자·관리자만 보고, 다른 사람에게는 그 프로젝트의 앱·지식베이스·실행 기록이 404로 숨겨진다.

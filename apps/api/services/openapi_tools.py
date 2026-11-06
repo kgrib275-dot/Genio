@@ -39,6 +39,13 @@ def _short(value: Any, limit: int) -> str:
     return " ".join(str(value or "").split())[:limit]
 
 
+def _load_yaml(raw: str) -> Any:
+    # 별칭(*a)으로 작은 명세가 크게 부풀려지는 공격을 막는다(Dify 가져오기와 같은 로더)
+    from api.services.dify_import import _NoAliasLoader
+
+    return yaml.load(raw, Loader=_NoAliasLoader)  # noqa: S506 - SafeLoader 바탕의 안전 로더
+
+
 def load_spec(text: str) -> dict[str, Any]:
     raw = text.strip()
     if not raw:
@@ -48,8 +55,8 @@ def load_spec(text: str) -> dict[str, Any]:
     if len(raw.encode("utf-8")) > MAX_SPEC_BYTES:
         raise NodeError("명세가 너무 커요(최대 1MB). 필요한 부분만 남긴 명세를 쓰세요.")
     try:
-        data = json.loads(raw) if raw.startswith("{") else yaml.safe_load(raw)
-    except (json.JSONDecodeError, yaml.YAMLError):
+        data = json.loads(raw) if raw.startswith("{") else _load_yaml(raw)
+    except (json.JSONDecodeError, yaml.YAMLError, RecursionError):
         raise NodeError(
             "명세를 읽지 못했어요. JSON이나 YAML 형식이 맞는지 확인한 뒤 다시 시도하세요."
         ) from None
