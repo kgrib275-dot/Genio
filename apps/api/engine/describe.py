@@ -285,6 +285,12 @@ def describe_step(node: dict[str, Any] | None, step: dict[str, Any], label: str)
             if dt
             else f"{name} 단계(날짜·시간)를 마쳤어요."
         )
+    if ntype == "guardrail":
+        if out.get("passed"):
+            extra = f" ({', '.join(out.get('notes') or [])})" if out.get("notes") else ""
+            return f"{name} 단계에서 안전 검사를 통과했어요{extra}."
+        reasons = out.get("reasons") or []
+        return f"{name} 단계에서 안전 검사에 걸렸어요: {'; '.join(str(r) for r in reasons[:3])}."
     if ntype == "wait":
         return f"{name} 단계에서 {out.get('waited_seconds', data.get('seconds', 0))}초 기다렸어요."
     if ntype == "iteration":

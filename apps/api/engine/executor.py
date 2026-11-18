@@ -150,6 +150,12 @@ class RunServices:
             self._privacy_cache = get_privacy(self.db, self.workspace_id)
         return self._privacy_cache
 
+    def mask_text(self, text: str) -> str:
+        """안전 검사 단계용: 개인정보를 가린 글(운영 준비 B2의 가리기 규칙)."""
+        from api.services import pii
+
+        return pii.mask(text)
+
     def log_note(self, text: str) -> None:
         if text not in self.notes:
             self.notes.append(text)

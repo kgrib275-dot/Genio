@@ -2,6 +2,7 @@
 
 from nodes.builtin import BUILTIN_SPECS, register_builtins
 from nodes.builtin_files import register_files
+from nodes.builtin_guardrail import register_guardrail
 from nodes.builtin_tools import register_tools
 from nodes.builtin_v02 import register_v02
 from nodes.builtin_v04 import register_v04
@@ -24,6 +25,7 @@ register_v04(registry)
 register_v05(registry)
 register_tools(registry)
 register_files(registry)
+register_guardrail(registry)
 
 __all__ = [
     "BUILTIN_SPECS",
