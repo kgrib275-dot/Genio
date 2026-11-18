@@ -28,7 +28,7 @@ run_lint() {
 
 run_type() {
   echo "== [type] mypy --strict =="
-  "$VENV_BIN/mypy"
+  "$VENV_BIN/python" -m mypy
   echo "== [type] tsc =="
   (cd apps/web && npm run --silent typecheck)
 }

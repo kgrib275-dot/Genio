@@ -76,7 +76,7 @@ def test_redirect_to_other_host_drops_auth(
     def client(**kw: Any) -> httpx.Client:
         return real(transport=httpx.MockTransport(handler), follow_redirects=False)
 
-    monkeypatch.setattr(safe_http.httpx, "Client", client)
+    monkeypatch.setattr(httpx, "Client", client)
     out = safe_http.request(
         "GET",
         "http://a.example.com/start",
@@ -139,13 +139,12 @@ def test_preview_refuses_credential_to_other_host(
         headers=team.h("admin"),
     ).json()["id"]
     sent: list[dict[str, str]] = []
-    monkeypatch.setattr(
-        safe_http,
-        "request",
-        lambda m, u, headers=None, body=None, **k: (
-            sent.append(headers or {}) or {"status": 200, "body": {}, "headers": {}}
-        ),
-    )
+
+    def fake_request(m: str, u: str, headers: Any = None, body: Any = None, **k: Any) -> Any:
+        sent.append(headers or {})
+        return {"status": 200, "body": {}, "headers": {}}
+
+    monkeypatch.setattr(safe_http, "request", fake_request)
     url = f"/api/v1/workspaces/{team.ws}/http/preview"
     auth = {"type": "bearer", "credential_id": cid}
     bad = client.post(

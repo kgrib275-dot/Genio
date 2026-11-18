@@ -167,7 +167,7 @@ class SpyAdapter(FakeAdapter):
     def seen(self) -> list[dict[str, Any]]:
         return self.calls
 
-    def complete(self, **kw: Any) -> Any:  # type: ignore[override]
+    def complete(self, **kw: Any) -> Any:
         res = super().complete(**kw)
         res.text = "확인했어요. [전화번호1]로 연락드릴게요."
         return res

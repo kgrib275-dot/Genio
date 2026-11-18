@@ -146,9 +146,12 @@ def test_offsite_task_uses_singleton(monkeypatch: pytest.MonkeyPatch) -> None:
     assert tasks.offsite_backup_task.run() == {"status": "off"}
     monkeypatch.setattr(get_settings(), "genio_backup_s3_bucket", "b")
     seen: list[str] = []
-    monkeypatch.setattr(
-        tasks, "run_once", lambda name, period, fn, lock_seconds=600: seen.append(name) or {}
-    )
+
+    def spy(name: str, period: float, fn: Any, lock_seconds: float = 600) -> dict[str, Any]:
+        seen.append(name)
+        return {}
+
+    monkeypatch.setattr(tasks, "run_once", spy)
     tasks.offsite_backup_task.run()
     assert seen == ["offsite_backup"]
 
