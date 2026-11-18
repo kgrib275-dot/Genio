@@ -55,6 +55,8 @@ def test_temp_password_must_be_changed(client: TestClient, team: Team) -> None:
     )
     ok = client.post(url, json={"current_password": pw, "new_password": NEW_PW}, headers=h)
     assert ok.status_code == 200, ok.text
+    # 비밀번호를 바꾸면 이 기기도 새로 받은 토큰으로 이어 쓴다(옛 토큰은 1초 뒤부터 끊길 수 있다)
+    h = {"Authorization": f"Bearer {ok.json()['access_token']}"}
     assert client.get("/api/v1/me", headers=h).json()["must_change_password"] is False
     assert client.get(f"/api/v1/workspaces/{team.ws}/apps", headers=h).status_code == 200
     # 새 비밀번호로 다시 로그인된다

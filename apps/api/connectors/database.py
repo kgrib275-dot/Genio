@@ -104,7 +104,8 @@ def run_sql(
     args = {str(k): v for k, v in (params or {}).items()}
     try:
         if engine == "postgresql":
-            return _pg(host, port, database, user, password, ssl, stmt, args, mode, hostaddr=ip)
+            pin: dict[str, Any] = {"hostaddr": ip} if ip else {}
+            return _pg(host, port, database, user, password, ssl, stmt, args, mode, **pin)
         return _mysql(ip or host, port, database, user, password, ssl, stmt, args, mode)
     except NodeError:
         raise
