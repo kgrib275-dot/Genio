@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api/client";
 import { streamSSE, type SSEEvent } from "@/lib/api/sse";
-import type { BuilderMessage, BuilderSession } from "@/lib/api/types";
+import type { BuilderMessage, BuilderSession, Graph } from "@/lib/api/types";
 
 /** 앱의 최신 빌더 대화를 쓰고, 없으면 새로 만든다. */
 export function useBuilderSession(appId: string) {
@@ -55,4 +55,21 @@ export function streamRunEvents(
   signal?: AbortSignal,
 ): Promise<void> {
   return streamSSE(`/runs/${runId}/events`, { onEvent, signal });
+}
+
+export interface RevertResult {
+  graph: Graph;
+  draft_rev: number;
+  had_later_changes: boolean;
+}
+
+/** 빌더가 한 차례에 바꾼 흐름을 바꾸기 전 모습으로 되돌린다. */
+export function revertBuilderTurn(
+  sessionId: string,
+  messageId: string,
+  force = false,
+): Promise<RevertResult> {
+  return api.post<RevertResult>(`/builder/sessions/${sessionId}/messages/${messageId}/revert`, {
+    force,
+  });
 }

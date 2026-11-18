@@ -8,8 +8,10 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 
+from api.builder import checkpoint
 from api.builder.agent import message_dict, run_turn
 from api.builder.metrics import workspace_metrics
+from api.core.audit import audit
 from api.deps import EDIT_APPS, MANAGE_MEMBERS, Ctx, require_role
 from api.models import BuilderMessage, BuilderSession
 from api.routers.common import sse_frame, sse_response
@@ -78,3 +80,26 @@ def post_message(session_id: str, body: MessageIn, ctx: SessionBuilders) -> Stre
             yield sse_frame(name, data)
 
     return sse_response(frames())
+
+
+class RevertIn(BaseModel):
+    force: bool = False
+
+
+@router.post("/builder/sessions/{session_id}/messages/{message_id}/revert")
+def revert_message(
+    session_id: str, message_id: str, body: RevertIn, ctx: SessionBuilders
+) -> dict[str, Any]:
+    """빌더가 한 차례에 바꾼 흐름을 바꾸기 전 모습으로 되돌린다."""
+    out = checkpoint.revert_turn(ctx.db, session_id, message_id, force=body.force)
+    audit(
+        ctx.db,
+        workspace_id=ctx.workspace_id,
+        user_id=ctx.user.id,
+        action="builder.revert",
+        target_type="builder_message",
+        target_id=message_id,
+        meta={"had_later_changes": out["had_later_changes"]},
+    )
+    ctx.db.commit()
+    return out

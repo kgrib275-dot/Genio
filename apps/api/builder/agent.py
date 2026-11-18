@@ -20,7 +20,7 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from api.builder import metrics
+from api.builder import checkpoint, metrics
 from api.builder.graph_summary import summarize
 from api.builder.tools import STOP_TOOLS, TOOL_DEFS, BuilderToolbox
 from api.config import get_settings
@@ -47,7 +47,7 @@ def message_dict(m: BuilderMessage) -> dict[str, Any]:
         "id": m.id,
         "role": m.role,
         "content": m.content,
-        "graph_patch": m.graph_patch,
+        "graph_patch": checkpoint.public_record(m.graph_patch),
         "created_at": m.created_at,
     }
 
@@ -193,8 +193,12 @@ def _agent(
     record: dict[str, Any] = {"ops": [], "tool_calls": []}
     text_parts: list[str] = []
     toolbox = BuilderToolbox(db, app, user_id)
+    before_graph = checkpoint.snapshot(app.draft_graph)
 
     def save_assistant(text: str) -> None:
+        if record["ops"]:
+            db.refresh(app)
+            checkpoint.attach(record, before_graph, app.draft_graph)
         msg = BuilderMessage(
             session_id=session_id, role="assistant", content=text, graph_patch=record
         )

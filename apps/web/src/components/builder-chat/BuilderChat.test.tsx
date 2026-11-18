@@ -4,14 +4,24 @@ import { MemoryRouter } from "react-router-dom";
 import { BuilderChatView } from "@/components/builder-chat/BuilderChat";
 import type { BuilderSendBody } from "@/lib/api/builder";
 import type { SSEEvent } from "@/lib/api/sse";
+import type { BuilderMessage } from "@/lib/api/types";
 import { useCanvas } from "@/store/canvas";
 
 const sent: BuilderSendBody[] = [];
+const reverts: string[] = [];
 
 vi.mock("@/lib/api/builder", async (orig) => {
   const actual = await orig<typeof import("@/lib/api/builder")>();
   return {
     ...actual,
+    revertBuilderTurn: async (_sid: string, mid: string, force = false) => {
+      reverts.push(`${mid}:${force}`);
+      return {
+        graph: { version: 1, nodes: [], edges: [], variables: {} },
+        draft_rev: 7,
+        had_later_changes: false,
+      };
+    },
     sendBuilderMessage: async (
       _sid: string,
       body: BuilderSendBody,
@@ -53,7 +63,7 @@ vi.mock("@/lib/api/builder", async (orig) => {
   };
 });
 
-function renderChat(enterToSend?: boolean) {
+function renderChat(enterToSend?: boolean, history: BuilderMessage[] = []) {
   const qc = new QueryClient();
   if (enterToSend !== undefined)
     qc.setQueryData(["me"], {
@@ -66,7 +76,7 @@ function renderChat(enterToSend?: boolean) {
   return render(
     <QueryClientProvider client={qc}>
       <MemoryRouter>
-        <BuilderChatView sessionId="s1" history={[]} wsId="ws1" />
+        <BuilderChatView sessionId="s1" history={history} wsId="ws1" />
       </MemoryRouter>
     </QueryClientProvider>,
   );
@@ -121,5 +131,22 @@ describe("BuilderChatView", () => {
     expect(sent).toHaveLength(0);
     expect(fireEvent.keyDown(box, { key: "Enter" })).toBe(false);
     await waitFor(() => expect(sent.map((s) => s.content)).toEqual(["보내기"]));
+  });
+
+  it("흐름을 바꾼 차례에는 '이 차례 되돌리기'가 있고 누르면 캔버스가 되돌아간다", async () => {
+    const now = new Date().toISOString();
+    renderChat(true, [
+      { id: "u1", role: "user", content: "단계 더해 줘", graph_patch: null, created_at: now },
+      {
+        id: "a1",
+        role: "assistant",
+        content: "더했어요.",
+        graph_patch: { ops: [], tool_calls: [], revertible: true },
+        created_at: now,
+      },
+    ]);
+    fireEvent.click(await screen.findByRole("button", { name: /이 차례 되돌리기/ }));
+    await waitFor(() => expect(reverts).toEqual(["a1:false"]));
+    expect(useCanvas.getState().graph.nodes).toEqual([]);
   });
 });

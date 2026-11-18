@@ -399,6 +399,9 @@ export interface TurnRecord {
   ask_user?: AskUser;
   market_suggestion?: MarketSuggestion;
   test_result?: TestResult;
+  /** 흐름을 바꾼 차례: 되돌릴 수 있는지 */
+  revertible?: boolean;
+  reverted?: boolean;
 }
 
 export interface BuilderMessage {

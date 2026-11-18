@@ -1,5 +1,5 @@
 import { useQueryClient } from "@tanstack/react-query";
-import { ArrowUp, RotateCcw, Sparkles } from "lucide-react";
+import { ArrowUp, RotateCcw, Sparkles, Undo2 } from "lucide-react";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import {
   AskUserCard,
@@ -12,12 +12,13 @@ import { ErrorBox, Loading } from "@/components/ErrorBox";
 import { toast } from "@/components/ui/toast-store";
 import {
   createBuilderSession,
+  revertBuilderTurn,
   sendBuilderMessage,
   useBuilderMessages,
   useBuilderSession,
   type BuilderSendBody,
 } from "@/lib/api/builder";
-import { errorLines } from "@/lib/api/client";
+import { ApiError, errorLines } from "@/lib/api/client";
 import { useInstallMarketItem } from "@/lib/api/resources";
 import {
   normalizeGraph,
@@ -47,6 +48,7 @@ function TurnBody({
   onPick,
   onInstall,
   installing,
+  onRevert,
 }: {
   content: string;
   record: TurnRecord | DraftTurn | null;
@@ -55,8 +57,10 @@ function TurnBody({
   onPick: (o: string) => void;
   onInstall: (key: string) => void;
   installing: boolean;
+  onRevert?: () => void;
 }) {
   const role = useSession((s) => s.role);
+  const patch = record as TurnRecord | null;
   return (
     <div className="space-y-2">
       {content && (
@@ -78,6 +82,17 @@ function TurnBody({
       {record?.ask_user && (
         <AskUserCard ask={record.ask_user} active={active && !busy} onPick={onPick} />
       )}
+      {onRevert && patch?.revertible && (
+        <button
+          type="button"
+          className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-2 py-1 text-[12px] text-slate-600 hover:border-indigo-300 hover:text-indigo-700 disabled:opacity-50"
+          disabled={busy}
+          onClick={onRevert}
+        >
+          <Undo2 className="size-3.5" aria-hidden /> 이 차례 되돌리기
+        </button>
+      )}
+      {patch?.reverted && <p className="text-[12px] text-slate-500">이 차례는 되돌렸어요.</p>}
     </div>
   );
 }
@@ -155,6 +170,33 @@ export function BuilderChatView({
       setBusy(false);
       if (!finished) setDraft((d) => (d && (d.text || d.error || d.tool_calls.length) ? d : null));
       void qc.invalidateQueries({ queryKey: ["builder-messages", sessionId] });
+    }
+  };
+
+  const revert = async (messageId: string) => {
+    const apply = (r: { graph: Graph; draft_rev: number }) => {
+      useCollab.getState().setRev(r.draft_rev);
+      useCanvas.getState().replaceFromServer(normalizeGraph(r.graph), []);
+      void qc.invalidateQueries({ queryKey: ["builder-messages", sessionId] });
+      toast.success("이 차례의 변경을 되돌렸어요.");
+    };
+    try {
+      apply(await revertBuilderTurn(sessionId, messageId));
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 409 && err.message.includes("더 바뀌었어요")) {
+        if (
+          !window.confirm(`${err.message}
+${err.hint}`)
+        )
+          return;
+        try {
+          apply(await revertBuilderTurn(sessionId, messageId, true));
+        } catch (e2) {
+          toast.error(e2);
+        }
+        return;
+      }
+      toast.error(err);
     }
   };
 
@@ -262,6 +304,7 @@ export function BuilderChatView({
                   onPick={(o) => void send({ content: o })}
                   onInstall={onInstall}
                   installing={install.isPending}
+                  onRevert={() => void revert(m.id)}
                 />
               </div>
             </div>
