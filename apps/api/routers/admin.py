@@ -149,18 +149,23 @@ def overview(ws: str, ctx: Managers, days: int = Query(default=14, ge=1, le=90))
         return (dt if dt.tzinfo else dt.replace(tzinfo=UTC)).astimezone(UTC).date().isoformat()
 
     if app_ids:
-        for r in db.scalars(select(Run).where(Run.app_id.in_(app_ids), Run.created_at >= since)):
-            d = rows.get(day(r.created_at))
+        # 실행 한 줄을 통째로(입력·결과 글까지) 읽지 않고 집계에 필요한 칸만 읽는다
+        for r_app, r_usage, r_cost, r_created, r_by in db.execute(
+            select(Run.app_id, Run.token_usage, Run.cost, Run.created_at, Run.created_by).where(
+                Run.app_id.in_(app_ids), Run.created_at >= since
+            )
+        ):
+            d = rows.get(day(r_created))
             if d is None:
                 continue
-            u = r.token_usage or {}
+            u = r_usage or {}
             d["runs"] += 1
             d["tokens"] += int(u.get("input_tokens", 0)) + int(u.get("output_tokens", 0))
-            d["cost"] += Decimal(str(r.cost or 0))
-            if r.created_by:
-                d["users"].add(r.created_by)
-            per_app[r.app_id]["runs"] += 1
-            per_app[r.app_id]["cost"] += Decimal(str(r.cost or 0))
+            d["cost"] += Decimal(str(r_cost or 0))
+            if r_by:
+                d["users"].add(r_by)
+            per_app[r_app]["runs"] += 1
+            per_app[r_app]["cost"] += Decimal(str(r_cost or 0))
         for c in db.scalars(
             select(Conversation).where(
                 Conversation.app_id.in_(app_ids), Conversation.created_at >= since

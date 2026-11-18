@@ -237,3 +237,40 @@ def test_dependency_map_hides_apps_nobody_uses(client: TestClient, team: Team) -
     new_session(client, team, "혼자 있는 앱")
     out = client.get(f"/api/v1/workspaces/{team.ws}/dependencies", headers=team.h("builder")).json()
     assert all(r["kind"] != "app" for r in out["resources"])
+
+
+def test_chat_missing_required_input_says_what_to_fill(client: TestClient, team: Team) -> None:
+    """꼭 적어야 하는 칸을 비운 채 보내면 '잠시 후 다시'가 아니라 채울 칸을 알려 준다."""
+    app_id, _ = new_session(client, team, "필수 칸")
+    graph = {
+        "version": 1,
+        "nodes": [
+            {
+                "id": "n1",
+                "type": "input",
+                "data": {
+                    "fields": [
+                        {"key": "message", "type": "text", "required": True},
+                        {"key": "start", "label": "시작일", "type": "text", "required": True},
+                    ]
+                },
+            },
+            {"id": "n2", "type": "output", "data": {"template": "{{n1.start}}"}},
+        ],
+        "edges": [{"id": "e1", "source": "n1", "target": "n2"}],
+    }
+    client.put(f"/api/v1/apps/{app_id}/draft", json={"graph": graph}, headers=team.h("builder"))
+    client.post(f"/api/v1/apps/{app_id}/versions", json={"note": "v1"}, headers=team.h("builder"))
+    dep = client.post(
+        f"/api/v1/apps/{app_id}/deployments",
+        json={"channel": "share_link", "access": "public"},
+        headers=team.h("builder"),
+    ).json()
+    with client.stream(
+        "POST", f"/api/v1/public/apps/{dep['public_token']}/chat", json={"message": "안녕"}
+    ) as res:
+        from api.tests.test_builder import parse_sse
+
+        events = parse_sse("".join(res.iter_text()))
+    err = next(d for n, d in events if n == "error")
+    assert "시작일" in err["message"] and "채운 뒤" in err["hint"]

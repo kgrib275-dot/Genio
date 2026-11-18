@@ -106,6 +106,8 @@ export function ChatView({
   const [lines, setLines] = useState<ChatLine[]>([]);
   const [message, setMessage] = useState("");
   const [extra, setExtra] = useState<Record<string, string>>({});
+  // 꼭 적어야 하는데 비어 있는 시작 입력 칸(보내기를 막고 칸을 붉게 보여 준다)
+  const [missingKeys, setMissingKeys] = useState<string[]>([]);
   const [status, setStatus] = useState("");
   const [busy, setBusy] = useState(false);
   const [files, setFiles] = useState<StoredFile[]>([]);
@@ -231,6 +233,14 @@ export function ChatView({
   const send = async (raw: string, opts: { regenerate?: boolean } = {}) => {
     const text = raw.trim();
     if (!text || busyRef.current) return;
+    if (!opts.regenerate) {
+      const missing = extraFields.filter((f) => f.required && !(extra[f.key] ?? "").trim());
+      if (missing.length > 0) {
+        setMissingKeys(missing.map((f) => f.key));
+        return;
+      }
+    }
+    setMissingKeys([]);
     const ctrl = new AbortController();
     abortRef.current = ctrl;
     const attached = opts.regenerate ? [] : files;
@@ -830,13 +840,25 @@ export function ChatView({
                   )}
                 </p>
               )}
+              {missingKeys.length > 0 && (
+                <p role="alert" className="text-xs text-red-600">
+                  {extraFields
+                    .filter((f) => missingKeys.includes(f.key))
+                    .map((f) => f.label || f.key)
+                    .join(", ")}
+                  을(를) 먼저 적어 주세요. 빨간 칸을 채운 뒤 다시 보내면 돼요.
+                </p>
+              )}
               {extraFields.length > 0 && (
                 <div className="grid gap-1.5 sm:grid-cols-2">
                   {extraFields.map((f) => (
                     // 값을 넣어도 무슨 칸인지 보이게 이름을 칸 왼쪽에 둔다
                     <label
                       key={f.key}
-                      className="flex min-w-0 items-center gap-2 rounded-lg border border-slate-200 bg-white pl-2.5 focus-within:border-indigo-400"
+                      className={cn(
+                        "flex min-w-0 items-center gap-2 rounded-lg border bg-white pl-2.5 focus-within:border-indigo-400",
+                        missingKeys.includes(f.key) ? "border-red-400" : "border-slate-200",
+                      )}
                     >
                       <span className="shrink-0 text-xs font-medium text-slate-500">
                         {f.label || f.key}
@@ -846,7 +868,10 @@ export function ChatView({
                         aria-label={f.label || f.key}
                         type={f.type === "number" ? "number" : "text"}
                         value={extra[f.key] ?? ""}
-                        onChange={(e) => setExtra({ ...extra, [f.key]: e.target.value })}
+                        onChange={(e) => {
+                          setExtra({ ...extra, [f.key]: e.target.value });
+                          setMissingKeys((k) => k.filter((x) => x !== f.key));
+                        }}
                         className="h-9 min-w-0 flex-1 rounded-r-lg bg-transparent px-2 text-sm text-slate-900 focus:outline-none"
                       />
                     </label>

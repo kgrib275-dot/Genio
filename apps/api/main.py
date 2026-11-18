@@ -5,10 +5,12 @@ import logging
 import time
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from datetime import UTC, datetime
 from typing import Any
 
 from anyio import to_thread
 from fastapi import Depends, FastAPI, Request
+from fastapi.encoders import ENCODERS_BY_TYPE
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
 from sqlalchemy import text
@@ -64,6 +66,16 @@ from api.routers import (
     workspaces,
 )
 from api.services.seed import seed_demo, seed_demo_samples
+
+
+def _utc_isoformat(dt: datetime) -> str:
+    """시간대 표시가 없는 시각(개발용 sqlite가 돌려줌)은 UTC로 보고 +00:00을 붙인다.
+    안 붙이면 브라우저가 내 시간대로 읽어서 '9시간 전'처럼 어긋난다. 운영 DB(PostgreSQL)는 원래 붙어 있다."""
+    return (dt if dt.tzinfo else dt.replace(tzinfo=UTC)).isoformat()
+
+
+ENCODERS_BY_TYPE[datetime] = _utc_isoformat
+
 
 setup_logging("api")  # 운영 준비 1차(A6): GENIO_LOG_FORMAT=json이면 JSON 한 줄 로그
 log = logging.getLogger("genio")

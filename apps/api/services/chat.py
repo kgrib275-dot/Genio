@@ -525,20 +525,21 @@ def _check_run(
         answer = ""
     if not answer:
         db.commit()
-        return (
-            status,
-            [
-                (
-                    "error",
-                    {
-                        "message": "답을 만들지 못했어요.",
-                        "hint": "잠시 후 다시 물어보거나 앱 관리자에게 알려 주세요.",
-                    },
-                )
-            ],
-            None,
-            None,
-        )
+        err = str(getattr(r, "error", "") or "")
+        marker = "필수 입력이 비어 있어요:"
+        if marker in err:
+            # 사용자가 칸을 비워서 생긴 실패는 '잠시 후 다시'가 아니라 무엇을 채울지 알려 준다
+            names = err.split(marker, 1)[1].strip()
+            error_event = {
+                "message": f"먼저 적어 주세요: {names}",
+                "hint": "아래 칸을 채운 뒤 다시 보내 주세요.",
+            }
+        else:
+            error_event = {
+                "message": "답을 만들지 못했어요.",
+                "hint": "잠시 후 다시 물어보거나 앱 관리자에게 알려 주세요.",
+            }
+        return (status, [("error", error_event)], None, None)
     mod = features["moderation"]
     was_moderated = bool(
         mod["enabled"] and mod["check_output"] and moderated(answer, mod["keywords"])

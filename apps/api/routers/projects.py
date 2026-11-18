@@ -279,21 +279,24 @@ def projects_overview(ws: str, ctx: Viewers, days: int = 30) -> dict[str, Any]:
         ).all():
             stats[kb_project[kb_id]]["documents"] += int(n)
     if app_project:
-        for r in db.scalars(
-            select(Run).where(Run.app_id.in_(list(app_project)), Run.created_at >= since)
+        # 실행 한 줄을 통째로(입력·결과 글까지) 읽지 않고 집계에 필요한 칸만 읽는다
+        for r_app, r_status, r_usage, r_cost, r_created in db.execute(
+            select(Run.app_id, Run.status, Run.token_usage, Run.cost, Run.created_at).where(
+                Run.app_id.in_(list(app_project)), Run.created_at >= since
+            )
         ):
-            st = stats[app_project[r.app_id]]
+            st = stats[app_project[r_app]]
             st["runs"] += 1
-            if r.status in ("succeeded", "failed", "waiting_approval"):
-                st[r.status] += 1
-            u = r.token_usage or {}
+            if r_status in ("succeeded", "failed", "waiting_approval"):
+                st[r_status] += 1
+            u = r_usage or {}
             st["input_tokens"] += int(u.get("input_tokens", 0))
             st["output_tokens"] += int(u.get("output_tokens", 0))
-            st["cost"] += Decimal(str(r.cost or 0))
-            d = _day(r.created_at)
+            st["cost"] += Decimal(str(r_cost or 0))
+            d = _day(r_created)
             if d in st["series"]:
                 st["series"][d] += 1
-            bump_last(st, r.created_at)
+            bump_last(st, r_created)
         for c in db.scalars(
             select(Conversation).where(
                 Conversation.app_id.in_(list(app_project)), Conversation.created_at >= since
