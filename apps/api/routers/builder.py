@@ -68,6 +68,7 @@ class BuilderEvent(BaseModel):
 class MessageIn(BaseModel):
     content: str = Field(default="", max_length=4000)
     event: BuilderEvent | None = None
+    plan_only: bool = False  # 먼저 계획만 보여 주기(흐름을 바꾸지 않음)
 
 
 @router.post("/builder/sessions/{session_id}/messages")
@@ -76,7 +77,7 @@ def post_message(session_id: str, body: MessageIn, ctx: SessionBuilders) -> Stre
 
     def frames() -> Iterator[str]:
         event = body.event.model_dump() if body.event else None
-        for name, data in run_turn(session_id, user_id, body.content, event):
+        for name, data in run_turn(session_id, user_id, body.content, event, body.plan_only):
             yield sse_frame(name, data)
 
     return sse_response(frames())

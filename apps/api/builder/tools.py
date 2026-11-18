@@ -161,6 +161,8 @@ TOOL_DEFS: list[ToolDef] = [
 ]
 TOOL_SCHEMAS = {t.name: t.input_schema for t in TOOL_DEFS}
 STOP_TOOLS = {"ask_user", "suggest_market_item"}
+# '먼저 계획 보기' 차례에는 흐름을 바꾸거나 실제로 돌리는 툴을 막는다
+PLAN_BLOCKED_TOOLS = {"add_node", "update_node", "remove_node", "connect", "run_test"}
 RUN_TEST_TIMEOUT = 120.0
 
 
@@ -174,7 +176,8 @@ class ToolOutcome:
 
 
 class BuilderToolbox:
-    def __init__(self, db: Session, app: App, user_id: str) -> None:
+    def __init__(self, db: Session, app: App, user_id: str, plan_only: bool = False) -> None:
+        self.plan_only = plan_only
         self.db = db
         self.app = app
         self.user_id = user_id
@@ -192,6 +195,15 @@ class BuilderToolbox:
 
     # ----- 실행 -----
     def execute(self, name: str, args: dict[str, Any]) -> ToolOutcome:
+        if self.plan_only and name in PLAN_BLOCKED_TOOLS:
+            return ToolOutcome(
+                False,
+                {
+                    "error": "이번 차례는 계획만 세우는 차례라 흐름을 바꾸거나 실행할 수 없어요. "
+                    "계획을 글로 보여 주고 ask_user로 '이대로 만들까요?'를 물으세요."
+                },
+                "계획 차례라 건너뜀",
+            )
         schema = TOOL_SCHEMAS.get(name)
         if schema is None:
             return ToolOutcome(False, {"error": f"없는 툴: {name}"}, f"알 수 없는 툴 {name}")

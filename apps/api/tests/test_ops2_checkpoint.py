@@ -79,3 +79,28 @@ def test_no_change_turn_and_permissions(
     assert res.status_code == 409 and "되돌릴 수 없어요" in res.json()["detail"]["message"]
     assert client.post(url, json={}, headers=team.h("member")).status_code in (403, 404)
     assert client.post(url, json={}).status_code == 401
+
+
+def test_plan_only_turn_blocks_changes(
+    client: TestClient, team: Team, fake_llm: FakeAdapter
+) -> None:
+    add_llm(client, team)
+    app_id, sid = new_session(client, team, "계획")
+    start = _draft(client, team, app_id)
+    seen: list[str] = []
+
+    def plan(messages: list[Any]) -> Any:
+        seen.append(str(messages[-1].get("content")))
+        return text_turn("1. 인사 단계를 더해요.")(messages)
+
+    fake_llm.script = [_add("막힐 단계"), plan]
+    body = {"content": "인사 단계 더해 줘", "plan_only": True}
+    with client.stream(
+        "POST", f"/api/v1/builder/sessions/{sid}/messages", json=body, headers=team.h("builder")
+    ) as res:
+        assert res.status_code == 200
+        text = "".join(res.iter_text())
+    assert "계획 차례라 건너뜀" in text and "event: graph_patch" not in text
+    assert _draft(client, team, app_id) == start  # 흐름은 그대로
+    assert "계획만 세우는 차례" in seen[0]
+    assert "이번 차례: 계획만 세우기" in str(fake_llm.calls[0]["system"])

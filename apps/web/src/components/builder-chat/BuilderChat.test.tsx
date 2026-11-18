@@ -149,4 +149,16 @@ describe("BuilderChatView", () => {
     await waitFor(() => expect(reverts).toEqual(["a1:false"]));
     expect(useCanvas.getState().graph.nodes).toEqual([]);
   });
+
+  it("'먼저 계획 보기'를 켜면 보내는 메시지에 plan_only가 붙는다", async () => {
+    sent.length = 0;
+    renderChat(true);
+    fireEvent.click(screen.getByLabelText("먼저 계획 보기"));
+    fireEvent.change(screen.getByLabelText("빌더에게 보낼 메시지"), {
+      target: { value: "메일 분류 흐름" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "보내기" }));
+    await waitFor(() => expect(sent).toHaveLength(1));
+    expect(sent[0]?.plan_only).toBe(true);
+  });
 });

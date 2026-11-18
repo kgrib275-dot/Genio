@@ -117,6 +117,7 @@ export function BuilderChatView({
   const [draft, setDraft] = useState<DraftTurn | null>(null);
   const [busy, setBusy] = useState(false);
   const [input, setInput] = useState("");
+  const [planFirst, setPlanFirst] = useState(false);
   const enterToSend = useEnterToSend();
   const [streamError, setStreamError] = useState<unknown>(null);
   const install = useInstallMarketItem(wsId);
@@ -130,8 +131,9 @@ export function BuilderChatView({
     bottomRef.current?.scrollIntoView?.({ block: "end" });
   }, [messages, draft]);
 
-  const send = async (body: BuilderSendBody) => {
-    if (busy || !body.content.trim()) return;
+  const send = async (raw: BuilderSendBody) => {
+    if (busy || !raw.content.trim()) return;
+    const body: BuilderSendBody = planFirst ? { ...raw, plan_only: true } : raw;
     setBusy(true);
     setStreamError(null);
     setDraft(emptyDraft());
@@ -373,7 +375,17 @@ ${err.hint}`)
             <ArrowUp className="h-4 w-4" />
           </button>
         </div>
-        <p className="mt-1.5 px-1 text-[11px] text-slate-400">Enter 보내기 · Shift+Enter 줄바꿈</p>
+        <div className="mt-1.5 flex items-center justify-between gap-2 px-1 text-[11px] text-slate-400">
+          <span>Enter 보내기 · Shift+Enter 줄바꿈</span>
+          <label className="inline-flex cursor-pointer items-center gap-1 text-slate-500">
+            <input
+              type="checkbox"
+              checked={planFirst}
+              onChange={(e) => setPlanFirst(e.target.checked)}
+            />
+            먼저 계획 보기
+          </label>
+        </div>
       </form>
     </div>
   );

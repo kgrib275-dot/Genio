@@ -114,10 +114,23 @@ def _context(db: Session, app: App, session_id: str, current_id: str) -> list[Me
     return messages
 
 
-def _turn_system(app: App) -> str:
+PLAN_NOTE = (
+    "\n\n# 이번 차례: 계획만 세우기\n"
+    "사용자가 '먼저 계획 보기'를 켰다. 이번 차례에는 흐름을 바꾸거나 테스트를 돌리지 않는다"
+    "(add_node·update_node·remove_node·connect·run_test는 막혀 있다). get_graph·list_available_nodes로 "
+    "필요한 것만 확인한 뒤, 다음을 쉬운 업무 말로 번호를 붙여 보여 준다.\n"
+    "1. 만들 흐름의 단계 순서(각 단계가 하는 일 한 줄)\n"
+    "2. 필요한 연결 정보·지식베이스(이미 있는지)\n"
+    "3. 사용자에게 확인하고 싶은 것\n"
+    "마지막에 ask_user로 '이대로 만들까요?'를 묻고 선택지는 '이대로 만들어 줘', '여기를 바꿔 줘'로 한다."
+)
+
+
+def _turn_system(app: App, plan_only: bool = False) -> str:
     graph = Graph.model_validate(app.draft_graph or empty_graph())
     return (
         system_prompt()
+        + (PLAN_NOTE if plan_only else "")
         + "\n\n# 지금 만드는 앱\n"
         + f"- 이름: {app.name}\n- 종류: {app.type}\n- 설명: {app.description or '(없음)'}\n"
         + "\n# 현재 흐름 요약(순번. id [타입] 이름)\n"
@@ -126,7 +139,11 @@ def _turn_system(app: App) -> str:
 
 
 def run_turn(
-    session_id: str, user_id: str, content: str, event: dict[str, Any] | None
+    session_id: str,
+    user_id: str,
+    content: str,
+    event: dict[str, Any] | None,
+    plan_only: bool = False,
 ) -> Iterator[Event]:
     """SSE용 이벤트를 차례로 돌려준다. 에이전트는 별도 스레드에서 돈다."""
     q: queue.Queue[Any] = queue.Queue()
@@ -137,7 +154,7 @@ def run_turn(
     def worker() -> None:
         try:
             with SessionLocal() as db:
-                _agent(db, session_id, user_id, content, event, emit)
+                _agent(db, session_id, user_id, content, event, emit, plan_only)
         except Exception:
             log.exception("빌더 내부 오류(session=%s)", session_id)
             emit(
@@ -172,6 +189,7 @@ def _agent(
     content: str,
     event: dict[str, Any] | None,
     emit: Any,
+    plan_only: bool = False,
 ) -> None:
     sess = db.get(BuilderSession, session_id)
     if sess is None:
@@ -192,7 +210,7 @@ def _agent(
 
     record: dict[str, Any] = {"ops": [], "tool_calls": []}
     text_parts: list[str] = []
-    toolbox = BuilderToolbox(db, app, user_id)
+    toolbox = BuilderToolbox(db, app, user_id, plan_only=plan_only)
     before_graph = checkpoint.snapshot(app.draft_graph)
 
     def save_assistant(text: str) -> None:
@@ -227,7 +245,7 @@ def _agent(
     changed_since_validate = False
     # 이 차례 안에서는 시스템 프롬프트를 바꾸지 않는다. Anthropic은 '생각 블록'을 만든 때와 시스템
     # 프롬프트가 다르면 그 블록을 거절(400)한다. 흐름이 바뀐 내용은 툴 결과에 붙여 AI에게 알린다.
-    system_for_turn = _turn_system(app)
+    system_for_turn = _turn_system(app, plan_only)
     for _ in range(MAX_STEPS):
         db.refresh(app)
         try:

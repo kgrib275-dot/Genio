@@ -33,6 +33,8 @@ export function useBuilderMessages(sessionId: string | undefined) {
 export interface BuilderSendBody {
   content: string;
   event?: { type: "installed"; item_key: string };
+  /** 먼저 계획만 보여 주기(흐름은 바꾸지 않음) */
+  plan_only?: boolean;
 }
 
 export function sendBuilderMessage(
