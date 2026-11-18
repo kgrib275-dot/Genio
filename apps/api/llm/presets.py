@@ -70,6 +70,16 @@ M = PresetModel
 _LIST: tuple[Preset, ...] = (
     # ---- 기본(전용 어댑터) ----
     Preset(
+        "demo",
+        "데모 AI (키 없이 체험)",
+        "기본",
+        None,
+        (M("demo-1", "데모 모델 (예시 답만 나와요)", json=True, tools=True),),
+        note="실제 AI가 아니에요. 화면과 흐름을 훑어보는 용도예요. 키가 있는 AI 연결을 등록하면 진짜 답이 나와요.",
+        native=True,
+        embedding=True,
+    ),
+    Preset(
         "openai",
         "OpenAI (GPT)",
         "기본",

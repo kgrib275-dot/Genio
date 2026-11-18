@@ -258,6 +258,36 @@ def check_ai_url(db: Session, ws: str, base_url: str | None) -> None:
         ) from None
 
 
+@router.post("/workspaces/{ws}/llm-providers/demo")
+def add_demo_provider(ws: str, ctx: SecretManagers) -> dict[str, Any]:
+    """키 없이 체험하는 데모 AI 연결을 만든다(이미 있으면 그대로 돌려준다)."""
+    existing = list(ctx.db.scalars(select(LlmProvider).where(LlmProvider.workspace_id == ws)))
+    for p in existing:
+        if p.provider == "demo":
+            return {"created": False, "provider_id": p.id}
+    chat_rows = [p for p in existing if not is_rerank(p.provider)]
+    row = LlmProvider(
+        workspace_id=ws,
+        provider="demo",
+        label="데모 AI",
+        api_key_encrypted=encrypt_str("demo-no-key"),
+        default_model="demo-1",
+        is_default=not chat_rows,  # 진짜 연결이 이미 있으면 기본 연결은 그대로 둔다
+    )
+    ctx.db.add(row)
+    ctx.db.flush()
+    audit(
+        ctx.db,
+        workspace_id=ws,
+        user_id=ctx.user.id,
+        action="llm.demo_enable",
+        target_type="llm_provider",
+        target_id=row.id,
+    )
+    ctx.db.commit()
+    return {"created": True, "provider_id": row.id}
+
+
 @router.post("/workspaces/{ws}/llm-providers")
 def add_provider(ws: str, body: ProviderIn, ctx: SecretManagers) -> dict[str, Any]:
     if body.provider not in PROVIDERS:
@@ -291,7 +321,11 @@ def add_provider(ws: str, body: ProviderIn, ctx: SecretManagers) -> dict[str, An
     existing = list(ctx.db.scalars(select(LlmProvider).where(LlmProvider.workspace_id == ws)))
     # 재정렬 전용 연결은 '기본 연결'이 될 수 없고, 기본 연결 정하기에도 끼지 않는다
     chat_rows = [p for p in existing if not is_rerank(p.provider)]
-    is_default = (body.is_default or not chat_rows) and not is_rerank(body.provider)
+    # 데모 연결만 있을 때 진짜 연결을 더하면 그 연결을 기본으로 삼는다(키를 넣으면 바로 실제로 동작)
+    only_demo = bool(chat_rows) and all(p.provider == "demo" for p in chat_rows)
+    is_default = (
+        body.is_default or not chat_rows or (only_demo and body.provider != "demo")
+    ) and not is_rerank(body.provider)
     if is_default:
         for p in chat_rows:
             p.is_default = False
@@ -335,6 +369,14 @@ def probe_connection(
     if provider not in PROVIDERS:
         raise AppError(422, "지원하지 않는 AI 공급자예요.", "목록에서 공급자를 고르세요.")
     started = time.perf_counter()
+    if provider == "demo":
+        return {
+            "ok": True,
+            "message": "데모 AI는 키 없이 늘 연결돼요. 예시 답만 나오는 체험용이에요.",
+            "hint": "진짜 답이 필요하면 키가 있는 AI 연결을 등록하세요.",
+            "models": [{"model": "demo-1", "label": "데모 모델"}],
+            "ms": 0,
+        }
     if is_rerank(provider):
         use = (model or "").strip() or PRESETS[provider].default_model
         if not use:

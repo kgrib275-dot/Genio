@@ -54,6 +54,7 @@ import {
   useDeleteLlmProvider,
   useInvitations,
   useInvite,
+  useEnableDemoAi,
   useLlmProviders,
   useMembers,
   useTestNewLlm,
@@ -707,6 +708,9 @@ export function LlmSection({
   showDefaults?: boolean;
 }) {
   const list = useLlmProviders(ws);
+  const enableDemo = useEnableDemoAi(ws);
+  const onlyDemo =
+    (list.data?.length ?? 0) > 0 && (list.data ?? []).every((p) => p.provider === "demo");
   const pc = useListControls(list.data, {
     key: "llm-providers",
     search: (p) => `${p.label} ${p.provider} ${p.default_model ?? ""}`,
@@ -791,7 +795,28 @@ export function LlmSection({
                     ? "'새 AI 연결'에서 제공사를 고르고 키를 넣은 뒤 '연결 테스트'를 눌러요. 등록해야 빌더와 AI 단계가 동작해요."
                     : "소유자·관리자가 AI 키를 등록해야 빌더와 AI 단계가 동작해요. 관리자에게 요청하세요."
                 }
+                action={
+                  manage
+                    ? {
+                        label: enableDemo.isPending ? "켜는 중…" : "키 없이 데모 AI로 체험하기",
+                        onClick: () =>
+                          enableDemo.mutate(undefined, {
+                            onSuccess: () => toast.success("데모 AI를 켰어요. 예시 답만 나와요."),
+                            onError: (err) => toast.error(err),
+                          }),
+                      }
+                    : null
+                }
               />
+            )}
+            {onlyDemo && (
+              <p
+                className="mx-4 mb-3 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800 sm:mx-5"
+                data-testid="demo-banner"
+              >
+                지금은 데모 AI예요. 실제 AI가 아니라 예시 답만 나와요. 키가 있는 AI 연결을 등록하면
+                그 연결이 기본이 되어 진짜로 동작해요.
+              </p>
             )}
             {(list.data?.length ?? 0) > 0 && (
               <ListToolbar c={pc} placeholder="이름·모델 검색" className="px-4 pb-3 sm:px-5" />
@@ -805,6 +830,7 @@ export function LlmSection({
                   <span className="font-medium">{p.label}</span>
                   <Badge tone="blue">{presetName(presets, p.provider)}</Badge>
                   {p.is_default && <Badge tone="green">기본</Badge>}
+                  {p.provider === "demo" && <Badge tone="amber">데모</Badge>}
                   {asProviderV9(p).rerank && <Badge tone="amber">재정렬 전용</Badge>}
                   <span className="basis-full text-xs text-slate-500 sm:basis-auto">
                     {p.default_model} · 키 {p.api_key_masked}

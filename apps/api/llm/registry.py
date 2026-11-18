@@ -35,6 +35,10 @@ AdapterFactory = Callable[[str, str, str | None], ChatAdapter]
 
 
 def default_factory(provider: str, api_key: str, base_url: str | None) -> ChatAdapter:
+    if provider == "demo":
+        from api.llm.demo_adapter import DemoAdapter
+
+        return DemoAdapter(api_key, base_url)
     if provider == "anthropic":
         return AnthropicAdapter(api_key, base_url)
     if provider == "google":

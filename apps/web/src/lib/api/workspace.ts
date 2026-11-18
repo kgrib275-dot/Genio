@@ -54,6 +54,16 @@ export function useLlmProviders(ws: string, enabled = true) {
   });
 }
 
+/** 키 없이 체험하는 데모 AI 연결 만들기(이미 있으면 그대로) */
+export function useEnableDemoAi(ws: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () =>
+      api.post<{ created: boolean; provider_id: string }>(`/workspaces/${ws}/llm-providers/demo`),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ["llm-providers", ws] }),
+  });
+}
+
 export interface NewLlmProvider {
   provider: ProviderKind;
   label: string;
