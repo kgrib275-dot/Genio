@@ -95,11 +95,13 @@ export default function BuilderPage() {
   const fixRunId = params.get("fix");
   useEffect(() => {
     if (!fixRunId || !appId) return;
-    setPendingPrompt(appId, fixRequestMessage(fixRunId));
+    const hint = params.get("hint");
+    setPendingPrompt(appId, fixRequestMessage(fixRunId, hint ?? undefined));
     setMobileTab("chat");
     setPromptNonce((n) => n + 1);
     const next = new URLSearchParams(params);
     next.delete("fix");
+    next.delete("hint");
     setParams(next, { replace: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fixRunId, appId]);

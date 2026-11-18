@@ -326,6 +326,15 @@ export interface Run {
   token_usage: { input_tokens?: number; output_tokens?: number };
   cost: number | string;
   app_name?: string;
+  /** 실패한 실행의 자동 진단(제안 버튼) */
+  diagnosis?: RunDiagnosis | null;
+}
+
+export interface RunDiagnosis {
+  node_id: string | null;
+  node_label: string;
+  node_type: string;
+  suggestions: { id: string; label: string; prompt: string }[];
 }
 
 export interface RunStep {

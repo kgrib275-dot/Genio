@@ -78,8 +78,12 @@ export function useBuilderMetrics(ws: string, enabled = true) {
 }
 
 /** 빌더에게 실패한 실행을 고쳐 달라고 할 때 보낼 문장 */
-export function fixRequestMessage(runId: string): string {
-  return `이 실행이 왜 실패했는지 보고 고쳐 줘 (실행 ${runId})`;
+export function fixRequestMessage(runId: string, hint?: string): string {
+  const base = `이 실행이 왜 실패했는지 보고 고쳐 줘 (실행 ${runId})`;
+  return hint
+    ? `${base}
+${hint.slice(0, 300)}`
+    : base;
 }
 
 /** 실패 설명(두 줄)을 문제·고치는 방법으로 나눈다 */

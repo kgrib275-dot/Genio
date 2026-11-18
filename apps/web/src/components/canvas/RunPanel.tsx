@@ -103,7 +103,7 @@ export function FailureBox({
   steps,
   appId,
 }: {
-  run: Pick<Run, "id" | "error">;
+  run: Pick<Run, "id" | "error" | "diagnosis">;
   steps: StoryStep[];
   appId?: string;
 }) {
@@ -124,6 +124,28 @@ export function FailureBox({
         >
           <Wand2 className="h-3.5 w-3.5" /> 빌더에게 고쳐 달라고 하기
         </button>
+      )}
+      {appId && (run.diagnosis?.suggestions.length ?? 0) > 1 && (
+        <div
+          className="flex basis-full flex-wrap items-center gap-1.5"
+          data-testid="fix-suggestions"
+        >
+          <span className="text-xs text-red-800">이렇게 고칠까요?</span>
+          {run.diagnosis?.suggestions.map((sg) => (
+            <button
+              key={sg.id}
+              type="button"
+              onClick={() =>
+                navigate(
+                  `/apps/${appId}/builder?fix=${run.id}&hint=${encodeURIComponent(sg.prompt)}`,
+                )
+              }
+              className="rounded-full border border-red-200 bg-white px-2.5 py-0.5 text-xs text-red-800 hover:bg-red-100"
+            >
+              {sg.label}
+            </button>
+          ))}
+        </div>
       )}
     </div>
   );

@@ -18,6 +18,7 @@ from api.db import SessionLocal
 from api.deps import EDIT_APPS, VIEW_RUNS, Ctx, require_role
 from api.engine import events
 from api.engine.describe import describe_run, describe_step
+from api.engine.diagnosis import diagnose
 from api.engine.executor import load_graph
 from api.models import App, HumanTask, Run, RunStep
 from api.routers.common import sse_frame, sse_response
@@ -79,6 +80,7 @@ def run_detail(db: Session, run: Run) -> dict[str, Any]:
         **rd,
         "steps": steps,
         "story": describe_run(rd, steps),
+        "diagnosis": diagnose(rd, steps, nodes),
         "approval": run.approval,
         "graph": graph,
         "files": files_of_run(db, run, app.workspace_id) if app is not None else [],
