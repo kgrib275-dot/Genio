@@ -70,6 +70,7 @@ import { asProviderV9 } from "@/lib/api/v9llm";
 import { downloadAuditCsv } from "@/lib/api/ops";
 import { SystemMailCard } from "@/pages/workspace/SystemMailCard";
 import { BuilderRulesCard } from "@/pages/workspace/BuilderRulesCard";
+import { DependenciesCard } from "@/pages/workspace/DependenciesCard";
 import { ImpactCard } from "@/pages/workspace/ImpactCard";
 import { NodePolicyCard } from "@/pages/workspace/NodePolicyCard";
 import { PrivacyCard } from "@/pages/workspace/PrivacyCard";
@@ -1129,6 +1130,7 @@ export function UsageSection({ ws }: { ws: string }) {
         {(role === "owner" || role === "admin") && <NodePolicyCard ws={ws} />}
         {(role === "owner" || role === "admin") && <BuilderRulesCard ws={ws} />}
         {canEdit(role) && <SkillsCard ws={ws} />}
+        {canEdit(role) && <DependenciesCard ws={ws} />}
       </div>
     </div>
   );
