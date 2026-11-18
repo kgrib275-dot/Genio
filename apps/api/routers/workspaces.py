@@ -880,3 +880,36 @@ def put_node_policy(ws: str, body: NodePolicyPatch, ctx: Managers) -> dict[str, 
     market_types = market.market_node_types(ctx.db, ws)
     specs = [s for s in registry.all() if s.source != "market" or s.type in market_types]
     return node_policy.view(ctx.db, ws, specs)
+
+
+# ---------------- 후속(X4): 빌더 상시 규칙 ----------------
+class BuilderRulesIn(BaseModel):
+    rules: str = Field(default="", max_length=4000)
+
+
+@router.get("/workspaces/{ws}/builder-rules")
+def get_builder_rules(ws: str, ctx: Managers) -> dict[str, Any]:
+    from api.services import builder_rules
+
+    return {"rules": builder_rules.get_rules(ctx.db, ws), "max_chars": builder_rules.MAX_RULES}
+
+
+@router.put("/workspaces/{ws}/builder-rules")
+def put_builder_rules(ws: str, body: BuilderRulesIn, ctx: Managers) -> dict[str, Any]:
+    from api.services import builder_rules
+
+    w = ctx.db.get(Workspace, ws)
+    if w is None:
+        raise not_found("워크스페이스")
+    saved = builder_rules.save_rules(ctx.db, w, body.rules)
+    audit(
+        ctx.db,
+        workspace_id=ws,
+        user_id=ctx.user.id,
+        action="workspace.builder_rules",
+        target_type="workspace",
+        target_id=ws,
+        meta={"chars": len(saved)},
+    )
+    ctx.db.commit()
+    return {"rules": saved, "max_chars": builder_rules.MAX_RULES}

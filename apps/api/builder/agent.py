@@ -29,6 +29,7 @@ from api.llm.base import ChatTurn, LlmError, Message
 from api.llm.registry import ResolvedLlm, resolve_llm
 from api.models import App, BuilderMessage, BuilderSession, MarketItem
 from api.schemas.graph import Graph, empty_graph
+from api.services import builder_rules
 
 log = logging.getLogger("genio.builder")
 SYSTEM_PROMPT_PATH = Path(__file__).with_name("prompts") / "system.md"
@@ -126,10 +127,11 @@ PLAN_NOTE = (
 )
 
 
-def _turn_system(app: App, plan_only: bool = False) -> str:
+def _turn_system(app: App, plan_only: bool = False, rules: str = "") -> str:
     graph = Graph.model_validate(app.draft_graph or empty_graph())
     return (
         system_prompt()
+        + builder_rules.prompt_block(rules)
         + (PLAN_NOTE if plan_only else "")
         + "\n\n# 지금 만드는 앱\n"
         + f"- 이름: {app.name}\n- 종류: {app.type}\n- 설명: {app.description or '(없음)'}\n"
@@ -245,7 +247,7 @@ def _agent(
     changed_since_validate = False
     # 이 차례 안에서는 시스템 프롬프트를 바꾸지 않는다. Anthropic은 '생각 블록'을 만든 때와 시스템
     # 프롬프트가 다르면 그 블록을 거절(400)한다. 흐름이 바뀐 내용은 툴 결과에 붙여 AI에게 알린다.
-    system_for_turn = _turn_system(app, plan_only)
+    system_for_turn = _turn_system(app, plan_only, builder_rules.get_rules(db, app.workspace_id))
     for _ in range(MAX_STEPS):
         db.refresh(app)
         try:
