@@ -102,6 +102,9 @@ def _dep(d: Deployment, version: int | None, origin: str) -> dict[str, Any]:
         "allowed_users": d.allowed_users or [],
         "created_at": d.created_at,
         "share_url": f"{origin}/share/{d.public_token}",
+        # 링크를 메신저에 붙였을 때 나오는 카드: 썸네일 그림 주소와 카드(제목·소개·썸네일)를 만드는 주소
+        "thumbnail_url": f"{origin}/api/v1/public/apps/{d.public_token}/share-image",
+        "preview_url": f"{origin}/api/v1/public/share/{d.public_token}",
         "widget_snippet": f'<script src="{origin}/api/v1/public/apps/{d.public_token}/widget.js" async></script>',
         "api_url": f"{origin}/api/v1/public/apps/{d.public_token}/chat",
         "appearance": appearance_of(d),

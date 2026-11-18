@@ -41,6 +41,7 @@ import {
 } from "@/lib/api/types";
 import { exportApp, useDuplicateApp, useRestoreVersion } from "@/lib/api/v2";
 import { copyText, downloadJson, formatDate } from "@/lib/cn";
+import { buildShareText } from "@/lib/shareText";
 import { useListControls } from "@/lib/useListControls";
 import type { DeploymentV4 } from "@/lib/api/chat";
 import { useProjects } from "@/lib/api/v3";
@@ -84,6 +85,23 @@ function CopyRow({ label, value }: { label: string; value: string }) {
           {ko.common.copy}
         </Button>
       </div>
+    </div>
+  );
+}
+
+function ShareTextRow(v: { title: string; description: string; link: string; thumbnail: string }) {
+  const text = buildShareText(v);
+  return (
+    <div className="mt-2">
+      <Button
+        size="sm"
+        variant="outline"
+        onClick={async () => {
+          if (await copyText(text)) toast.success("공유 문구를 복사했어요.");
+        }}
+      >
+        공유 문구 복사(제목·소개·링크·썸네일)
+      </Button>
     </div>
   );
 }
@@ -397,7 +415,30 @@ function DeploymentsCard({ appId, editable }: { appId: string; editable: boolean
                 </Button>
               )}
             </div>
-            {d.channel === "share_link" && <CopyRow label="공유 링크" value={d.share_url} />}
+            {d.channel === "share_link" && (
+              <>
+                <CopyRow label="공유 링크" value={d.share_url} />
+                {d.thumbnail_url && <CopyRow label="썸네일 주소" value={d.thumbnail_url} />}
+                {d.access !== "public" && (
+                  <p className="mt-1 text-xs text-slate-500">
+                    메신저에 붙였을 때 썸네일·소개는 &apos;누구나&apos; 열 수 있는 링크만 나와요.
+                    로그인이 필요한 링크는 기본 그림과 앱 이름만 보여요.
+                  </p>
+                )}
+                <ShareTextRow
+                  link={d.share_url}
+                  thumbnail={d.thumbnail_url ?? ""}
+                  title={
+                    String((d as DeploymentV4).appearance?.share_title ?? "") ||
+                    (appInfo.data?.name ?? "")
+                  }
+                  description={
+                    String((d as DeploymentV4).appearance?.share_description ?? "") ||
+                    (appInfo.data?.description ?? "")
+                  }
+                />
+              </>
+            )}
             {d.channel === "web_widget" && (
               <>
                 <CopyRow label="웹사이트에 붙일 코드" value={d.widget_snippet} />

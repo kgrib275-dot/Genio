@@ -467,6 +467,9 @@ export interface Deployment {
   allowed_roles: Role[];
   created_at: string;
   share_url: string;
+  /** 링크 공유 카드의 썸네일 그림 주소와 카드(제목·소개·썸네일) 주소 */
+  thumbnail_url?: string;
+  preview_url?: string;
   widget_snippet: string;
   api_url: string;
 }
