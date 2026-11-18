@@ -1,3 +1,4 @@
+import { appNameFrom } from "@/lib/appName";
 import {
   GraduationCap,
   ArrowRight,
@@ -49,14 +50,6 @@ const SUGGESTIONS = [
   "주간 보고 초안을 만들어서 승인 후 메일로 보내 줘",
   "회의 메모를 받아 할 일 목록으로 정리해 줘",
 ];
-
-function appNameFrom(prompt: string): string {
-  const clean = prompt
-    .replace(/\s+/g, " ")
-    .trim()
-    .replace(/(해\s?줘|만들어\s?줘|줘)[.!?]*$/, "");
-  return clean.length > 24 ? `${clean.slice(0, 24)}…` : clean || "새 앱";
-}
 
 /** 맨 위: 말로 앱 만들기 */
 function PromptHero({ projectId }: { projectId?: string }) {

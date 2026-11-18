@@ -46,7 +46,11 @@ function CaseEditor({
   onSave: (c: EvalCase[]) => void;
 }) {
   const [rows, setRows] = useState<EvalCase[]>(cases);
-  useEffect(() => setRows(cases), [cases]);
+  // 처음에는 빈 질문 칸 하나를 미리 보여 줘서 바로 적을 수 있게 한다
+  useEffect(
+    () => setRows(cases.length === 0 && !readOnly ? [newCase()] : cases),
+    [cases, readOnly],
+  );
   const set = (i: number, patch: Partial<EvalCase>) =>
     setRows((r) => r.map((c, j) => (j === i ? { ...c, ...patch } : c)));
   return (
@@ -57,7 +61,9 @@ function CaseEditor({
       />
       <CardBody className="space-y-3">
         {rows.length === 0 && (
-          <p className="text-sm text-slate-500">아직 질문이 없어요. 아래 버튼으로 추가하세요.</p>
+          <p className="text-sm text-slate-500">
+            질문을 적고 저장하세요. 질문이 더 필요하면 아래 &apos;질문 추가&apos;를 누르세요.
+          </p>
         )}
         {rows.map((c, i) => {
           const message = String(c.input.message ?? "");
@@ -150,7 +156,23 @@ function CaseEditor({
             <Button variant="secondary" onClick={() => setRows((r) => [...r, newCase()])}>
               <Plus className="h-4 w-4" /> 질문 추가
             </Button>
-            <Button disabled={saving} onClick={() => onSave(rows)}>
+            <Button
+              disabled={saving}
+              onClick={() =>
+                onSave(
+                  rows
+                    .filter((c) => c.name.trim() || String(c.input.message ?? "").trim())
+                    .map((c) => ({
+                      ...c,
+                      name:
+                        c.name.trim() ||
+                        String(c.input.message ?? "")
+                          .trim()
+                          .slice(0, 30),
+                    })),
+                )
+              }
+            >
               {saving ? "저장 중…" : "질문 저장"}
             </Button>
           </div>

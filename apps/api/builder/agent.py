@@ -239,7 +239,17 @@ def _agent(
         last = messages.pop()
         messages[-1]["content"] += "\n\n" + last["content"]
 
+    new_turn = [
+        False
+    ]  # 툴을 쓴 뒤 AI가 다시 말을 시작하는 곳인지(앞 말과 붙어 보이지 않게 줄을 띄운다)
+
     def on_text(delta: str) -> None:
+        if new_turn[0] and delta.strip():
+            new_turn[0] = False
+            joined = "".join(text_parts)
+            if joined and not joined[-1].isspace():
+                text_parts.append("\n\n")
+                emit("text", {"delta": "\n\n"})
         text_parts.append(delta)
         emit("text", {"delta": delta})
 
@@ -250,6 +260,7 @@ def _agent(
     system_for_turn = _turn_system(app, plan_only, builder_rules.get_rules(db, app.workspace_id))
     for _ in range(MAX_STEPS):
         db.refresh(app)
+        new_turn[0] = True
         try:
             turn: ChatTurn = llm.adapter.chat(
                 model=llm.model,

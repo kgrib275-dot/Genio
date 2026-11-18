@@ -921,7 +921,7 @@ export function ChatView({
                   ref={inputRef}
                   aria-label="메시지"
                   rows={1}
-                  placeholder={listening ? "듣고 있어요…" : `${title}에게 물어보세요`}
+                  placeholder={listening ? "듣고 있어요…" : "궁금한 것을 입력해 주세요"}
                   className="max-h-40 min-h-[36px] flex-1 resize-none border-0 bg-transparent py-2 text-[15px] text-slate-900 placeholder:text-slate-400 focus:outline-none sm:text-sm"
                   value={message}
                   onChange={(e) => setMessage(e.target.value)}

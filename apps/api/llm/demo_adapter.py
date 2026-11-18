@@ -145,14 +145,22 @@ class DemoAdapter:
                     text=f"{DEMO_TAG} 이미 단계가 여럿 있어서 건드리지 않았어요. {DEMO_NOTE}",
                     model=DEMO_MODEL,
                 )
-            return call(
-                "add_node",
-                {
-                    "type": "template",
-                    "data": {"label": "데모 단계", "template": "데모로 만든 단계예요."},
-                },
-                "예시로 '데모 단계'를 하나 더할게요.",
+            # 입력 단계 바로 뒤에 끼워 넣어 연결이 끊기지 않게 한다
+            first = next(
+                (
+                    n
+                    for n in graph.get("nodes", [])
+                    if isinstance(n, dict) and n.get("type") == "input"
+                ),
+                None,
             )
+            args: dict[str, Any] = {
+                "type": "template",
+                "data": {"label": "데모 단계", "template": "데모로 만든 단계예요."},
+            }
+            if first and first.get("id"):
+                args["after"] = first["id"]
+            return call("add_node", args, "예시로 '데모 단계'를 하나 더할게요.")
         if called == ["get_graph", "add_node"]:
             return call("validate", {}, "잘 연결됐는지 검사할게요.")
         return ChatTurn(

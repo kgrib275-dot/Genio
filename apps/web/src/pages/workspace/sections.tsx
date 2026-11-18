@@ -815,7 +815,8 @@ export function LlmSection({
                 data-testid="demo-banner"
               >
                 지금은 데모 AI예요. 실제 AI가 아니라 예시 답만 나와요. 키가 있는 AI 연결을 등록하면
-                그 연결이 기본이 되어 진짜로 동작해요.
+                그 연결이 기본이 되어 진짜로 동작해요. 데모로 올린 지식베이스 문서는 키를 등록한 뒤
+                &apos;다시 처리&apos;해 주세요.
               </p>
             )}
             {(list.data?.length ?? 0) > 0 && (
@@ -830,7 +831,6 @@ export function LlmSection({
                   <span className="font-medium">{p.label}</span>
                   <Badge tone="blue">{presetName(presets, p.provider)}</Badge>
                   {p.is_default && <Badge tone="green">기본</Badge>}
-                  {p.provider === "demo" && <Badge tone="amber">데모</Badge>}
                   {asProviderV9(p).rerank && <Badge tone="amber">재정렬 전용</Badge>}
                   <span className="basis-full text-xs text-slate-500 sm:basis-auto">
                     {p.default_model} · 키 {p.api_key_masked}

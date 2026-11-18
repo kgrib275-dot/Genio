@@ -575,7 +575,12 @@ def usage(
 ) -> dict[str, Any]:
     if group == "user":
         return _usage_by_user(ctx, ws, _parse_dt(from_), _parse_dt(to))
-    q = select(Run, App.name).join(App, App.id == Run.app_id).where(App.workspace_id == ws)
+    # 실행 한 줄을 통째로(입력·결과 글까지) 읽지 않고 집계에 필요한 칸만 읽는다(기록이 많을 때 빠르게)
+    q = (
+        select(Run.app_id, App.name, Run.token_usage, Run.cost)
+        .join(App, App.id == Run.app_id)
+        .where(App.workspace_id == ws)
+    )
     start, end = _parse_dt(from_), _parse_dt(to)
     if start:
         q = q.where(Run.created_at >= start)
@@ -585,14 +590,14 @@ def usage(
     total_in = total_out = 0
     total_cost = Decimal("0")
     total_runs = 0
-    for r, name in ctx.db.execute(q).all():
-        u = r.token_usage or {}
+    for app_id, name, token_usage, cost in ctx.db.execute(q).all():
+        u = token_usage or {}
         i, o = int(u.get("input_tokens", 0)), int(u.get("output_tokens", 0))
-        c = Decimal(str(r.cost or 0))
+        c = Decimal(str(cost or 0))
         entry = by_app.setdefault(
-            r.app_id,
+            app_id,
             {
-                "app_id": r.app_id,
+                "app_id": app_id,
                 "app_name": name,
                 "runs": 0,
                 "input_tokens": 0,
@@ -651,7 +656,7 @@ def _usage_by_user(
     ctx: Ctx, ws: str, start: datetime | None, end: datetime | None
 ) -> dict[str, Any]:
     q = (
-        select(Run, User)
+        select(Run.token_usage, Run.cost, User.id, User.name, User.email)
         .join(App, App.id == Run.app_id)
         .outerjoin(User, User.id == Run.created_by)
         .where(App.workspace_id == ws)
@@ -667,23 +672,23 @@ def _usage_by_user(
         "output_tokens": 0,
         "cost": Decimal("0"),
     }
-    for r, u in ctx.db.execute(q).all():
-        key = u.id if u else "_anon"
+    for token_usage, cost, uid, uname, uemail in ctx.db.execute(q).all():
+        key = uid if uid else "_anon"
         entry = by_user.setdefault(
             key,
             {
-                "user_id": u.id if u else None,
-                "name": u.name if u else "방문자·자동 실행",
-                "email": u.email if u else None,
+                "user_id": uid,
+                "name": uname if uid else "방문자·자동 실행",
+                "email": uemail if uid else None,
                 "runs": 0,
                 "input_tokens": 0,
                 "output_tokens": 0,
                 "cost": Decimal("0"),
             },
         )
-        usage_ = r.token_usage or {}
+        usage_ = token_usage or {}
         i, o = int(usage_.get("input_tokens", 0)), int(usage_.get("output_tokens", 0))
-        c = Decimal(str(r.cost or 0))
+        c = Decimal(str(cost or 0))
         for d in (entry, totals):
             d["runs"] += 1
             d["input_tokens"] += i

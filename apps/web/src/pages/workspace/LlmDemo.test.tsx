@@ -52,6 +52,6 @@ describe("데모 AI", () => {
     fireEvent.click(await screen.findByRole("button", { name: "키 없이 데모 AI로 체험하기" }));
     await waitFor(() => expect(posts).toEqual(["/workspaces/w1/llm-providers/demo"]));
     expect(await screen.findByTestId("demo-banner")).toHaveTextContent("지금은 데모 AI예요");
-    expect(screen.getByText("데모")).toBeInTheDocument();
+    expect(screen.getByText("데모 AI")).toBeInTheDocument();
   });
 });

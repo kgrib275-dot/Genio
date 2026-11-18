@@ -508,6 +508,10 @@ export function Layout() {
     const t = window.setTimeout(() => setTouring(true), 700);
     return () => window.clearTimeout(t);
   }, [tourDone, pathname, workspaceId]);
+  // 투어는 대시보드 화면을 짚는 안내라서, 다른 화면으로 가면 닫는다(끝낸 것으로 치지는 않아 다음에 다시 보여 준다)
+  useEffect(() => {
+    if (touring && pathname !== "/") setTouring(false);
+  }, [touring, pathname]);
   useEffect(() => {
     const onStart = () => {
       navigate("/");

@@ -20,7 +20,7 @@ from api.models import LlmProvider, Workspace
 
 # 기본 5종 + OpenAI 호환 공급자 preset(v0.6, llm/presets.py)
 PROVIDERS = tuple(PRESETS)
-EMBEDDING_PROVIDERS = ("openai", "openai-compatible", "azure")
+EMBEDDING_PROVIDERS = ("openai", "openai-compatible", "azure", "demo")
 
 
 @dataclass
@@ -149,15 +149,14 @@ def resolve_llm(
     if chosen is not None:
         pass
     elif purpose == "embedding":
-        chosen = next(
-            (r for r in rows if r.provider in EMBEDDING_PROVIDERS and r.is_default),
-            None,
-        )
-        chosen = chosen or next((r for r in rows if r.provider in EMBEDDING_PROVIDERS), None)
+        # 진짜 연결을 먼저 쓰고, 없을 때만 데모 AI(키 없이 체험)로 대신한다
+        real = [r for r in rows if r.provider in EMBEDDING_PROVIDERS and r.provider != "demo"]
+        chosen = next((r for r in real if r.is_default), None) or next(iter(real), None)
+        chosen = chosen or next((r for r in rows if r.provider == "demo"), None)
         if chosen is None:
             raise LlmError(
-                "문서 임베딩에 쓸 OpenAI 연결이 없어요.",
-                "워크스페이스 설정 > AI 연결에 OpenAI 키를 등록하세요.",
+                "문서를 검색용으로 바꿀 AI 연결이 없어요.",
+                "관리 > AI 모델에서 OpenAI 키를 등록하세요. 키가 아직 없으면 '키 없이 데모 AI로 체험하기'로 먼저 써 볼 수 있어요.",
             )
     elif ref in ("", "default"):
         chosen = next((r for r in rows if r.is_default), rows[0])

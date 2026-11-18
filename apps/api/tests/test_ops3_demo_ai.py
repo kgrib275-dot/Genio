@@ -173,3 +173,67 @@ def test_onboarding_does_not_count_demo_as_connected(client: TestClient, team: T
     assert before.status_code == 200, before.text
     _demo(client, team)
     assert client.get(url, headers=team.h("owner")).json()["ai_connected"] is False
+
+
+def test_demo_builder_step_is_connected_and_flow_validates(client: TestClient, team: Team) -> None:
+    _demo(client, team)
+    app_id, sid = new_session(client, team, "데모 연결")
+    send(client, team, sid, "아무거나 만들어 줘")
+    graph = client.get(f"/api/v1/apps/{app_id}", headers=team.h("builder")).json()["draft_graph"]
+    ids = {n["id"] for n in graph["nodes"]}
+    demo = next(n for n in graph["nodes"] if n["data"].get("label") == "데모 단계")
+    assert any(e["target"] == demo["id"] for e in graph["edges"])  # 들어오는 선이 있다
+    assert any(e["source"] == demo["id"] for e in graph["edges"])  # 나가는 선도 있다
+    assert all(e["source"] in ids and e["target"] in ids for e in graph["edges"])
+    v = client.post(f"/api/v1/apps/{app_id}/validate", json={}, headers=team.h("builder")).json()
+    assert v["valid"] is True, v["errors"]
+
+
+def test_builder_turn_texts_do_not_run_together(
+    client: TestClient, team: Team, fake_llm: Any
+) -> None:
+    from api.tests.conftest import add_llm
+    from api.tests.fakes import text_turn, tool_turn
+
+    add_llm(client, team)
+    _, sid = new_session(client, team, "줄 띄우기")
+    fake_llm.script = [
+        tool_turn("흐름을 읽을게요.", ("get_graph", {})),
+        text_turn("다 읽었어요."),
+    ]
+    events = send(client, team, sid, "봐 줘")
+    done = next(d for n, d in events if n == "done")
+    assert done["content"] == "흐름을 읽을게요.\n\n다 읽었어요."
+
+
+def test_demo_ai_serves_knowledge_embeddings_but_real_key_wins(
+    client: TestClient, team: Team
+) -> None:
+    from api.db import SessionLocal
+    from api.llm.registry import resolve_llm
+
+    _demo(client, team)
+    with SessionLocal() as db:
+        got = resolve_llm(db, team.ws, "default", purpose="embedding")
+        assert got.provider.provider == "demo"
+    res = client.post(
+        f"/api/v1/workspaces/{team.ws}/llm-providers",
+        json={
+            "provider": "openai",
+            "label": "진짜",
+            "api_key": "sk-test-1234",
+            "default_model": "gpt-5.4-mini",
+        },
+        headers=team.h("owner"),
+    )
+    assert res.status_code == 200
+    with SessionLocal() as db:
+        assert (
+            resolve_llm(db, team.ws, "default", purpose="embedding").provider.provider == "openai"
+        )
+
+
+def test_dependency_map_hides_apps_nobody_uses(client: TestClient, team: Team) -> None:
+    new_session(client, team, "혼자 있는 앱")
+    out = client.get(f"/api/v1/workspaces/{team.ws}/dependencies", headers=team.h("builder")).json()
+    assert all(r["kind"] != "app" for r in out["resources"])

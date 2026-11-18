@@ -211,6 +211,11 @@ class Deployment(Base):
 
 class Run(Base):
     __tablename__ = "runs"
+    # 앱별·기간별 '최근 것부터' 보기와 합산(0020)
+    __table_args__ = (
+        Index("ix_runs_app_created", "app_id", "created_at"),
+        Index("ix_runs_created_at", "created_at"),
+    )
     id: Mapped[str] = _id()
     app_id: Mapped[str] = mapped_column(ForeignKey("apps.id", ondelete="CASCADE"), index=True)
     version_id: Mapped[str | None] = mapped_column(

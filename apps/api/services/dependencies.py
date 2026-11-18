@@ -112,6 +112,7 @@ def build(db: Session, workspace_id: str) -> dict[str, Any]:
             "unused": not users and kind in ("credential", "kb", "table", "skill"),
         }
         for (kind, rid), users in used_by.items()
+        if kind != "app" or users
     ]
     resources.sort(key=lambda r: (r["kind"], str(r["name"]).lower()))
     return {

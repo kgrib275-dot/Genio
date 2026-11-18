@@ -338,14 +338,21 @@ def _load_public(db: Session, token: str) -> tuple[Deployment, App, WorkflowVers
     return dep, app, version
 
 
-def _check_access(db: Session, dep: Deployment, app: App, user: User | None) -> None:
+def _check_access(
+    db: Session,
+    dep: Deployment,
+    app: App,
+    user: User | None,
+    role: Role | None = None,
+) -> None:
+    """role을 이미 알고 있으면(같은 워크스페이스를 여러 번 검사할 때) 넘겨서 조회를 줄인다."""
     if dep.access == "public":
         return
     if user is None:
         raise AppError(
             401, "이 앱은 로그인한 멤버만 쓸 수 있어요.", "로그인한 뒤 다시 열어 주세요."
         )
-    role = membership_role(db, user.id, app.workspace_id)
+    role = role or membership_role(db, user.id, app.workspace_id)
     if role is None:
         raise AppError(
             403,

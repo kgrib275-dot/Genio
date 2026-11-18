@@ -30,7 +30,7 @@ def hub(ws: str, ctx: Members) -> list[dict[str, Any]]:
             continue
         seen.add(app.id)
         try:
-            _check_access(ctx.db, dep, app, ctx.user)
+            _check_access(ctx.db, dep, app, ctx.user, role=ctx.role)
         except AppError:
             continue
         out.append(

@@ -32,7 +32,7 @@ export function SkillsCard({ ws }: { ws: string }) {
     <Card>
       <CardHeader
         title="업무 요령(스킬)"
-        description="환불 문의는 이 순서로 안내해요, 같은 지침을 모아 둬요. 에이전트는 이름과 설명만 보고 있다가 필요할 때만 꺼내 읽어요. 만들어 두면 에이전트 단계에서 골라 쓸 수 있어요."
+        description="'환불 문의는 이 순서로 안내해요' 같은 지침을 모아 둬요. 에이전트는 이름과 설명만 보고 있다가 필요할 때만 꺼내 읽어요. 만들어 두면 에이전트 단계에서 골라 쓸 수 있어요."
       />
       <CardBody className="space-y-4">
         {q.isLoading && <Loading />}

@@ -83,23 +83,28 @@ export function AppNav({
         aria-label="앱 메뉴"
         className="-mx-1 order-3 flex w-full gap-0.5 overflow-x-auto px-1 pb-0.5 lg:order-none lg:mx-0 lg:w-auto lg:rounded-lg lg:bg-slate-100 lg:p-0.5"
       >
-        {tabs.map((t) => (
-          <NavLink
-            key={t.to}
-            to={t.to}
-            className={({ isActive }) =>
-              cn(
+        {tabs.map((t) => {
+          const active =
+            pathname.startsWith(t.to) || Boolean(t.also?.some((a) => pathname.startsWith(a)));
+          return (
+            <NavLink
+              key={t.to}
+              to={t.to}
+              title={t.label}
+              aria-label={t.label}
+              className={cn(
                 "inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md px-3 py-1.5 text-[13px] font-medium transition-colors",
-                isActive || t.also?.some((a) => pathname.startsWith(a))
+                active
                   ? "bg-indigo-50 text-indigo-700 lg:bg-white lg:text-slate-900 lg:shadow-sm"
                   : "text-slate-500 hover:text-slate-800",
-              )
-            }
-          >
-            <t.Icon className="h-3.5 w-3.5" />
-            {t.label}
-          </NavLink>
-        ))}
+              )}
+            >
+              <t.Icon className="h-3.5 w-3.5" />
+              {/* 오른쪽에 버튼이 많은 화면(만들기)은 노트북 폭(1024~1535px)에서 지금 보는 탭만 글자를 보여 줘서 버튼이 잘리지 않게 한다 */}
+              <span className={active || !right ? "" : "lg:hidden 2xl:inline"}>{t.label}</span>
+            </NavLink>
+          );
+        })}
       </nav>
       {right && (
         <div className="ml-auto flex flex-wrap items-center justify-end gap-2">{right}</div>

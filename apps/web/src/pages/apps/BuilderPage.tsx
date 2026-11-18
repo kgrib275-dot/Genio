@@ -18,7 +18,6 @@ import { useLiveCollab } from "@/components/collab/useLiveCollab";
 import { FlowCanvas } from "@/components/canvas/FlowCanvas";
 import { NodePalette } from "@/components/canvas/NodePalette";
 import { viewportCenter } from "@/components/canvas/viewportBridge";
-import { NodeSettingsPanel } from "@/components/canvas/NodeSettingsPanel";
 import { defaultData } from "@/components/canvas/nodeUtils";
 import { RunPanel } from "@/components/canvas/RunPanel";
 import { TestRunDialog } from "@/components/canvas/TestRunDialog";
@@ -38,6 +37,11 @@ import { useCanvas } from "@/store/canvas";
 import { useCollab } from "@/store/collab";
 import { canEdit, canManage, useSession } from "@/store/session";
 import { AppNav } from "@/pages/apps/AppNav";
+
+// 단계 설정 폼(rjsf·검증 라이브러리)은 단계를 눌렀을 때만 필요해서 따로 받는다(첫 화면을 가볍게)
+const NodeSettingsPanel = lazy(() =>
+  import("@/components/canvas/NodeSettingsPanel").then((m) => ({ default: m.NodeSettingsPanel })),
+);
 
 // 대화로 시험하기(Dify 미리 보기). 열 때만 받아 온다.
 const PreviewChatPanel = lazy(() => import("@/components/chat/PreviewChatPanel"));
@@ -65,6 +69,14 @@ function useDraftAutosave(appId: string) {
 }
 
 export default function BuilderPage() {
+  // 화면이 한가해지면 단계 설정 폼을 미리 받아 둬서, 처음 단계를 눌러도 기다리지 않게 한다
+  useEffect(() => {
+    const warm = () => void import("@/components/canvas/NodeSettingsPanel");
+    const w = window as Window & { requestIdleCallback?: (cb: () => void) => number };
+    if (w.requestIdleCallback) w.requestIdleCallback(warm);
+    else window.setTimeout(warm, 1500);
+  }, []);
+
   const { id: appId = "" } = useParams();
   const { workspaceId: ws, role } = useSession();
   const app = useApp(appId);
@@ -413,19 +425,21 @@ export default function BuilderPage() {
               <aside
                 className={`w-full shrink-0 border-l border-slate-200 bg-white ${panelOpen ? "lg:hidden" : "lg:block"} lg:w-[340px] ${mobileTab === "settings" ? "block" : "hidden"}`}
               >
-                <NodeSettingsPanel
-                  node={selected}
-                  spec={specs.find((s) => s.type === selected.type)}
-                  wsId={ws}
-                  nodes={graph.nodes}
-                  errors={nodeErrors[selected.id]}
-                  readOnly={readOnly}
-                  appId={appId}
-                  lastStep={steps[selected.id]}
-                  onChange={(data) => useCanvas.getState().updateNodeData(selected.id, data)}
-                  onDelete={() => useCanvas.getState().removeNode(selected.id)}
-                  onClose={() => useCanvas.getState().select(null)}
-                />
+                <Suspense fallback={<Loading label="설정을 불러오는 중…" />}>
+                  <NodeSettingsPanel
+                    node={selected}
+                    spec={specs.find((s) => s.type === selected.type)}
+                    wsId={ws}
+                    nodes={graph.nodes}
+                    errors={nodeErrors[selected.id]}
+                    readOnly={readOnly}
+                    appId={appId}
+                    lastStep={steps[selected.id]}
+                    onChange={(data) => useCanvas.getState().updateNodeData(selected.id, data)}
+                    onDelete={() => useCanvas.getState().removeNode(selected.id)}
+                    onClose={() => useCanvas.getState().select(null)}
+                  />
+                </Suspense>
               </aside>
             )}
           </div>
