@@ -22,8 +22,8 @@ from api.llm.image import MAX_COUNT, SIZES, RawImage
 from api.llm.presets import default_image_model, image_capable
 from api.llm.vision import sniff_mime
 from api.models import LlmProvider
+from api.services import ai_label, run_files
 from api.services import files as files_svc
-from api.services import run_files
 from nodes import NodeError
 
 MAX_IMAGE_BYTES = 10 * 1024 * 1024
@@ -104,6 +104,7 @@ def generate(
     size: str,
     count: int,
     user_id: str | None = None,
+    visible_label: bool = False,
 ) -> GeneratedImages:
     if not prompt.strip():
         raise NodeError("만들 이미지를 설명하는 글을 적어 주세요. '설명' 칸이 비어 있어요.")
@@ -143,6 +144,10 @@ def generate(
                 "AI가 그림이 아닌 내용을 돌려줬어요(PNG·JPG·WEBP만 쓸 수 있어요). "
                 "모델 이름과 연결을 확인하세요."
             )
+        # 운영 준비 1차(B6): AI 생성 표시(파일 정보는 늘, 보이는 글자는 단계 설정)
+        data = ai_label.label_image(
+            data, mime, model=result.model or model_name, visible=visible_label
+        )
         f = files_svc.save_generated(
             db,
             workspace_id,

@@ -393,6 +393,7 @@ def public_app(token: str, db: DbDep, user: OptionalUser) -> dict[str, Any]:
             "citations": f["citations"],
             "speech": f["speech"],
             "file_upload": f["file_upload"],
+            "ai_notice": f["ai_notice"],
         },
         "appearance": appearance_of(dep),
     }

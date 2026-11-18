@@ -1,6 +1,7 @@
 import {
   Headset,
   BookMarked,
+  BadgeInfo,
   Eye,
   EyeOff,
   FileUp,
@@ -22,6 +23,7 @@ import { Field, Input, Select, Textarea } from "@/components/ui/input";
 import { toast } from "@/components/ui/toast-store";
 import { useApp, useApps } from "@/lib/api/apps";
 import {
+  AI_NOTICE_TEXT,
   normalizeFeatures,
   type AppDetailV2,
   type AppFeatures,
@@ -223,6 +225,25 @@ export function FeaturesForm({
             addLabel="추천 질문 추가"
             disabled={readOnly}
           />
+        </FeatureRow>
+        <FeatureRow
+          icon={<BadgeInfo className="h-4 w-4" />}
+          title="AI 안내 문구"
+          description="입력창 아래에 AI가 답한다는 것을 알려요. AI 기본법상 이용자에게 미리 알려야 하니 켜 두기를 권해요."
+          enabled={f.ai_notice.enabled}
+          disabled={readOnly}
+          onToggle={(v) => setF({ ...f, ai_notice: { ...f.ai_notice, enabled: v } })}
+        >
+          {f.ai_notice.enabled && (
+            <Input
+              aria-label="AI 안내 문구"
+              maxLength={200}
+              placeholder={AI_NOTICE_TEXT}
+              value={f.ai_notice.text}
+              disabled={readOnly}
+              onChange={(e) => setF({ ...f, ai_notice: { ...f.ai_notice, text: e.target.value } })}
+            />
+          )}
         </FeatureRow>
         <FeatureRow
           icon={<Sparkles className="h-4 w-4" />}

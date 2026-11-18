@@ -340,6 +340,7 @@ class RunServices:
         prompt: str,
         size: str,
         count: int,
+        visible_label: bool = False,
     ) -> dict[str, Any]:
         from api.services import image_gen
 
@@ -352,6 +353,7 @@ class RunServices:
             prompt=prompt,
             size=image_gen.clean_size(size),
             count=image_gen.clean_count(count),
+            visible_label=visible_label,
         )
         if res.input_tokens or res.output_tokens:
             self.usage.append((res.model, res.input_tokens, res.output_tokens))

@@ -142,6 +142,8 @@ describe("공유 챗", () => {
   it("시작 인사·추천 질문을 보여 주고, 답에 출처·이어질 질문·평가를 붙인다", async () => {
     renderPage();
     expect(screen.getByText("사내 규정을 물어보세요.")).toBeInTheDocument();
+    // 운영 준비 B6: 앱 설정이 없어도 'AI가 답해요' 안내를 기본으로 보여 준다
+    expect(screen.getByTestId("ai-notice")).toHaveTextContent("AI가 답해요");
     fireEvent.click(screen.getByRole("button", { name: "연차는 며칠인가요?" }));
 
     expect(await screen.findByText("연차는 15일이에요.")).toBeInTheDocument();

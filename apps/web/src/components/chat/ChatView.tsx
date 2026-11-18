@@ -48,7 +48,14 @@ import {
 } from "@/lib/api/chat";
 import { errorLines } from "@/lib/api/client";
 import type { FeaturesWithHandoff } from "@/lib/api/v5a";
-import type { Citation, PublicApp, PublicFeatures, Rating, StoredFile } from "@/lib/api/types";
+import {
+  AI_NOTICE_TEXT,
+  type Citation,
+  type PublicApp,
+  type PublicFeatures,
+  type Rating,
+  type StoredFile,
+} from "@/lib/api/types";
 import { resolveFilePath, type OutputFile } from "@/lib/fileKinds";
 import { cn } from "@/lib/cn";
 import { isSendKey, sendHint, useEnterToSend } from "@/lib/composer";
@@ -133,6 +140,9 @@ export function ChatView({
   const nextId = () => ++seq.current;
 
   const extraFields = inputFields.filter((f) => f.key !== "message" && f.type !== "file");
+  // 운영 준비 B6(AI 기본법 투명성): AI가 답한다는 안내. 앱 기능에서 끄거나 문구를 바꿀 수 있다
+  const aiNotice =
+    features.ai_notice?.enabled === false ? null : features.ai_notice?.text || AI_NOTICE_TEXT;
   const maxFiles = features.file_upload?.max_files ?? 3;
   const canAttach = Boolean(features.file_upload?.enabled && transport.upload);
   const sttAvailable = Boolean(features.speech?.stt) && sttSupported();
@@ -943,9 +953,15 @@ export function ChatView({
                   </button>
                 )}
               </div>
-              {!narrow && (
-                <p className="text-center text-[11px] text-slate-400">
-                  {footerNote ?? "AI 답은 틀릴 수 있어요. 중요한 내용은 한 번 더 확인하세요."}
+              {(footerNote ?? aiNotice) && (
+                <p
+                  className={cn(
+                    "text-center text-slate-400",
+                    narrow ? "text-[10px] leading-tight" : "text-[11px]",
+                  )}
+                  data-testid="ai-notice"
+                >
+                  {footerNote ?? aiNotice}
                 </p>
               )}
             </div>

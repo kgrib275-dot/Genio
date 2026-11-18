@@ -28,6 +28,19 @@ from nodes import NodeError
 PNG = tiny_png()
 
 
+def same_picture(data: bytes) -> bool:
+    """만든 그림은 원본과 같은 그림이고, 운영 준비 B6의 AI 생성 표시가 파일 정보에 남아 있다."""
+    import io
+
+    from PIL import Image
+
+    from api.services.ai_label import image_label
+
+    a = Image.open(io.BytesIO(PNG)).convert("RGB")
+    b = Image.open(io.BytesIO(data)).convert("RGB")
+    return a.tobytes() == b.tobytes() and image_label(data) is not None
+
+
 # ---------------- 파일 만들기(순수 함수) ----------------
 def _build(fmt: str, **kw: Any) -> bytes:
     args: dict[str, Any] = {
@@ -268,7 +281,7 @@ def test_image_step_saves_files_and_estimates_cost(
     # 로그인한 사람은 내려받는다
     h = team.h("builder")
     r = client.get(f"/api/v1/runs/{d['id']}/files/{d['files'][0]['id']}?inline=1", headers=h)
-    assert r.status_code == 200 and r.content == PNG
+    assert r.status_code == 200 and same_picture(r.content)
     assert r.headers["content-type"] == "image/png" and r.headers["content-disposition"].startswith(
         "inline"
     )
@@ -470,7 +483,7 @@ def test_public_chat_answer_carries_signed_files(
     r = client.get(_public_url(token, f, inline="1"))
     assert (
         r.status_code == 200
-        and r.content == PNG
+        and same_picture(r.content)
         and r.headers["content-disposition"].startswith("inline")
     )
     assert "sandbox" in r.headers["content-security-policy"]

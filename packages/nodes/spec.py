@@ -147,8 +147,10 @@ class NodeServices(Protocol):
         prompt: str,
         size: str,
         count: int,
+        visible_label: bool = False,
     ) -> dict[str, Any]:
-        """AI로 그림을 만들어 워크스페이스 파일로 저장한다. 출력: {files, revised_prompt, cost}"""
+        """AI로 그림을 만들어 워크스페이스 파일로 저장한다. 출력: {files, revised_prompt, cost}
+        파일 정보에 AI 생성 표시를 늘 남기고, visible_label이면 그림에도 글자를 넣는다(B6)."""
         ...
 
     def export_file(

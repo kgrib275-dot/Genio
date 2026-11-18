@@ -27,12 +27,14 @@ def _run_image_generate(data: dict[str, Any], ctx: NodeContext) -> NodeResult:
         count = max(1, min(int(float(str(data.get("count") or 1))), 4))
     except ValueError:
         count = 1
+    extra: dict[str, Any] = {"visible_label": True} if data.get("visible_label") else {}
     res = ctx.services.generate_images(
         provider=str(data.get("provider") or "default"),
         model=str(data.get("model") or "").strip() or None,
         prompt=full,
         size=size,
         count=count,
+        **extra,
     )
     files = res.get("files") or []
     ctx.log(f"이미지 {len(files)}장을 만들었어요(예상 비용 약 ${res.get('cost', 0):.3f}, 참고용).")
@@ -75,6 +77,12 @@ IMAGE_GENERATE = NodeSpec(
             },
             "provider": {"type": "string", "title": "AI 연결", "default": "default"},
             "model": {"type": "string", "title": "이미지 모델(비우면 연결의 대표 모델)"},
+            "visible_label": {
+                "type": "boolean",
+                "title": "그림에 'AI 생성' 글자 넣기",
+                "description": "파일 정보에는 늘 AI 생성 표시가 남아요. 켜면 그림 오른쪽 아래에도 보이게 넣어요(실제 사람·장소처럼 보이는 그림이면 켜 두세요).",
+                "default": False,
+            },
         },
         "required": ["prompt"],
     },

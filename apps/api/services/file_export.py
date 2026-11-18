@@ -11,6 +11,7 @@ import json
 import re
 from typing import Any
 
+from api.services import ai_label
 from nodes import NodeError
 
 MAX_FILE_BYTES = 10 * 1024 * 1024
@@ -142,6 +143,7 @@ def build_xlsx(headers: list[str], body: list[list[str]], sheet: str) -> bytes:
             max(widest + 2, 8), 60
         )
     ws.freeze_panes = "A2"
+    ai_label.label_workbook(wb)  # 운영 준비 1차(B6): 문서 속성에 AI 생성 표시
     out = io.BytesIO()
     wb.save(out)
     return out.getvalue()
@@ -200,6 +202,7 @@ def build_docx(text: str | None, table: tuple[list[str], list[list[str]]] | None
             else:
                 buf.append(line.strip())
         flush()
+    ai_label.label_docx_document(d)  # 운영 준비 1차(B6): 문서 속성에 AI 생성 표시
     out = io.BytesIO()
     d.save(out)
     return out.getvalue()

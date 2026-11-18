@@ -553,7 +553,16 @@ export interface AppFeatures {
   memory: { window: number; summary?: boolean };
   /** v0.4: 실행이 실패하면 이 앱을 실행한다(n8n Error Workflow) */
   on_failure?: { app_id: string | null };
+  /** 운영 준비 B6: 챗 화면의 "AI가 답해요" 안내(기본 켜짐) */
+  ai_notice: AiNotice;
 }
+
+export interface AiNotice {
+  enabled: boolean;
+  text: string;
+}
+
+export const AI_NOTICE_TEXT = "AI가 답해요. 틀릴 수 있으니 중요한 내용은 담당자에게 확인하세요.";
 
 export const DEFAULT_FEATURES: AppFeatures = {
   opening_statement: "",
@@ -565,6 +574,7 @@ export const DEFAULT_FEATURES: AppFeatures = {
   speech: { stt: false, tts: false },
   file_upload: { enabled: false, max_files: 3 },
   memory: { window: 0 },
+  ai_notice: { enabled: true, text: AI_NOTICE_TEXT },
 };
 
 /** 서버가 일부 키를 빠뜨려도 화면이 깨지지 않게 기본값과 합친다. */
@@ -580,6 +590,7 @@ export function normalizeFeatures(f: Partial<AppFeatures> | null | undefined): A
     speech: { ...DEFAULT_FEATURES.speech, ...src.speech },
     file_upload: { ...DEFAULT_FEATURES.file_upload, ...src.file_upload },
     memory: { ...DEFAULT_FEATURES.memory, ...src.memory },
+    ai_notice: { ...DEFAULT_FEATURES.ai_notice, ...src.ai_notice },
     ...(src.on_failure ? { on_failure: { app_id: src.on_failure.app_id ?? null } } : {}),
   };
 }
@@ -802,6 +813,7 @@ export interface PublicFeatures {
   citations?: { enabled: boolean };
   speech?: { stt: boolean; tts: boolean };
   file_upload?: { enabled: boolean; max_files: number };
+  ai_notice?: AiNotice;
 }
 
 export interface PublicAppV2 extends PublicApp {

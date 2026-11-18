@@ -6,8 +6,12 @@ from typing import Any
 
 from api.core.crypto import decrypt_str, encrypt_str, mask
 
+AI_NOTICE_TEXT = "AI가 답해요. 틀릴 수 있으니 중요한 내용은 담당자에게 확인하세요."
+
 DEFAULT_FEATURES: dict[str, Any] = {
     "opening_statement": "",
+    # 운영 준비 1차(B6, AI 기본법 투명성): 챗 화면에 'AI가 답한다'는 안내를 늘 보여 준다(기본 켜짐)
+    "ai_notice": {"enabled": True, "text": AI_NOTICE_TEXT},
     "suggested_questions": [],
     "follow_up": {"enabled": False},
     "citations": {"enabled": True},
@@ -85,6 +89,10 @@ def patch_features(saved: dict[str, Any] | None, patch: dict[str, Any]) -> dict[
         str(w).strip()[:30] for w in current["handoff"]["keywords"] if str(w).strip()
     ][:30]
     current["handoff"]["message"] = str(current["handoff"]["message"] or "")[:300]
+    current["ai_notice"]["enabled"] = bool(current["ai_notice"]["enabled"])
+    current["ai_notice"]["text"] = (
+        str(current["ai_notice"]["text"] or "").strip()[:200] or AI_NOTICE_TEXT
+    )
     target = current["on_failure"].get("app_id")
     current["on_failure"]["app_id"] = (str(target).strip()[:36] or None) if target else None
     mcp_name = re.sub(r"[^A-Za-z0-9_-]+", "_", str(current["mcp"]["tool_name"] or "")).strip("_")
