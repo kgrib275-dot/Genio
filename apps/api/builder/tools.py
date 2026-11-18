@@ -32,6 +32,7 @@ from api.models import (
 )
 from api.schemas.graph import Graph, GraphEdge, GraphNode, Position, empty_graph
 from api.services import apps as app_service
+from api.services import node_policy
 from api.services.projects import hidden_project_ids
 from api.services.queue import enqueue_run
 from nodes import NodeError, registry
@@ -237,10 +238,13 @@ class BuilderToolbox:
         ws = self.app.workspace_id
         allowed = set(registry.types())
         market_types = market_node_types(self.db, ws)
+        blocked = node_policy.blocked_types(self.db, ws)
         node_types = []
         for spec in registry.all():
             if spec.source == "market" and spec.type not in market_types:
                 continue
+            if spec.type in blocked:
+                continue  # 관리자가 막아 둔 단계는 빌더에게 보여 주지 않는다
             props = spec.input_schema.get("properties", {})
             node_types.append(
                 {

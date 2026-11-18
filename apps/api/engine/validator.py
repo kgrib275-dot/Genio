@@ -30,6 +30,8 @@ class ValidationEnv:
     credentials: dict[str, str] | None = None
     connectors: set[str] | None = None
     knowledge_bases: set[str] | None = None
+    # 관리자가 이 워크스페이스에서 막아 둔 단계 종류(후속 Z2)
+    blocked_types: set[str] = field(default_factory=set)
     errors: list[GraphError] = field(default_factory=list)
 
 
@@ -184,6 +186,13 @@ def validate_graph(raw: dict[str, Any], env: ValidationEnv) -> ValidationResult:
                 )
             )
             continue
+        if node.type in env.blocked_types and not node.disabled:
+            errors.append(
+                GraphError(
+                    node_id=node.id,
+                    message=f"'{spec.label}' 단계는 관리자가 이 워크스페이스에서 쓰지 못하게 막아 뒀어요. 다른 단계로 바꾸거나 관리자에게 허용을 요청하세요.",
+                )
+            )
         specs[node.id] = spec
         if node.disabled:
             continue

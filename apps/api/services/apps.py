@@ -19,6 +19,7 @@ from api.models import (
     WorkflowVersion,
 )
 from api.schemas.graph import ValidationResult, starter_graph
+from api.services import node_policy
 from nodes import registry
 
 
@@ -45,6 +46,7 @@ def validation_env(db: Session, workspace_id: str) -> ValidationEnv:
         credentials={c[0]: c[1] for c in creds},
         connectors=connectors,
         knowledge_bases=kbs,
+        blocked_types=node_policy.blocked_types(db, workspace_id),
     )
 
 

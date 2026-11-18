@@ -70,6 +70,7 @@ import { asProviderV9 } from "@/lib/api/v9llm";
 import { downloadAuditCsv } from "@/lib/api/ops";
 import { SystemMailCard } from "@/pages/workspace/SystemMailCard";
 import { ImpactCard } from "@/pages/workspace/ImpactCard";
+import { NodePolicyCard } from "@/pages/workspace/NodePolicyCard";
 import { PrivacyCard } from "@/pages/workspace/PrivacyCard";
 import { SkillsCard } from "@/pages/workspace/SkillsCard";
 import { useResetMember2fa } from "@/lib/api/account";
@@ -1124,6 +1125,7 @@ export function UsageSection({ ws }: { ws: string }) {
         <CostEstimateCard ws={ws} />
         {(role === "owner" || role === "admin") && <LimitsCard ws={ws} />}
         {(role === "owner" || role === "admin") && <PrivacyCard ws={ws} />}
+        {(role === "owner" || role === "admin") && <NodePolicyCard ws={ws} />}
         {canEdit(role) && <SkillsCard ws={ws} />}
       </div>
     </div>

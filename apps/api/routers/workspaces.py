@@ -842,3 +842,41 @@ def patch_limits(ws: str, body: LimitsPatch, ctx: Managers) -> dict[str, Any]:
     )
     ctx.db.commit()
     return _limits_out(ctx, w)
+
+
+# ---------------- 후속(Z2): 쓸 수 있는 단계 제한 ----------------
+class NodePolicyPatch(BaseModel):
+    blocked_types: list[str] = Field(default_factory=list, max_length=200)
+
+
+@router.get("/workspaces/{ws}/node-policy")
+def get_node_policy(ws: str, ctx: Managers) -> dict[str, Any]:
+    from api.services import node_policy
+
+    market_types = market.market_node_types(ctx.db, ws)
+    specs = [s for s in registry.all() if s.source != "market" or s.type in market_types]
+    return node_policy.view(ctx.db, ws, specs)
+
+
+@router.put("/workspaces/{ws}/node-policy")
+def put_node_policy(ws: str, body: NodePolicyPatch, ctx: Managers) -> dict[str, Any]:
+    from api.services import node_policy
+
+    w = ctx.db.get(Workspace, ws)
+    if w is None:
+        raise not_found("워크스페이스")
+    known = {s.type for s in registry.all()}
+    saved = node_policy.save_blocked(ctx.db, w, body.blocked_types, known)
+    audit(
+        ctx.db,
+        workspace_id=ws,
+        user_id=ctx.user.id,
+        action="workspace.node_policy",
+        target_type="workspace",
+        target_id=ws,
+        meta={"blocked": saved},
+    )
+    ctx.db.commit()
+    market_types = market.market_node_types(ctx.db, ws)
+    specs = [s for s in registry.all() if s.source != "market" or s.type in market_types]
+    return node_policy.view(ctx.db, ws, specs)
