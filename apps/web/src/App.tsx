@@ -25,6 +25,7 @@ const TaskLinkPage = lazy(() => import("@/pages/share/TaskLinkPage"));
 const TasksPage = lazy(() => import("@/pages/tasks/TasksPage"));
 const LearnPage = lazy(() => import("@/pages/learn/LearnPage"));
 const AppFeaturesPage = lazy(() => import("@/pages/apps/AppFeaturesPage"));
+const HubPage = lazy(() => import("@/pages/hub/HubPage"));
 const AppEvalsPage = lazy(() => import("@/pages/apps/AppEvalsPage"));
 const AppLogsPage = lazy(() => import("@/pages/apps/AppLogsPage"));
 const AppMonitorPage = lazy(() => import("@/pages/apps/AppMonitorPage"));
@@ -79,6 +80,7 @@ export default function App() {
               <Route path="apps/:id/monitor" element={<AppMonitorPage />} />
               <Route path="apps/:id/api" element={<AppApiPage />} />
               <Route path="apps/:id/triggers" element={<AppTriggersPage />} />
+              <Route path="hub" element={<HubPage />} />
               <Route path="runs/:id" element={<RunDetailPage />} />
               <Route path="knowledge" element={<KnowledgePage />} />
               <Route path="data" element={<DataTablesPage />} />
