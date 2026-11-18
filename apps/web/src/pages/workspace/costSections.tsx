@@ -249,6 +249,39 @@ function numOrNull(v: string): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
+type CapKey =
+  | "max_concurrent_runs"
+  | "max_concurrent_runs_per_app"
+  | "max_runs_per_minute"
+  | "max_file_storage_mb";
+
+const CAP_FIELDS: { key: CapKey; label: string; hint: string; placeholder: string }[] = [
+  {
+    key: "max_concurrent_runs",
+    label: "동시 실행 수(워크스페이스 전체)",
+    hint: "한꺼번에 도는 흐름 수예요.",
+    placeholder: "예: 20",
+  },
+  {
+    key: "max_concurrent_runs_per_app",
+    label: "앱 하나당 동시 실행 수",
+    hint: "앱 하나가 다른 앱 몫까지 쓰지 않게 해요.",
+    placeholder: "예: 5",
+  },
+  {
+    key: "max_runs_per_minute",
+    label: "분당 실행 수",
+    hint: "1분 동안 새로 시작하는 흐름 수예요.",
+    placeholder: "예: 120",
+  },
+  {
+    key: "max_file_storage_mb",
+    label: "파일 저장 용량(MB)",
+    hint: "올린 파일과 흐름이 만든 파일을 합친 용량이에요.",
+    placeholder: "예: 2048",
+  },
+];
+
 /** 월 한도·알림·보관 기간(소유자·관리자) */
 export function LimitsCard({ ws }: { ws: string }) {
   const q = useLimits(ws);
@@ -268,6 +301,13 @@ function LimitsForm({ ws, initial }: { ws: string; initial: WorkspaceLimits }) {
   const [emails, setEmails] = useState(initial.alert_emails.join(", "));
   const [cred, setCred] = useState(initial.alert_credential_id ?? "");
   const [retention, setRetention] = useState(initial.retention_days?.toString() ?? "");
+  const [cap, setCap] = useState({
+    max_concurrent_runs: initial.max_concurrent_runs?.toString() ?? "",
+    max_concurrent_runs_per_app: initial.max_concurrent_runs_per_app?.toString() ?? "",
+    max_runs_per_minute: initial.max_runs_per_minute?.toString() ?? "",
+    max_file_storage_mb: initial.max_file_storage_mb?.toString() ?? "",
+  });
+  const usage = initial.usage;
   const used = initial.month_cost;
   const ratio = initial.monthly_budget_usd ? Math.min(1, used / initial.monthly_budget_usd) : 0;
 
@@ -365,6 +405,33 @@ function LimitsForm({ ws, initial }: { ws: string; initial: WorkspaceLimits }) {
             실행이 실패하면 메일로 알리기(5분마다 모아서)
           </label>
         </div>
+        <div className="border-t border-slate-100 pt-4 dark:border-slate-800">
+          <p className="text-sm font-medium">실행·저장 한도</p>
+          <p className="mt-0.5 text-xs text-slate-500">
+            실행 한도를 넘으면 새 실행은 실패하지 않고 차례를 기다렸다 시작해요(최대 30분). 비우면
+            제한이 없어요.
+            {usage && (
+              <>
+                {" "}
+                지금 실행 중 {usage.running_now}개 · 최근 1분 {usage.started_last_minute}개 · 파일{" "}
+                {usage.file_storage_mb.toLocaleString()}MB
+              </>
+            )}
+          </p>
+          <div className="mt-3 grid gap-3 sm:grid-cols-2">
+            {CAP_FIELDS.map((f) => (
+              <Field key={f.key} label={f.label} htmlFor={`lim-${f.key}`} hint={f.hint}>
+                <Input
+                  id={`lim-${f.key}`}
+                  inputMode="numeric"
+                  placeholder={f.placeholder}
+                  value={cap[f.key]}
+                  onChange={(e) => setCap((c) => ({ ...c, [f.key]: e.target.value }))}
+                />
+              </Field>
+            ))}
+          </div>
+        </div>
         <ErrorBox error={save.error} />
         <Button
           disabled={save.isPending}
@@ -380,6 +447,10 @@ function LimitsForm({ ws, initial }: { ws: string; initial: WorkspaceLimits }) {
                   .filter(Boolean),
                 alert_credential_id: cred || null,
                 retention_days: numOrNull(retention),
+                max_concurrent_runs: numOrNull(cap.max_concurrent_runs),
+                max_concurrent_runs_per_app: numOrNull(cap.max_concurrent_runs_per_app),
+                max_runs_per_minute: numOrNull(cap.max_runs_per_minute),
+                max_file_storage_mb: numOrNull(cap.max_file_storage_mb),
               },
               { onSuccess: () => toast.success("한도·알림 설정을 저장했어요.") },
             )

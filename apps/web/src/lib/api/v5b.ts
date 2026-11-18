@@ -95,7 +95,12 @@ export interface WorkspaceLimits {
   alert_emails: string[];
   alert_credential_id: string | null;
   retention_days: number | null;
+  max_concurrent_runs: number | null;
+  max_concurrent_runs_per_app: number | null;
+  max_runs_per_minute: number | null;
+  max_file_storage_mb: number | null;
   month_cost: number;
+  usage?: { running_now: number; started_last_minute: number; file_storage_mb: number };
 }
 
 export interface InstallationV5 {
@@ -241,7 +246,7 @@ export function useLimits(ws: string, enabled = true) {
 export function useUpdateLimits(ws: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (v: Partial<Omit<WorkspaceLimits, "month_cost">>) =>
+    mutationFn: (v: Partial<Omit<WorkspaceLimits, "month_cost" | "usage">>) =>
       api.patch<WorkspaceLimits>(`/workspaces/${ws}/limits`, v),
     onSuccess: (data) => qc.setQueryData(["limits", ws], data),
   });

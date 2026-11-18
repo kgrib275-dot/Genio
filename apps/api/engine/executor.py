@@ -709,6 +709,49 @@ def _limits_message(db: Session, app: App) -> str | None:
     return str(msg) if msg else None
 
 
+DEFERRED = "__deferred__"
+# 한도 때문에 기다리는 실행을 다시 확인하는 간격(초)
+CAPACITY_RETRY_SECONDS = 5.0
+
+
+def _capacity_gate(db: Session, app: App, run: Run) -> str | None:
+    """운영 준비 1차(A9): 동시 실행·분당 실행 한도를 넘으면 실패시키지 않고 잠시 뒤 다시 큐에 넣는다.
+
+    None = 지금 시작, DEFERRED = 다시 큐에 넣었음, 그 밖의 문자열 = 너무 오래 기다려 실패시킬 문장.
+    바로 실행 모드(시험·로컬)에서는 큐가 없어 기다릴 수 없으므로 확인하지 않는다.
+    """
+    if get_settings().genio_run_inline:
+        return None
+    from api.services import limits
+
+    try:
+        reason = limits.capacity_wait_reason(db, app)
+    except Exception:
+        log.exception("동시 실행 한도 확인 실패(app=%s)", app.id)
+        return None
+    if not reason:
+        return None
+    info = dict((run.context or {}).get("capacity_wait") or {})
+    since_raw = str(info.get("since") or "")
+    try:
+        since = datetime.fromisoformat(since_raw) if since_raw else now()
+    except ValueError:
+        since = now()
+    if since.tzinfo is None:
+        since = since.replace(tzinfo=UTC)
+    if (now() - since).total_seconds() > limits.CAPACITY_MAX_WAIT_SECONDS:
+        return limits.capacity_timeout_message(reason)
+    run.context = {
+        **(run.context or {}),
+        "capacity_wait": {"since": since.isoformat(), "reason": reason},
+    }
+    db.commit()
+    from api.services.queue import enqueue_run
+
+    enqueue_run(run.id, countdown=CAPACITY_RETRY_SECONDS)
+    return DEFERRED
+
+
 # ---------------------------------------------------------------------------
 # v0.6 병렬 분기(ADR 0010): 준비된 단계를 동시에 실행하고, 합치는 단계는 앞 갈래가 모두
 # 끝날 때까지 기다린다. 고르지 않은 갈래는 '안 감'으로 표시해 기다림을 풀어 준다
@@ -1142,6 +1185,12 @@ def _execute(db: Session, run_id: str) -> None:
         blocked = _limits_message(db, app)
         if blocked:
             _finish(db, run, services, "failed", blocked)
+            return
+        gate = _capacity_gate(db, app, run)
+        if gate == DEFERRED:
+            return
+        if gate:
+            _finish(db, run, services, "failed", gate)
             return
         start = next((n for n in graph.nodes if n.type == "input"), None)
         if start is None:

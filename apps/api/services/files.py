@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from api.core.errors import AppError
 from api.models import StoredFile
 from api.services import storage
+from api.services.limits import check_file_quota
 
 MAX_FILE_BYTES = 15 * 1024 * 1024
 ALLOWED_EXT = (
@@ -58,6 +59,7 @@ async def save_upload(
     content = await file.read(MAX_FILE_BYTES + 1)
     if len(content) > MAX_FILE_BYTES:
         raise AppError(413, "파일이 너무 커요(최대 15MB).", "더 작은 파일로 나눠 올려 주세요.")
+    check_file_quota(db, workspace_id, len(content))
     f = StoredFile(
         workspace_id=workspace_id,
         app_id=app_id,
@@ -85,6 +87,7 @@ def save_generated(
     user_id: str | None = None,
 ) -> StoredFile:
     """실행 단계(이미지 만들기·파일 만들기)가 만든 파일을 워크스페이스 파일로 저장한다."""
+    check_file_quota(db, workspace_id, len(data))
     f = StoredFile(
         workspace_id=workspace_id,
         app_id=app_id,

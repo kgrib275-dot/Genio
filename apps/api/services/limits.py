@@ -7,6 +7,11 @@
   alert_emails         받는 사람
   alert_credential_id  메일을 보낼 'Email (SMTP)' 연결 정보
   retention_days       이보다 오래된 실행 기록·대화를 지운다(None = 계속 보관)
+  운영 준비 1차(A9) — 넘으면 새 실행은 실패시키지 않고 잠시 기다렸다 시작한다(최대 CAPACITY_MAX_WAIT_SECONDS)
+  max_concurrent_runs          워크스페이스 전체에서 동시에 도는 실행 수
+  max_concurrent_runs_per_app  앱 하나가 동시에 돌릴 수 있는 실행 수
+  max_runs_per_minute          1분 동안 새로 시작하는 실행 수
+  max_file_storage_mb          올린 파일·만든 파일의 총 용량(넘으면 새 파일을 거절)
 진행 상태(마지막 확인 시각 등)는 settings["limits_state"]에 둔다.
 """
 
@@ -19,7 +24,7 @@ from typing import Any
 from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
-from api.models import App, AppTrigger, Conversation, Message, Run, Workspace
+from api.models import App, AppTrigger, Conversation, Message, Run, StoredFile, Workspace
 
 log = logging.getLogger("genio.limits")
 
@@ -32,7 +37,22 @@ DEFAULTS: dict[str, Any] = {
     "alert_emails": [],
     "alert_credential_id": None,
     "retention_days": None,
+    "max_concurrent_runs": None,
+    "max_concurrent_runs_per_app": None,
+    "max_runs_per_minute": None,
+    "max_file_storage_mb": None,
 }
+# (설정 이름, 최소, 최대, 화면 이름)
+CAPACITY_FIELDS: tuple[tuple[str, int, int, str], ...] = (
+    ("max_concurrent_runs", 1, 1000, "동시 실행 수"),
+    ("max_concurrent_runs_per_app", 1, 1000, "앱 하나당 동시 실행 수"),
+    ("max_runs_per_minute", 1, 100_000, "분당 실행 수"),
+    ("max_file_storage_mb", 1, 1_000_000, "파일 저장 용량(MB)"),
+)
+# 한도 때문에 기다린 실행을 이 시간이 지나면 실패로 끝낸다
+CAPACITY_MAX_WAIT_SECONDS = 30 * 60
+# 이보다 오래 '실행 중'인 기록은 멈춘 것으로 보고 동시 실행 수에서 뺀다(실행 제한 10분 + 여유)
+STALE_RUNNING_SECONDS = 15 * 60
 
 
 def now_utc() -> datetime:
@@ -88,6 +108,10 @@ def clean_limits(patch: dict[str, Any], current: dict[str, Any]) -> dict[str, An
     if "retention_days" in patch:
         rd = _num(patch["retention_days"], 7, 3650, "보관 기간(일)")
         out["retention_days"] = int(rd) if rd is not None else None
+    for key, lo, hi, label in CAPACITY_FIELDS:
+        if key in patch:
+            v = _num(patch[key], lo, hi, label)
+            out[key] = int(v) if v is not None else None
     return out
 
 
@@ -115,6 +139,114 @@ def check_run_allowed(db: Session, app: App) -> str | None:
             "관리자에게 관리 > 사용량에서 월 한도를 늘려 달라고 하세요."
         )
     return None
+
+
+# ---------------- 운영 준비 1차(A9): 동시 실행·분당 실행·파일 용량 ----------------
+def _running_since(now: datetime) -> datetime:
+    return now - timedelta(seconds=STALE_RUNNING_SECONDS)
+
+
+def running_counts(db: Session, workspace_id: str, app_id: str | None = None) -> tuple[int, int]:
+    """(워크스페이스에서 지금 도는 실행 수, 그중 이 앱의 수). 멈춘 지 오래된 기록은 뺀다."""
+    since = _running_since(now_utc())
+    base = (
+        select(func.count())
+        .select_from(Run)
+        .join(App, App.id == Run.app_id)
+        .where(
+            App.workspace_id == workspace_id,
+            Run.status == "running",
+            Run.started_at.is_not(None),
+            Run.started_at >= since,
+        )
+    )
+    total = int(db.scalar(base) or 0)
+    per_app = int(db.scalar(base.where(Run.app_id == app_id)) or 0) if app_id else 0
+    return total, per_app
+
+
+def started_last_minute(db: Session, workspace_id: str) -> int:
+    since = now_utc() - timedelta(seconds=60)
+    return int(
+        db.scalar(
+            select(func.count())
+            .select_from(Run)
+            .join(App, App.id == Run.app_id)
+            .where(
+                App.workspace_id == workspace_id,
+                Run.started_at.is_not(None),
+                Run.started_at >= since,
+            )
+        )
+        or 0
+    )
+
+
+def capacity_wait_reason(db: Session, app: App) -> str | None:
+    """새 실행을 지금 시작하면 한도를 넘는지. 넘으면 기다리는 이유(짧은 한 줄), 아니면 None."""
+    ws = db.get(Workspace, app.workspace_id)
+    if ws is None:
+        return None
+    lim = get_limits(ws)
+    total_cap = lim.get("max_concurrent_runs")
+    app_cap = lim.get("max_concurrent_runs_per_app")
+    rate_cap = lim.get("max_runs_per_minute")
+    if total_cap or app_cap:
+        total, per_app = running_counts(db, ws.id, app.id)
+        if total_cap and total >= int(total_cap):
+            return f"워크스페이스 동시 실행 한도({int(total_cap)}개)"
+        if app_cap and per_app >= int(app_cap):
+            return f"앱 하나당 동시 실행 한도({int(app_cap)}개)"
+    if rate_cap and started_last_minute(db, ws.id) >= int(rate_cap):
+        return f"분당 실행 한도({int(rate_cap)}개)"
+    return None
+
+
+def capacity_timeout_message(reason: str) -> str:
+    return (
+        f"{reason} 때문에 {CAPACITY_MAX_WAIT_SECONDS // 60}분 넘게 기다렸지만 시작하지 못했어요.\n"
+        "잠시 후 다시 실행하거나, 관리자에게 관리 > 사용량에서 한도를 늘려 달라고 하세요."
+    )
+
+
+def file_storage_bytes(db: Session, workspace_id: str) -> int:
+    return int(
+        db.scalar(
+            select(func.coalesce(func.sum(StoredFile.size), 0)).where(
+                StoredFile.workspace_id == workspace_id
+            )
+        )
+        or 0
+    )
+
+
+def check_file_quota(db: Session, workspace_id: str, add_bytes: int) -> None:
+    """파일을 더 저장하면 용량 한도를 넘는지. 넘으면 AppError(413)."""
+    from api.core.errors import AppError
+
+    ws = db.get(Workspace, workspace_id)
+    if ws is None:
+        return
+    cap_mb = get_limits(ws).get("max_file_storage_mb")
+    if not cap_mb:
+        return
+    used = file_storage_bytes(db, workspace_id)
+    if used + add_bytes > int(cap_mb) * 1024 * 1024:
+        raise AppError(
+            413,
+            f"파일 저장 용량 한도({int(cap_mb):,}MB)를 넘어 더 저장할 수 없어요"
+            f"(지금 {used / 1048576:,.1f}MB).",
+            "필요 없는 파일을 지우거나, 관리자에게 관리 > 사용량에서 한도를 늘려 달라고 하세요.",
+        )
+
+
+def capacity_usage(db: Session, ws: Workspace) -> dict[str, Any]:
+    total, _ = running_counts(db, ws.id)
+    return {
+        "running_now": total,
+        "started_last_minute": started_last_minute(db, ws.id),
+        "file_storage_mb": round(file_storage_bytes(db, ws.id) / 1048576, 1),
+    }
 
 
 # ---------------- 알림(5분마다) ----------------

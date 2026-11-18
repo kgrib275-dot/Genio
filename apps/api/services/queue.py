@@ -50,13 +50,17 @@ def _client() -> Celery:
     return Celery("genio-api", broker=s.celery_broker_url or s.redis_url or "memory://")
 
 
-def enqueue_run(run_id: str) -> None:
+def enqueue_run(run_id: str, countdown: float | None = None) -> None:
+    """실행을 큐에 넣는다. countdown초 뒤에 시작(한도 때문에 기다릴 때, 운영 준비 A9)."""
     if get_settings().genio_run_inline:
         from api.engine.executor import execute_run
 
         execute_run(run_id)
         return
-    _client().send_task(EXECUTE_RUN, args=[run_id])
+    if countdown:
+        _client().send_task(EXECUTE_RUN, args=[run_id], countdown=countdown)
+    else:
+        _client().send_task(EXECUTE_RUN, args=[run_id])
 
 
 def enqueue_document(document_id: str) -> None:

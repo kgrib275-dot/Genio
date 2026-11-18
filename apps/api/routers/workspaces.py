@@ -687,12 +687,18 @@ class LimitsPatch(BaseModel):
     alert_emails: list[str] | None = None
     alert_credential_id: str | None = None
     retention_days: int | None = None
+    # 운영 준비 1차(A9)
+    max_concurrent_runs: int | None = None
+    max_concurrent_runs_per_app: int | None = None
+    max_runs_per_minute: int | None = None
+    max_file_storage_mb: int | None = None
 
 
 def _limits_out(ctx: Ctx, w: Workspace) -> dict[str, Any]:
     return {
         **limits.get_limits(w),
         "month_cost": float(limits.month_cost(ctx.db, w.id)),
+        "usage": limits.capacity_usage(ctx.db, w),
     }
 
 
