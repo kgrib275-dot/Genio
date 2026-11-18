@@ -30,6 +30,7 @@ from api.models import (
 from api.routers.common import sse_frame, sse_response
 from api.schemas.graph import Graph
 from api.services import apps as svc
+from api.services import pii
 from api.services.app_config import merged_features, patch_features, store_env_vars
 from api.services.chat import PREVIEW_PREFIX, ChatRequest, run_chat, start_chat
 from api.services.files import save_upload
@@ -284,6 +285,7 @@ def list_conversations(
             select(User).where(User.id.in_([c.user_id for c in convs if c.user_id]))
         )
     }
+    masked = pii.logs_masked(ctx.db, ctx.workspace_id)
     return [
         {
             "id": c.id,
@@ -294,7 +296,11 @@ def list_conversations(
             "dislikes": stats[c.id]["dislikes"],
             "created_at": c.created_at,
             "last_message_at": stats[c.id]["last"],
-            "first_question": stats[c.id]["first_q"],
+            "first_question": (
+                pii.mask(stats[c.id]["first_q"])
+                if masked and c.status != "handoff"
+                else stats[c.id]["first_q"]
+            ),
             "status": c.status,
         }
         for c in convs
@@ -311,11 +317,16 @@ def conversation_messages(conversation_id: str, ctx: ConvViewers) -> list[dict[s
         .where(Message.conversation_id == conversation_id)
         .order_by(Message.created_at)
     )
+    # 운영 준비 1차(B2): 개인정보 가리기를 켰으면 가린다. 상담원이 지금 응대 중인 대화는 원문 그대로
+    conv = ctx.db.get(Conversation, conversation_id)
+    hide = (
+        conv is not None and conv.status != "handoff" and pii.logs_masked(ctx.db, ctx.workspace_id)
+    )
     return [
         {
             "id": m.id,
             "role": m.role,
-            "content": m.content,
+            "content": pii.mask(m.content) if hide else m.content,
             "run_id": m.run_id,
             "feedback": m.feedback,
             "feedback_comment": m.feedback_comment,

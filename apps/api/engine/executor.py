@@ -83,6 +83,7 @@ class RunServices:
         # (키를 바꿨어요·대체 연결로 답했어요). 단계가 끝나면 단계 기록(logs)에 옮겨 적는다.
         self.app_fallback: dict[str, Any] | None = None
         self.notes: list[str] = []
+        self._privacy_cache: dict[str, bool] | None = None
 
     def llm_complete(
         self,
@@ -95,13 +96,23 @@ class RunServices:
         json_schema: dict[str, Any] | None,
         stream: bool = False,
         images: list[str] | None = None,
+        mask_pii: bool = False,
     ) -> LlmResult:
         pictures = self.load_images(images or [])
         sink = self.on_delta
         node_id = self.current_node
+        # 운영 준비 1차(B2): 개인정보를 가리고 보내고, 답에서 원래 값으로 되돌린다
+        vault = None
+        if mask_pii or self._privacy().get("mask_before_ai"):
+            from api.services.pii import Vault
+
+            vault = Vault()
+            system, prompt = vault.mask(system), vault.mask(prompt)
+            if vault:
+                self.log_note("개인정보를 가리고 AI에 보냈어요.")
         on_delta = (
             (lambda t: sink(node_id, t))
-            if stream and sink is not None and json_schema is None
+            if stream and sink is not None and json_schema is None and not vault
             else None
         )
         llm = None
@@ -125,8 +136,23 @@ class RunServices:
             if llm is not None:
                 self.notes.extend(pop_notes(llm.adapter))
         result.model = result.model or llm.model
+        if vault:
+            result.text = vault.unmask(result.text)
+            if result.data is not None:
+                result.data = vault.unmask_value(result.data)
         self.usage.append((result.model, result.input_tokens, result.output_tokens))
         return result
+
+    def _privacy(self) -> dict[str, bool]:
+        if self._privacy_cache is None:
+            from api.services.pii import get_privacy
+
+            self._privacy_cache = get_privacy(self.db, self.workspace_id)
+        return self._privacy_cache
+
+    def log_note(self, text: str) -> None:
+        if text not in self.notes:
+            self.notes.append(text)
 
     def load_images(self, refs: list[str]) -> list[Any]:
         """AI 단계 이미지(v0.6): 파일 id·https 주소를 읽어 검사한다(형식·크기·개수)."""

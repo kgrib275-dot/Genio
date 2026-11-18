@@ -102,6 +102,8 @@ def _run_llm(data: dict[str, Any], ctx: NodeContext) -> NodeResult:
         "json_schema": schema,
         "stream": schema is None,
     }
+    if data.get("mask_pii"):
+        kwargs["mask_pii"] = True
     images = _image_refs(data.get("images"), ctx)
     if images:
         kwargs["images"] = images
@@ -166,6 +168,12 @@ LLM = NodeSpec(
             prompt={"type": "string", "title": "프롬프트"},
             output_schema={"type": "object", "title": "출력 형식(JSON Schema)"},
             memory={"type": "boolean", "title": "이전 대화 기억(챗 앱)", "default": False},
+            mask_pii={
+                "type": "boolean",
+                "title": "개인정보 가리고 보내기",
+                "description": "주민번호·전화·카드·계좌·메일·여권번호를 가린 채 AI에 보내고, 답에서 원래 값으로 돌려 넣어요.",
+                "default": False,
+            },
             images={
                 "type": "array",
                 "title": "함께 볼 이미지(파일·주소, 최대 4장)",

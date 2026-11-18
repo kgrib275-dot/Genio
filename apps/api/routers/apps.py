@@ -14,7 +14,7 @@ from api.core.errors import AppError, not_found
 from api.deps import ANY_MEMBER, EDIT_APPS, VIEW_RUNS, Ctx, require_role
 from api.models import App, Run, WorkflowVersion
 from api.routers.projects import check_project_target
-from api.routers.workspaces import run_dict
+from api.routers.workspaces import masked_runs, run_dict
 from api.schemas.graph import Graph
 from api.services import apps as svc
 from api.services import collab
@@ -372,4 +372,4 @@ def list_app_runs(
     rows = ctx.db.scalars(
         select(Run).where(Run.app_id == app_id).order_by(Run.created_at.desc()).limit(limit)
     )
-    return [run_dict(r) for r in rows]
+    return masked_runs(ctx.db, ctx.workspace_id, [run_dict(r) for r in rows])

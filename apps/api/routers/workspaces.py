@@ -495,7 +495,19 @@ def list_runs(
     if end:
         q = q.where(Run.created_at <= end)
     rows = ctx.db.execute(q.order_by(Run.created_at.desc()).limit(limit)).all()
-    return [{**run_dict(r), "app_name": name} for r, name in rows]
+    out = [{**run_dict(r), "app_name": name} for r, name in rows]
+    return masked_runs(ctx.db, ws, out)
+
+
+def masked_runs(db: Session, ws: str, rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """운영 준비 1차(B2): 기록에서 개인정보 가리기가 켜져 있으면 입력·결과·오류를 가린다."""
+    from api.services import pii
+
+    if not pii.logs_masked(db, ws):
+        return rows
+    return [
+        {**r, **{k: pii.mask_value(r.get(k)) for k in ("input", "output", "error")}} for r in rows
+    ]
 
 
 @router.get("/workspaces/{ws}/usage")
@@ -721,6 +733,41 @@ def http_preview(ws: str, body: HttpPreviewIn, ctx: Builders) -> dict[str, Any]:
         "truncated": truncated,
         "elapsed_ms": int((time.perf_counter() - started) * 1000),
     }
+
+
+# ---------------- 운영 준비 1차(B2): 개인정보 가리기 ----------------
+class PrivacyPatch(BaseModel):
+    mask_logs: bool | None = None
+    mask_before_ai: bool | None = None
+
+
+@router.get("/workspaces/{ws}/privacy")
+def get_privacy_settings(ws: str, ctx: Managers) -> dict[str, bool]:
+    from api.services import pii
+
+    return pii.get_privacy(ctx.db, ws)
+
+
+@router.patch("/workspaces/{ws}/privacy")
+def patch_privacy_settings(ws: str, body: PrivacyPatch, ctx: Managers) -> dict[str, bool]:
+    from api.services import pii
+
+    w = ctx.db.get(Workspace, ws)
+    if w is None:
+        raise not_found("워크스페이스")
+    new = {**pii.get_privacy(ctx.db, ws), **body.model_dump(exclude_unset=True, exclude_none=True)}
+    w.settings = {**(w.settings or {}), "privacy": new}
+    audit(
+        ctx.db,
+        workspace_id=ws,
+        user_id=ctx.user.id,
+        action="workspace.privacy",
+        target_type="workspace",
+        target_id=ws,
+        meta=new,
+    )
+    ctx.db.commit()
+    return new
 
 
 # ---------------- v0.5: 한도·알림·보관 기간(P1) ----------------

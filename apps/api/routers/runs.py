@@ -22,6 +22,7 @@ from api.engine.executor import load_graph
 from api.models import App, HumanTask, Run, RunStep
 from api.routers.common import sse_frame, sse_response
 from api.routers.workspaces import run_dict
+from api.services import pii
 from api.services import tasks as tasks_svc
 from api.services.queue import enqueue_run
 from nodes import NodeError
@@ -74,7 +75,7 @@ def run_detail(db: Session, run: Run) -> dict[str, Any]:
     app = db.get(App, run.app_id)
     from api.services.run_files import files_of_run  # v0.9: 이미지·파일 단계가 만든 파일
 
-    return {
+    out = {
         **rd,
         "steps": steps,
         "story": describe_run(rd, steps),
@@ -82,6 +83,12 @@ def run_detail(db: Session, run: Run) -> dict[str, Any]:
         "graph": graph,
         "files": files_of_run(db, run, app.workspace_id) if app is not None else [],
     }
+    # 운영 준비 1차(B2): '기록에서 개인정보 가리기'를 켠 워크스페이스는 값·글을 가려서 보여 준다
+    if app is not None and pii.logs_masked(db, app.workspace_id):
+        for key in ("input", "output", "error", "steps", "story", "approval"):
+            out[key] = pii.mask_value(out[key])
+        out["pii_masked"] = True
+    return out
 
 
 @router.get("/runs/{run_id}")

@@ -779,6 +779,15 @@ def send_run(db: Session, run_id: str) -> dict[str, str | None]:
         return {}
     include = bool(_cfg(ws).get("include_content"))
     rec = tm.collect(db, run, app, include)
+    if include:
+        from api.services import pii
+
+        if pii.logs_masked(db, ws.id):  # 운영 준비 1차(B2): 밖으로 보낼 때도 개인정보를 가린다
+            rec.input, rec.output = pii.mask_value(rec.input), pii.mask_value(rec.output)
+            rec.error = pii.mask(rec.error)
+            for st in rec.steps:
+                st.input, st.output = pii.mask_value(st.input), pii.mask_value(st.output)
+                st.error = pii.mask(st.error)
     results: dict[str, str | None] = {}
     for p in targets:
         try:
