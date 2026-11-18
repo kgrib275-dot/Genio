@@ -10,6 +10,10 @@ class Settings(BaseSettings):
 
     genio_env: str = "dev"
     genio_log_level: str = "INFO"
+    # 운영 준비 1차(A6): text(기본) | json(한 줄에 JSON 하나, 로그 수집기용)
+    genio_log_format: str = "text"
+    # 운영 준비 1차(A6): /metrics(Prometheus)를 여는 토큰. 비우면 /metrics는 꺼진다(404)
+    genio_metrics_token: str = ""
     # 개발용 기본값. 운영에서는 반드시 .env의 GENIO_SECRET_KEY로 바꾼다.
     genio_secret_key: str = "dev-secret-change-me-please-32bytes!!"  # noqa: S105
     genio_fernet_key: str = ""

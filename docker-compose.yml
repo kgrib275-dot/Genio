@@ -190,6 +190,44 @@ services:
         condition: service_completed_successfully
     restart: unless-stopped
 
+  # 운영 준비 1차(A6) 지표 보기(선택, profile: monitoring). PC 메모리를 쓰니 필요할 때만 켠다.
+  #   .env에 GENIO_METRICS_TOKEN=<긴 무작위 값>, GRAFANA_ADMIN_PASSWORD=<비밀번호>를 넣고
+  #   COMPOSE_PROFILES=monitoring docker compose up -d prometheus grafana
+  #   Grafana: http://127.0.0.1:53000 (admin / GRAFANA_ADMIN_PASSWORD). 자세히는 docs/runbook.md '관측'
+  prometheus:
+    profiles: ["monitoring"]
+    image: prom/prometheus:v2.53.0
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        printf '%s' "$$GENIO_METRICS_TOKEN" > /tmp/genio_metrics_token
+        exec /bin/prometheus --config.file=/etc/prometheus/prometheus.yml --storage.tsdb.path=/prometheus --storage.tsdb.retention.time=15d
+    environment:
+      GENIO_METRICS_TOKEN: ${GENIO_METRICS_TOKEN:-}
+    volumes:
+      - ./scripts/monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - promdata:/prometheus
+    ports:
+      - "127.0.0.1:59090:9090"
+    depends_on:
+      - api
+    restart: unless-stopped
+
+  grafana:
+    profiles: ["monitoring"]
+    image: grafana/grafana:11.1.0
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - ./scripts/monitoring/grafana/datasource.yml:/etc/grafana/provisioning/datasources/genio.yml:ro
+      - grafanadata:/var/lib/grafana
+    ports:
+      - "127.0.0.1:53000:3000"
+    depends_on:
+      - prometheus
+    restart: unless-stopped
+
   web:
     # 배포용 빌드를 nginx로 서빙(빠른 첫 화면). 개발 중 바로 반영하려면 apps/web에서 npm run dev(5190, API 8190 프록시).
     build:
@@ -228,6 +266,8 @@ services:
 
 volumes:
   pgdata:
+  promdata:
+  grafanadata:
   tsstate:
   filestore:
   objectdata:

@@ -1,6 +1,8 @@
 """FastAPI 진입점. 업무 API는 /api/v1 아래에 둔다."""
 
+import hmac
 import logging
+import time
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from typing import Any
@@ -8,11 +10,12 @@ from typing import Any
 from anyio import to_thread
 from fastapi import Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from sqlalchemy import text
 
 from api.config import get_settings
 from api.core.errors import install_error_handlers
+from api.core.observability import observe_request, render_metrics, request_id_var, setup_logging
 from api.core.sentry import init_sentry
 from api.db import Base, SessionLocal, engine
 from api.deps import public_ip_guard
@@ -58,7 +61,7 @@ from api.routers import (
 )
 from api.services.seed import seed_demo, seed_demo_samples
 
-logging.basicConfig(level=get_settings().genio_log_level)
+setup_logging("api")  # 운영 준비 1차(A6): GENIO_LOG_FORMAT=json이면 JSON 한 줄 로그
 log = logging.getLogger("genio")
 init_sentry("api")  # SENTRY_DSN이 있을 때만 켜진다(v0.8)
 
@@ -145,9 +148,33 @@ async def _request_id(request: Request, call_next: Any) -> Any:
 
     rid = clean_request_id(request.headers.get("x-request-id"))
     request.state.request_id = rid
-    response = await call_next(request)
+    token = request_id_var.set(rid)
+    started = time.perf_counter()
+    status = 500
+    try:
+        response = await call_next(request)
+        status = response.status_code
+    finally:
+        request_id_var.reset(token)
+        route = request.scope.get("route")
+        path = getattr(route, "path", None) or "(없는 주소)"
+        if path != "/metrics":
+            observe_request(request.method, path, status, time.perf_counter() - started)
     response.headers["X-Request-ID"] = rid
     return response
+
+
+@app.get("/metrics", include_in_schema=False)
+def metrics(request: Request) -> Response:
+    """운영 준비 1차(A6): Prometheus 지표. GENIO_METRICS_TOKEN을 정해야 켜지고 Bearer 토큰이 맞아야 한다.
+    사람이 쓰는 주소가 아니라 수집기용이라 역할(require_role) 대신 토큰으로 지킨다."""
+    expected = get_settings().genio_metrics_token
+    if not expected:
+        return Response(status_code=404)
+    given = request.headers.get("authorization", "").removeprefix("Bearer ").strip()
+    if not hmac.compare_digest(given.encode(), expected.encode()):
+        return Response(status_code=401, headers={"WWW-Authenticate": "Bearer"})
+    return Response(render_metrics(), media_type="text/plain; version=0.0.4; charset=utf-8")
 
 
 @app.middleware("http")

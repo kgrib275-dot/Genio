@@ -1,0 +1,8 @@
+# Grafana가 처음 뜰 때 Prometheus를 자료원으로 등록한다(프로필 monitoring).
+apiVersion: 1
+datasources:
+  - name: Prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true

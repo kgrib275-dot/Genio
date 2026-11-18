@@ -229,3 +229,11 @@ COMPOSE_PROFILES=sandbox docker compose up -d --build
   - `s3`: 버킷 버전 관리(또는 다른 버킷으로 복제)를 켜 둔다. 자체 서버면 `objectdata` 볼륨을 백업한다.
 - 복구 순서: DB 복구(`scripts/restore_backup.sh`) → 파일 저장소 복구 → 시스템 상태·파일 열어 보기로 확인. 행은 있는데 파일이 없으면 "저장된 파일을 찾지 못했어요"가 나온다.
 - 옮기기 전에 백업을 한 번 받아 두고, `--clear-db`는 저장소 쪽 백업까지 확인한 뒤에만 쓴다.
+
+## 관측(운영 준비 1차 A6)
+- **로그 형식**: `.env`에 `GENIO_LOG_FORMAT=json`이면 api·worker·scheduler 로그가 한 줄에 JSON 하나(`ts`·`level`·`logger`·`msg`·`request_id`)로 나온다. 비밀값은 가려서 남긴다. 화면 오류에 보이는 요청 번호로 `docker compose logs api | grep <요청 번호>` 하면 그 요청의 로그만 찾을 수 있다(글 형식도 `[요청 번호]`가 붙는다).
+- **지표**: `.env`에 `GENIO_METRICS_TOKEN=<긴 무작위 값>`을 넣고 api를 다시 만들면 `http://127.0.0.1:8190/metrics`가 켜진다(`Authorization: Bearer <토큰>` 필요, 웹 주소·공유 주소로는 열리지 않음). 비우면 404.
+  - `genio_http_requests_total{method,route,status}`, `genio_http_request_duration_seconds`(API 프로세스들이 Redis로 함께 셈)
+  - `genio_runs_24h{status}`, `genio_runs_running`, `genio_queue_length`, `genio_scheduler_last_run_seconds`, `genio_ai_cost_usd_month`, `genio_ai_tokens_24h{kind}`, `genio_users`, `genio_workspaces`, `genio_metrics_db_up`
+- **보기(선택)**: `COMPOSE_PROFILES=monitoring docker compose up -d prometheus grafana` → Grafana `http://127.0.0.1:53000`(admin / `GRAFANA_ADMIN_PASSWORD`). Prometheus 자료원은 자동 등록된다. 메모리가 빠듯하면 끄기: `docker compose stop prometheus grafana`.
+- 확인해 볼 만한 알림 기준(예시): 5xx 비율 > 1%, 대기 중인 작업 > 100, `genio_scheduler_last_run_seconds` > 300, `genio_metrics_db_up == 0`.

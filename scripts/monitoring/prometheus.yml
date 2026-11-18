@@ -1,0 +1,14 @@
+# 운영 준비 1차(A6): compose 프로필 monitoring의 Prometheus 설정.
+# 토큰은 컨테이너가 시작할 때 GENIO_METRICS_TOKEN으로 /tmp/genio_metrics_token 파일을 만들어 읽는다.
+global:
+  scrape_interval: 30s
+  evaluation_interval: 30s
+
+scrape_configs:
+  - job_name: genio-api
+    metrics_path: /metrics
+    authorization:
+      type: Bearer
+      credentials_file: /tmp/genio_metrics_token
+    static_configs:
+      - targets: ["api:8000"]

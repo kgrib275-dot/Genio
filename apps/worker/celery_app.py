@@ -4,9 +4,11 @@ import os
 
 from celery import Celery
 
+from api.core.observability import setup_logging
 from api.core.sentry import init_sentry
 
 init_sentry("worker")  # SENTRY_DSN이 있을 때만 켜진다(v0.8)
+setup_logging("worker")  # 운영 준비 1차(A6): GENIO_LOG_FORMAT=json이면 JSON 한 줄 로그
 
 celery = Celery(
     "genio",
@@ -20,6 +22,8 @@ celery.conf.update(
     accept_content=["json"],
     timezone="Asia/Seoul",
     task_track_started=True,
+    # 운영 준비 1차(A6): 로그 형식은 setup_logging이 정한다(Celery가 바꾸지 않게)
+    worker_hijack_root_logger=False,
     task_acks_late=True,
     worker_prefetch_multiplier=1,
     # 실행 10분 제한(설계서 §5) + 여유
