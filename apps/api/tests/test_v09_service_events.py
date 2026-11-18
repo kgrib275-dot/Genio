@@ -241,7 +241,9 @@ def test_rotate_generated_secret_invalidates_old(client: TestClient, team: Team)
     assert new != secret
     old = client.post(path, content=body, headers=gh_headers(secret, body, delivery="d-2"))
     assert old.status_code == 401
-    good = client.post(path, content=body, headers=gh_headers(new, body, delivery="d-3"))
+    # 같은 내용을 다시 보내면(재전송 공격 방어) 건너뛰므로, 새 비밀값 확인에는 다른 내용을 보낸다
+    body2 = gh_body(title="다른 이슈")
+    good = client.post(path, content=body2, headers=gh_headers(new, body2, delivery="d-3"))
     assert good.status_code == 202
     assert len(runs_of(app_id)) == 2
 

@@ -130,13 +130,14 @@ export interface TemplatePreview {
   requires: string[];
 }
 
-export type KeyScope = "chat" | "run" | "logs" | "mcp";
+export type KeyScope = "chat" | "run" | "logs" | "mcp" | "build";
 
 export const KEY_SCOPE_LABELS: Record<KeyScope, string> = {
   chat: "대화",
   run: "흐름 실행",
   logs: "기록 읽기",
   mcp: "MCP 도구",
+  build: "흐름 만들기·고치기(MCP)",
 };
 
 // ---------------- 연결 정보 ----------------

@@ -555,8 +555,8 @@ def _key(k: AppApiKey) -> dict[str, Any]:
     }
 
 
-KEY_SCOPES = ("chat", "run", "logs", "mcp")
-KeyScope = Literal["chat", "run", "logs", "mcp"]
+KEY_SCOPES = ("chat", "run", "logs", "mcp", "build")
+KeyScope = Literal["chat", "run", "logs", "mcp", "build"]
 
 
 def _default_scopes() -> list[KeyScope]:
@@ -566,7 +566,7 @@ def _default_scopes() -> list[KeyScope]:
 class KeyIn(BaseModel):
     name: str = Field(default="기본 키", min_length=1, max_length=100)
     # 권한 범위: chat(대화) · run(흐름 실행) · logs(실행 기록 읽기) · mcp(MCP 도구로 부르기, v0.6)
-    scopes: list[KeyScope] = Field(default_factory=_default_scopes, min_length=1, max_length=4)
+    scopes: list[KeyScope] = Field(default_factory=_default_scopes, min_length=1, max_length=5)
 
 
 @router.get("/apps/{app_id}/api-keys")

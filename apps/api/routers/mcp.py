@@ -295,3 +295,159 @@ def mcp_get() -> Response:
 @router.delete("/mcp")
 def mcp_delete() -> Response:
     return Response(status_code=405, headers={"Allow": "POST"})
+
+
+# ---------------- 흐름 만들기·고치기(키 권한 'build') ----------------
+# 바깥 AI(Claude·Cursor 등)가 이 앱의 '작업본'을 읽고 고친다. 배포·버전 저장·키 관리는 할 수 없다.
+BUILD_TOOLS = (
+    "get_graph",
+    "list_available_nodes",
+    "add_node",
+    "update_node",
+    "remove_node",
+    "connect",
+    "validate",
+    "run_test",
+    "get_run",
+)
+BUILD_MUTATING = {"add_node", "update_node", "remove_node", "connect"}
+
+
+def build_tool_defs() -> list[dict[str, Any]]:
+    from api.builder.tools import TOOL_DEFS
+
+    return [
+        {"name": t.name, "description": t.description, "inputSchema": t.input_schema}
+        for t in TOOL_DEFS
+        if t.name in BUILD_TOOLS
+    ]
+
+
+def _builder_user(db: Session, key: Any, app: App) -> str:
+    """키를 만든 사람이 아직 이 워크스페이스의 제작자 이상일 때만 그 사람의 권한으로 고친다."""
+    from api.deps import EDIT_APPS, membership_role
+
+    uid = key.created_by
+    role = membership_role(db, uid, app.workspace_id) if uid else None
+    if uid is None or role not in EDIT_APPS:
+        raise AppError(
+            403,
+            "이 키를 만든 사람이 더 이상 앱을 고칠 수 있는 멤버가 아니에요.",
+            "지금 제작자 이상인 멤버가 키를 새로 만드세요.",
+        )
+    return str(uid)
+
+
+def _build_call(
+    db: Session, key: Any, app: App, params: dict[str, Any], rid: Any
+) -> dict[str, Any]:
+    import json
+
+    from api.builder.tools import BuilderToolbox
+    from api.core.audit import audit
+
+    name = str(params.get("name") or "")
+    if name not in BUILD_TOOLS:
+        return _rpc_error(rid, INVALID_PARAMS, f"Unknown tool: {name}")
+    args = params.get("arguments") or {}
+    if not isinstance(args, dict):
+        return _rpc_error(rid, INVALID_PARAMS, "arguments must be an object")
+    if len(str(args)) > 50_000:
+        return _rpc_result(
+            rid, _tool_error("입력이 너무 커요(최대 50KB).", "단계를 나눠서 하나씩 보내세요.")
+        )
+    uid = _builder_user(db, key, app)
+    toolbox = BuilderToolbox(db, app, uid)
+    outcome = toolbox.execute(name, args)
+    if name in BUILD_MUTATING and outcome.ok:
+        audit(
+            db,
+            workspace_id=app.workspace_id,
+            user_id=uid,
+            action="app.mcp_build",
+            target_type="app",
+            target_id=app.id,
+            meta={"tool": name, "key": key.prefix},
+        )
+        db.commit()
+    text = json.dumps(outcome.result, ensure_ascii=False, default=str)[:30_000]
+    return _rpc_result(
+        rid,
+        {
+            "content": [{"type": "text", "text": text}],
+            "structuredContent": outcome.result,
+            "isError": not outcome.ok,
+        },
+    )
+
+
+def _handle_build(db: Session, key: Any, app: App, msg: Any) -> dict[str, Any] | None:
+    if not isinstance(msg, dict) or msg.get("jsonrpc") != "2.0" or "method" not in msg:
+        return _rpc_error(
+            msg.get("id") if isinstance(msg, dict) else None, INVALID_REQUEST, "Invalid Request"
+        )
+    method = str(msg["method"])
+    rid = msg.get("id")
+    params = msg.get("params") or {}
+    if "id" not in msg:
+        return None
+    if not isinstance(params, dict):
+        return _rpc_error(rid, INVALID_PARAMS, "params must be object")
+    if method == "initialize":
+        asked = str(params.get("protocolVersion") or "")
+        version = asked if asked in SUPPORTED_VERSIONS else SUPPORTED_VERSIONS[0]
+        return _rpc_result(
+            rid,
+            {
+                "protocolVersion": version,
+                "capabilities": {"tools": {"listChanged": False}},
+                "serverInfo": {
+                    "name": "genio-builder",
+                    "title": "Genio 빌더",
+                    "version": SERVER_VERSION,
+                },
+                "instructions": (
+                    f"Genio 앱 '{app.name}'의 작업본(초안)을 읽고 고치는 도구예요. "
+                    "get_graph로 먼저 읽고, 고친 뒤 validate와 run_test로 확인하세요. 배포는 사람이 해요."
+                ),
+            },
+        )
+    if method == "ping":
+        return _rpc_result(rid, {})
+    if method == "tools/list":
+        return _rpc_result(rid, {"tools": build_tool_defs()})
+    if method == "tools/call":
+        return _build_call(db, key, app, params, rid)
+    if method in ("resources/list", "prompts/list"):
+        return _rpc_result(rid, {"resources" if method == "resources/list" else "prompts": []})
+    return _rpc_error(rid, METHOD_NOT_FOUND, f"Method not found: {method}")
+
+
+@router.post("/mcp/build")
+async def mcp_build_post(request: Request, db: DbDep) -> Response:
+    from api.routers.service import key_and_app
+
+    key, app = key_and_app(request, db)
+    scopes = set(key.scopes or [])
+    if "build" not in scopes:
+        raise AppError(
+            403,
+            "이 API 키에는 '흐름 만들기·고치기' 권한이 없어요.",
+            "앱의 API 화면에서 이 권한을 켠 키를 새로 만드세요.",
+        )
+    if not ratelimit.allow(f"mcpbuild:{key.id}", MCP_RATE_PER_MINUTE):
+        raise AppError(429, "MCP 요청이 너무 많아요.", "1분 뒤에 다시 시도하세요.")
+    try:
+        payload = await request.json()
+    except ValueError:
+        return JSONResponse(_rpc_error(None, PARSE_ERROR, "Parse error"), status_code=400)
+    from starlette.concurrency import run_in_threadpool
+
+    if isinstance(payload, list):
+        return JSONResponse(
+            _rpc_error(None, INVALID_REQUEST, "Batch is not supported"), status_code=400
+        )
+    answer = await run_in_threadpool(_handle_build, db, key, app, payload)
+    if answer is None:
+        return Response(status_code=202)
+    return JSONResponse(answer)

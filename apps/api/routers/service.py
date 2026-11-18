@@ -33,7 +33,8 @@ class AppKeyCtx:
         self.key = key
 
 
-def app_key(request: Request, db: DbDep) -> AppKeyCtx:
+def key_and_app(request: Request, db: DbDep) -> tuple[AppApiKey, App]:
+    """키 확인과 속도 제한. 저장된 버전이 없어도 된다(작업본을 고치는 키용)."""
     auth = request.headers.get("authorization", "")
     raw = auth[7:].strip() if auth.lower().startswith("bearer ") else ""
     if not raw.startswith("gk-"):
@@ -48,17 +49,30 @@ def app_key(request: Request, db: DbDep) -> AppKeyCtx:
     if not ratelimit.allow(f"svc:{key.id}:{client_ip(request)}", SERVICE_RATE_PER_MINUTE):
         raise AppError(429, "요청이 너무 많아요.", "1분 뒤에 다시 시도하세요(분당 60회).")
     app = db.get(App, key.app_id)
-    version = app_svc.latest_version(db, key.app_id) if app else None
-    if app is None or version is None:
-        raise AppError(409, "앱에 저장된 버전이 없어요.", "빌더에서 '버전 저장'을 먼저 하세요.")
+    if app is None:
+        raise AppError(404, "앱을 찾을 수 없어요.", "앱이 지워졌는지 확인하세요.")
     key.last_used_at = datetime.now(UTC)
     db.commit()
+    return key, app
+
+
+def app_key(request: Request, db: DbDep) -> AppKeyCtx:
+    key, app = key_and_app(request, db)
+    version = app_svc.latest_version(db, key.app_id)
+    if version is None:
+        raise AppError(409, "앱에 저장된 버전이 없어요.", "빌더에서 '버전 저장'을 먼저 하세요.")
     return AppKeyCtx(app, version, key)
 
 
 KeyDep = Annotated[AppKeyCtx, Depends(app_key)]
 
-SCOPE_NAMES = {"chat": "대화", "run": "흐름 실행", "logs": "기록 읽기", "mcp": "MCP 도구"}
+SCOPE_NAMES = {
+    "chat": "대화",
+    "run": "흐름 실행",
+    "logs": "기록 읽기",
+    "mcp": "MCP 도구",
+    "build": "흐름 만들기·고치기",
+}
 
 
 def need_scope(k: AppKeyCtx, scope: str) -> None:
