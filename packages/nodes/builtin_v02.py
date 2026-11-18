@@ -641,6 +641,9 @@ def _run_agent(data: dict[str, Any], ctx: NodeContext) -> NodeResult:
     if not query.strip():
         raise NodeError("에이전트에게 줄 요청(query)이 비어 있어요.")
     tools = [t for t in (data.get("tools") or []) if isinstance(t, dict) and t.get("type")]
+    skill_ids = [str(x) for x in (data.get("skill_ids") or []) if str(x).strip()]
+    if skill_ids:
+        tools.append({"type": "skills", "ids": skill_ids[:20]})
     out = ctx.services.run_agent(
         provider=str(data.get("provider") or "default"),
         model=data.get("model") or None,
@@ -711,6 +714,11 @@ AGENT = NodeSpec(
                     "required": ["type"],
                 },
             },
+            "skill_ids": {
+                "type": "array",
+                "title": "쓸 수 있는 스킬(관리 > 스킬에서 만든 것의 id)",
+                "items": {"type": "string"},
+            },
             "approver_roles": {
                 "type": "array",
                 "title": "도구 승인할 수 있는 역할(승인 받기를 켠 도구가 있을 때)",
@@ -735,6 +743,7 @@ AGENT = NodeSpec(
     ui_schema={
         "instruction": {"ui:widget": "textarea"},
         "query": {"ui:widget": "textarea"},
+        "skill_ids": {"ui:widget": "skills"},
         "notify": NOTIFY_UI,
         **TIMEOUT_UI,
     },

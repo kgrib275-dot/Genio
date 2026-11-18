@@ -5,6 +5,7 @@ import type { FieldProps, IconButtonProps, WidgetProps } from "@rjsf/utils";
 import { Link } from "react-router-dom";
 import { useApps } from "@/lib/api/apps";
 import { useConnectorDefinitions, useCredentials, useKnowledgeBases } from "@/lib/api/resources";
+import { useSkills } from "@/lib/api/skills";
 import { useDataTables } from "@/lib/api/v4";
 import { useCanvas } from "@/store/canvas";
 import { RawValueButton, ValueInput } from "@/components/canvas/ValueInput";
@@ -105,6 +106,43 @@ export function KbWidget(props: WidgetProps) {
         </option>
       ))}
     </select>
+  );
+}
+
+/** 에이전트 단계: 워크스페이스 스킬 중 쓸 것을 체크로 고른다(값은 id 목록) */
+export function SkillsWidget(props: WidgetProps) {
+  const skills = useSkills(ctxOf(props).wsId);
+  const chosen = new Set(Array.isArray(props.value) ? (props.value as string[]) : []);
+  const list = skills.data?.skills ?? [];
+  if (list.length === 0)
+    return (
+      <p className="text-xs text-slate-500">
+        아직 스킬이 없어요. 관리 &gt; 사용량 화면의 &apos;스킬&apos;에서 SKILL.md를 가져오세요.
+      </p>
+    );
+  return (
+    <div className="space-y-1">
+      {list.map((s) => (
+        <label key={s.id} className="flex items-start gap-2 text-sm">
+          <input
+            type="checkbox"
+            className="mt-1 accent-indigo-600"
+            checked={chosen.has(s.id)}
+            disabled={props.disabled || props.readonly}
+            onChange={(e) => {
+              const next = new Set(chosen);
+              if (e.target.checked) next.add(s.id);
+              else next.delete(s.id);
+              props.onChange(next.size ? [...next] : undefined);
+            }}
+          />
+          <span>
+            <span className="font-medium">{s.name}</span>
+            <span className="block text-xs text-slate-500">{s.description}</span>
+          </span>
+        </label>
+      ))}
+    </div>
   );
 }
 

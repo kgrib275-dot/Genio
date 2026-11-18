@@ -71,11 +71,12 @@ import { downloadAuditCsv } from "@/lib/api/ops";
 import { SystemMailCard } from "@/pages/workspace/SystemMailCard";
 import { ImpactCard } from "@/pages/workspace/ImpactCard";
 import { PrivacyCard } from "@/pages/workspace/PrivacyCard";
+import { SkillsCard } from "@/pages/workspace/SkillsCard";
 import { useResetMember2fa } from "@/lib/api/account";
 import { copyText, formatCost, formatDate } from "@/lib/cn";
 import { optionsFrom, useListControls } from "@/lib/useListControls";
 import type { AuditLog } from "@/lib/api/types";
-import { useSession } from "@/store/session";
+import { canEdit, useSession } from "@/store/session";
 import { useMe } from "@/lib/api/auth";
 import { useLlmPresets } from "@/lib/api/v5b";
 import {
@@ -1123,6 +1124,7 @@ export function UsageSection({ ws }: { ws: string }) {
         <CostEstimateCard ws={ws} />
         {(role === "owner" || role === "admin") && <LimitsCard ws={ws} />}
         {(role === "owner" || role === "admin") && <PrivacyCard ws={ws} />}
+        {canEdit(role) && <SkillsCard ws={ws} />}
       </div>
     </div>
   );

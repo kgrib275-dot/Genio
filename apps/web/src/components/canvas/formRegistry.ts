@@ -15,6 +15,7 @@ import {
   DataTableWidget,
   JsonField,
   KbWidget,
+  SkillsWidget,
   TextareaWidget,
   ValueTextWidget,
 } from "@/components/canvas/widgets";
@@ -33,6 +34,7 @@ export const nodeWidgets: RegistryWidgetsType = {
   textarea: TextareaWidget,
   code: CodeWidget,
   kb: KbWidget,
+  skills: SkillsWidget,
   connector: ConnectorWidget,
   credential: CredentialWidget,
   connectorAction: ConnectorActionWidget,

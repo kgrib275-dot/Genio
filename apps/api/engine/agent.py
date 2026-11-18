@@ -116,6 +116,35 @@ def build_tools(
                 if t.get("approval"):
                     table[name]["approval"] = True
             continue
+        elif kind == "skills":
+            # 스킬: 이름·설명만 도구 설명에 늘 싣고, 본문은 에이전트가 고르면 그때 읽어 준다
+            from api.services import skills as skills_svc
+
+            chosen = skills_svc.catalog_for(
+                services.db, services.workspace_id, [str(x) for x in (t.get("ids") or [])]
+            )
+            if not chosen:
+                continue
+            listing = "\n".join(f"- {s['name']}: {s['description']}" for s in chosen)
+            defs.append(
+                ToolDef(
+                    "use_skill",
+                    "업무 요령(스킬)의 자세한 지침을 읽는다. 아래 중 지금 일에 맞는 것이 있으면 "
+                    "먼저 읽고 그대로 따른다.\n" + listing,
+                    {
+                        "type": "object",
+                        "properties": {
+                            "name": {"type": "string", "enum": [str(s["name"]) for s in chosen]}
+                        },
+                        "required": ["name"],
+                    },
+                )
+            )
+            table["use_skill"] = {
+                "type": "skills",
+                "bodies": {str(s["name"]): str(s["body"]) for s in chosen},
+            }
+            continue
         elif kind == "app":
             app = services.db.get(App, str(t.get("app_id") or ""))
             if app is None or app.workspace_id != services.workspace_id:
@@ -173,6 +202,11 @@ def call_tool(services: "RunServices", spec: dict[str, Any], args: dict[str, Any
         text = str(out.get("text") or "") or json.dumps(out.get("content"), ensure_ascii=False)
         prefix = "(도구가 오류를 알려 줬어요) " if out.get("is_error") else ""
         return (prefix + text)[:MAX_TOOL_OUTPUT]
+    if kind == "skills":
+        body = (spec.get("bodies") or {}).get(str(args.get("name") or ""))
+        if body is None:
+            raise NodeError("없는 스킬이에요. 목록에 있는 이름으로 불러 주세요.")
+        return str(body)
     if kind == "app":
         return run_child_app(services, str(spec.get("app_id")), dict(args.get("inputs") or {}))
     raise NodeError("알 수 없는 도구예요.")
