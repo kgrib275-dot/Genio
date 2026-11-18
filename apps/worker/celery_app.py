@@ -24,7 +24,8 @@ celery.conf.update(
     worker_prefetch_multiplier=1,
     # 실행 10분 제한(설계서 §5) + 여유
     task_time_limit=11 * 60,
-    # v0.4: 1분마다 예약 실행 확인(워커를 `-B`로 띄워 beat를 함께 돌린다. 워커가 여럿이면 하나만 -B)
+    # v0.4: 1분마다 예약 실행 확인. 운영 준비 1차(A2): beat는 compose의 `scheduler` 서비스 하나가 돌리고
+    # 워커는 실행만 한다(워커를 늘려도 예약이 겹치지 않음). 겹쳐 떠도 worker/singleton.py가 한 번만 실행한다.
     beat_schedule={
         "dispatch-schedules": {"task": "genio.dispatch_schedules", "schedule": 60.0},
         # v0.5: 실패·비용 알림(5분), 보관 기간이 지난 기록 지우기(하루 한 번)

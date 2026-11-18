@@ -12,6 +12,7 @@ from api.services.tasks import sweep as sweep_human_tasks
 from api.services.tracing import send_run
 from api.services.triggers import dispatch_schedules
 from worker.celery_app import celery
+from worker.singleton import run_once
 
 
 @celery.task(name="genio.sync_kb_source")  # type: ignore[untyped-decorator]
@@ -25,6 +26,10 @@ def sync_kb_source_task(kb_id: str, source_id: str) -> dict[str, str]:
 @celery.task(name="genio.sync_due_sources")  # type: ignore[untyped-decorator]
 def sync_due_sources_task() -> int:
     """'매일 동기화'로 정해 둔 소스 중 하루가 지난 것을 큐에 넣는다(beat가 한 시간마다 부름)."""
+    return run_once("sync_due_sources", 3600, _sync_due_sources) or 0
+
+
+def _sync_due_sources() -> int:
     from api.services.queue import enqueue_source_sync
 
     queued = 0
@@ -45,6 +50,10 @@ def sync_due_sources_task() -> int:
 @celery.task(name="genio.sweep_human_tasks")  # type: ignore[untyped-decorator]
 def sweep_human_tasks_task() -> dict[str, int]:
     """v0.9: 기한이 지난 사람 단계를 정해 둔 대로 처리하고, 기한 직전 일은 한 번 다시 알린다."""
+    return run_once("sweep_human_tasks", 300, _sweep_human_tasks) or {}
+
+
+def _sweep_human_tasks() -> dict[str, int]:
     from api.services.queue import enqueue_run
 
     with SessionLocal() as db:
@@ -75,22 +84,34 @@ def process_document_task(document_id: str) -> None:
 @celery.task(name="genio.dispatch_schedules")  # type: ignore[untyped-decorator]
 def dispatch_schedules_task() -> int:
     """next_run_at이 지난 예약 자동 실행을 큐에 넣는다(beat가 1분마다 부름)."""
-    with SessionLocal() as db:
-        return len(dispatch_schedules(db))
+
+    def go() -> int:
+        with SessionLocal() as db:
+            return len(dispatch_schedules(db))
+
+    return run_once("dispatch_schedules", 60, go, lock_seconds=300) or 0
 
 
 @celery.task(name="genio.check_alerts")  # type: ignore[untyped-decorator]
 def check_alerts_task() -> int:
     """실패·비용 알림 메일(워크스페이스 설정에 받는 사람·메일 연결 정보가 있을 때만)."""
-    with SessionLocal() as db:
-        return check_alerts(db)
+
+    def go() -> int:
+        with SessionLocal() as db:
+            return check_alerts(db)
+
+    return run_once("check_alerts", 300, go) or 0
 
 
 @celery.task(name="genio.apply_retention")  # type: ignore[untyped-decorator]
 def apply_retention_task() -> dict[str, int]:
     """보관 기간이 지난 실행 기록·대화를 지운다."""
-    with SessionLocal() as db:
-        return apply_retention(db)
+
+    def go() -> dict[str, int]:
+        with SessionLocal() as db:
+            return apply_retention(db)
+
+    return run_once("apply_retention", 24 * 3600, go, lock_seconds=3600) or {}
 
 
 @celery.task(name="genio.send_trace")  # type: ignore[untyped-decorator]

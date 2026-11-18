@@ -66,7 +66,7 @@ if (-not (Test-Path ".env")) {
 }
 
 # 3) 컨테이너
-Step "컨테이너 실행 (web · api · worker · postgres · redis · tailscale)"
+Step "컨테이너 실행 (web · api · worker · scheduler · postgres · redis · tailscale)"
 if ($Rebuild) { Native { docker compose up -d --build } } else { Native { docker compose up -d } }
 if ($LASTEXITCODE -ne 0) { Fail "컨테이너를 띄우지 못했어요." "docker compose logs 로 오류를 확인하세요." }
 Ok "컨테이너 실행됨"

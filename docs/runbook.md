@@ -76,8 +76,10 @@ make check            # make가 없으면(Windows): PYTHONUTF8=1 bash scripts/ch
 - 빌더 녹화 스냅샷 갱신: `UPDATE_SNAPSHOTS=1 pytest apps/api/tests/test_builder.py`
 
 ## 예약 실행(Celery beat, ADR 0008)
-- 워커는 `celery ... worker -B`로 beat를 함께 돌린다. beat가 1분마다 `genio.dispatch_schedules`를 불러 `next_run_at`이 지난 예약 자동 실행을 큐에 넣는다.
-- 워커 컨테이너를 2개 이상 띄우면 `-B`는 하나에만 둔다(둘 다 켜면 예약이 두 번 실행된다).
+- 운영 준비 1차(A2)부터 beat는 `scheduler` 서비스 하나가 따로 돌린다. 1분마다 `genio.dispatch_schedules`를 불러 `next_run_at`이 지난 예약 자동 실행을 큐에 넣는다. 워커는 실행만 한다.
+- 워커를 늘릴 때: `docker compose up -d --scale worker=2`. `scheduler`는 늘리지 않는다.
+- 실수로 beat가 둘 떠도 주기 작업마다 Redis 표시(`genio:beat:*`, `genio:lock:*`)로 한 주기에 한 번만 실행한다(`apps/worker/singleton.py`).
+- 확인: 관리 > 시스템 상태의 '예약 실행'이 마지막 실행 시각을 보여 준다. 5분 넘게 없으면 '주의' → `docker compose logs scheduler`.
 - 밀린 예약(워커가 꺼져 있던 동안)은 한 번만 실행하고 다음 시각부터 이어 간다.
 - 웹훅 주소(`/api/v1/hooks/{token}`)는 비밀값이다. 새어 나갔으면 앱 > 자동 실행에서 '주소 다시 만들기'를 누른다. 토큰은 로그에 남기지 않는다.
 - 웹훅·예약은 저장한 버전으로만 실행된다. 버전이 없으면 웹훅은 409, 예약은 건너뛰고 마지막 상태를 `no_version`으로 남긴다.
@@ -102,12 +104,13 @@ alembic -c apps/api/alembic.ini check      # 모델과 DB가 같은지
 | 빌더가 "등록된 AI 연결이 없어요" | 워크스페이스 > AI 연결에 키 등록 |
 | 문서가 '실패' | 문서 행의 사유 확인(대부분 OpenAI 연결 없음) |
 | 실행이 '대기 중'에서 안 움직임 | `docker compose logs worker` |
+| 예약 실행이 안 돎 | `docker compose logs scheduler` (시스템 상태 '예약 실행') |
 | 공유 주소가 안 열림 | `tailscale serve status`, 상대가 tailnet에 있는지 |
 
 ## 동시 사용자·서버 설정 (부하 시험 2026-11-03)
-- API는 운영 설정으로 뜬다: `uvicorn --workers ${GENIO_API_WORKERS:-4}`, 코드 자동 재시작 없음. **API 코드를 고친 뒤에는 `docker compose restart api worker`** 로 반영한다.
+- API는 운영 설정으로 뜬다: `uvicorn --workers ${GENIO_API_WORKERS:-4}`, 코드 자동 재시작 없음. **API 코드를 고친 뒤에는 `docker compose restart api worker scheduler`** 로 반영한다.
 - 코드를 고치며 바로바로 보고 싶을 때(개발): `docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d api` (프로세스 1개 + 자동 재시작).
-- requirements*.txt를 바꾸면 이미지를 다시 만든다: `docker compose up -d --build api worker`.
+- requirements*.txt를 바꾸면 이미지를 다시 만든다: `docker compose up -d --build api worker scheduler`.
 - 조정 값(.env): `GENIO_API_WORKERS`(프로세스 수, CPU 코어 수 정도), `GENIO_API_THREADS`(프로세스당 작업 스레드, 기본 200), `GENIO_DB_POOL_SIZE`·`GENIO_DB_MAX_OVERFLOW`(프로세스당 DB 연결, 기본 10+10). PostgreSQL `max_connections=200`(compose).
   프로세스 수 x (풀+여분) + 워커가 200을 넘지 않게 한다.
 - 요청 DB 세션은 엔드포인트 함수가 끝나면 바로 닫힌다(`DbDep`, scope=function). 응답을 스트리밍하는 동안 DB 연결을 붙잡지 않게 하려는 것이다. 스트리밍 코드 안에서 DB가 필요하면 `with SessionLocal()`로 짧게 열고, 세션 안에서 yield하지 않는다.

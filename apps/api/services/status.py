@@ -90,6 +90,59 @@ def _sandbox() -> dict[str, Any]:
     )
 
 
+def _ratelimit(redis_ok: bool) -> dict[str, Any]:
+    """속도 제한·로그인 시도 제한을 API 프로세스들이 함께 세는지(Redis) 따로 세는지(메모리)."""
+    from api.core import ratelimit
+
+    st = ratelimit.backend_state()
+    if not st["configured"]:
+        return _item(
+            "unknown",
+            "속도 제한",
+            "프로세스마다 따로 세요(Redis 설정 없음, 시험·로컬 환경).",
+            mode="memory",
+        )
+    if not redis_ok or st["degraded"]:
+        return _item(
+            "warn",
+            "속도 제한",
+            "Redis에 연결하지 못해 프로세스마다 따로 세고 있어요. 한도가 느슨해져요.",
+            mode="memory",
+        )
+    return _item("ok", "속도 제한", "모든 API 프로세스가 Redis로 함께 세요.", mode="redis")
+
+
+# 예약 실행(beat)이 마지막으로 돈 시각. worker/singleton.py의 last_run_key("dispatch_schedules")와 같은 키
+BEAT_LAST_KEY = "genio:beat:last:dispatch_schedules"
+BEAT_STALE_SECONDS = 300
+
+
+def _scheduler(r: Any) -> dict[str, Any]:
+    """scheduler 서비스(celery beat)가 1분마다 예약 실행을 확인하고 있는지."""
+    st = get_settings()
+    if st.genio_run_inline or r is None:
+        return _item("unknown", "예약 실행", "확인할 수 없어요.")
+    try:
+        raw = r.get(BEAT_LAST_KEY)
+    except Exception:
+        return _item("unknown", "예약 실행", "확인할 수 없어요.")
+    if not raw:
+        return _item(
+            "warn",
+            "예약 실행",
+            "예약 확인 기록이 없어요. scheduler 서비스가 떠 있는지 확인해 주세요.",
+        )
+    ago = int(time.time() - int(raw))
+    if ago > BEAT_STALE_SECONDS:
+        return _item(
+            "error",
+            "예약 실행",
+            f"{ago // 60}분째 예약을 확인하지 않았어요. scheduler 서비스를 다시 시작해 주세요.",
+            seconds_ago=ago,
+        )
+    return _item("ok", "예약 실행", f"{ago}초 전에 확인함", seconds_ago=ago)
+
+
 def _queue() -> dict[str, Any]:
     st = get_settings()
     url = st.celery_broker_url or st.redis_url
@@ -159,8 +212,18 @@ def _disk() -> dict[str, Any]:
 def system_status(db: Session) -> dict[str, Any]:
     now = datetime.now(UTC)
     since = now - timedelta(hours=24)
-    redis_item, _ = _redis()
-    items = [_db(db), redis_item, _worker(), _queue(), _sandbox(), _backup(now), _disk()]
+    redis_item, r = _redis()
+    items = [
+        _db(db),
+        redis_item,
+        _ratelimit(redis_item["status"] == "ok"),
+        _worker(),
+        _scheduler(r),
+        _queue(),
+        _sandbox(),
+        _backup(now),
+        _disk(),
+    ]
     runs_24h = db.scalar(select(func.count()).select_from(Run).where(Run.created_at >= since)) or 0
     failed_24h = (
         db.scalar(

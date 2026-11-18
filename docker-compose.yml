@@ -90,7 +90,17 @@ services:
 
   worker:
     <<: *backend-common
-    command: celery -A worker.celery_app:celery worker -B --schedule /tmp/celerybeat-schedule --loglevel=INFO --concurrency=4
+    # 실행만 한다. 늘릴 때: docker compose up -d --scale worker=2 (예약은 scheduler 하나가 보내므로 겹치지 않음)
+    command: celery -A worker.celery_app:celery worker --loglevel=INFO --concurrency=4
+    depends_on:
+      api:
+        condition: service_healthy
+
+  # 운영 준비 1차(A2): 주기 작업(예약 실행 1분, 알림·사람 단계 5분, 지식 동기화 1시간, 보관 기간 하루)을
+  # 보내기만 하는 celery beat. 반드시 하나만 띄운다(--scale 금지). 같은 이미지라 따로 빌드할 필요 없다.
+  scheduler:
+    <<: *backend-common
+    command: celery -A worker.celery_app:celery beat --schedule /tmp/celerybeat-schedule --loglevel=INFO
     depends_on:
       api:
         condition: service_healthy
