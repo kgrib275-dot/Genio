@@ -137,7 +137,8 @@ function RerunDialog({ run, open, onClose }: { run: Run; open: boolean; onClose:
 
 export default function RunDetailPage() {
   const { id: runId = "" } = useParams();
-  const run = useRun(runId);
+  const [reveal, setReveal] = useState(false);
+  const run = useRun(runId, reveal);
   const approve = useApproveRun(runId);
   const qc = useQueryClient();
   const [comment, setComment] = useState("");
@@ -223,6 +224,36 @@ export default function RunDetailPage() {
       </div>
       <RerunDialog run={r} open={rerunOpen} onClose={() => setRerunOpen(false)} />
 
+      {(r.pii_masked || reveal) && (
+        <div
+          className="mb-4 flex flex-wrap items-center gap-2 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700"
+          data-testid="pii-banner"
+        >
+          {reveal ? (
+            <>
+              <span>개인정보 원문을 보고 있어요. 이 열람은 활동 기록에 남았어요.</span>
+              <Button variant="outline" onClick={() => setReveal(false)}>
+                다시 가리기
+              </Button>
+            </>
+          ) : (
+            <>
+              <span>개인정보를 가려서 보여 주고 있어요.</span>
+              {(role === "owner" || role === "admin") && (
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    if (window.confirm("원문을 보면 누가 언제 봤는지 활동 기록에 남아요. 볼까요?"))
+                      setReveal(true);
+                  }}
+                >
+                  원문 보기
+                </Button>
+              )}
+            </>
+          )}
+        </div>
+      )}
       {r.status === "waiting_approval" && r.approval && (
         <Card className="mb-6 border-amber-300">
           <CardHeader title="승인이 필요해요" description={labelOf(r.approval.node_id)} />

@@ -361,6 +361,8 @@ export interface RunDetail extends Run {
   steps: RunStep[];
   approval: RunApproval | null;
   graph: GeneratedGraph;
+  /** 개인정보 가리기가 켜져 있어 값·글을 가려서 보내 준 경우 */
+  pii_masked?: boolean;
 }
 
 export interface BuilderSession {

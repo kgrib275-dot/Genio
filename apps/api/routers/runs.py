@@ -58,7 +58,7 @@ def _steps(db: Session, run_id: str) -> list[RunStep]:
     )
 
 
-def run_detail(db: Session, run: Run) -> dict[str, Any]:
+def run_detail(db: Session, run: Run, reveal: bool = False) -> dict[str, Any]:
     try:
         graph = load_graph(db, run).dump()
     except NodeError:
@@ -86,7 +86,7 @@ def run_detail(db: Session, run: Run) -> dict[str, Any]:
         "files": files_of_run(db, run, app.workspace_id) if app is not None else [],
     }
     # 운영 준비 1차(B2): '기록에서 개인정보 가리기'를 켠 워크스페이스는 값·글을 가려서 보여 준다
-    if app is not None and pii.logs_masked(db, app.workspace_id):
+    if app is not None and pii.logs_masked(db, app.workspace_id) and not reveal:
         for key in ("input", "output", "error", "steps", "story", "approval"):
             out[key] = pii.mask_value(out[key])
         out["pii_masked"] = True
@@ -94,11 +94,26 @@ def run_detail(db: Session, run: Run) -> dict[str, Any]:
 
 
 @router.get("/runs/{run_id}")
-def get_run(run_id: str, ctx: RunViewers) -> dict[str, Any]:
+def get_run(run_id: str, ctx: RunViewers, reveal: bool = False) -> dict[str, Any]:
     run = ctx.db.get(Run, run_id)
     if run is None:
         raise not_found("실행 기록")
-    return run_detail(ctx.db, run)
+    if reveal:
+        # 가려 둔 개인정보 원문 보기: 소유자·관리자만, 볼 때마다 활동 기록에 남긴다(후속 Z4)
+        if ctx.role not in ("owner", "admin"):
+            raise forbidden()
+        app = ctx.db.get(App, run.app_id)
+        if app is not None and pii.logs_masked(ctx.db, app.workspace_id):
+            audit(
+                ctx.db,
+                workspace_id=app.workspace_id,
+                user_id=ctx.user.id,
+                action="run.reveal",
+                target_type="run",
+                target_id=run.id,
+            )
+            ctx.db.commit()
+    return run_detail(ctx.db, run, reveal=reveal)
 
 
 def _stream(run_id: str) -> Iterator[str]:

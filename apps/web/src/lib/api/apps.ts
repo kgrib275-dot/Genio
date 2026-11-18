@@ -125,10 +125,10 @@ export function useAppRuns(appId: string) {
   });
 }
 
-export function useRun(runId: string) {
+export function useRun(runId: string, reveal = false) {
   return useQuery({
-    queryKey: ["run", runId],
-    queryFn: () => api.get<RunDetail>(`/runs/${runId}`),
+    queryKey: reveal ? ["run", runId, "reveal"] : ["run", runId],
+    queryFn: () => api.get<RunDetail>(`/runs/${runId}${reveal ? "?reveal=true" : ""}`),
     enabled: Boolean(runId),
   });
 }

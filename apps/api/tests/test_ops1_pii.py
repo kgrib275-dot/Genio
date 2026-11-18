@@ -269,3 +269,27 @@ def test_llm_node_has_mask_option() -> None:
 
     spec = registry.get("llm")
     assert spec is not None and "mask_pii" in spec.input_schema["properties"]
+
+
+def test_reveal_original_is_admin_only_and_audited(client: TestClient, team: Team) -> None:
+    from api.models import AuditLog
+
+    _, run_id = _app_run(team)
+    client.patch(
+        f"/api/v1/workspaces/{team.ws}/privacy", json={"mask_logs": True}, headers=team.h("owner")
+    )
+    url = f"/api/v1/runs/{run_id}?reveal=true"
+    assert client.get(url, headers=team.h("builder")).status_code == 403
+    assert client.get(url, headers=team.h("operator")).status_code == 403
+    shown = client.get(url, headers=team.h("admin")).json()
+    assert "010-1234-5678" in str(shown) and "pii_masked" not in shown
+    with SessionLocal() as db:
+        rows = db.query(AuditLog).filter(AuditLog.action == "run.reveal").all()
+        assert len(rows) == 1 and rows[0].target_id == run_id
+    # 가리기를 켜지 않은 곳에서는 기록하지 않는다
+    client.patch(
+        f"/api/v1/workspaces/{team.ws}/privacy", json={"mask_logs": False}, headers=team.h("owner")
+    )
+    client.get(url, headers=team.h("admin"))
+    with SessionLocal() as db:
+        assert db.query(AuditLog).filter(AuditLog.action == "run.reveal").count() == 1
