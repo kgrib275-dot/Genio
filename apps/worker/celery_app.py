@@ -39,6 +39,8 @@ celery.conf.update(
         "sweep-human-tasks": {"task": "genio.sweep_human_tasks", "schedule": 300.0},
         # v0.8: '매일 동기화'로 정해 둔 지식 가져오기 소스(웹사이트·노션·Google 문서)
         "sync-due-kb-sources": {"task": "genio.sync_due_sources", "schedule": 3600.0},
+        # 운영 준비 1차(A3): 백업을 바깥 S3 호환 저장소에 올리기(GENIO_BACKUP_S3_BUCKET이 있을 때만)
+        "offsite-backup": {"task": "genio.offsite_backup", "schedule": 3600.0},
     },
 )
 

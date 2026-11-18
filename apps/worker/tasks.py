@@ -119,3 +119,13 @@ def send_trace_task(run_id: str) -> dict[str, str | None]:
     """v0.6 외부 추적: 끝난 실행을 Langfuse·LangSmith로 보낸다(실패해도 실행과 무관)."""
     with SessionLocal() as db:
         return send_run(db, run_id)
+
+
+@celery.task(name="genio.offsite_backup")  # type: ignore[untyped-decorator]
+def offsite_backup_task() -> dict[str, object]:
+    """운영 준비 1차(A3): 최근 DB 백업을 바깥 저장소에 올리고 오래된 것은 지운다(한 시간마다)."""
+    from api.services import offsite_backup
+
+    if not offsite_backup.enabled():
+        return {"status": "off"}
+    return run_once("offsite_backup", 3600, offsite_backup.sync, lock_seconds=3000) or {}

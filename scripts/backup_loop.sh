@@ -58,6 +58,10 @@ while true; do
   if [ "$now_hour" = "$HOUR" ] && [ "$done_day" != "$today" ]; then
     run_backup
     done_day="$today"
+    # 운영 준비 1차(A3): 매주(기본 일요일=7) 백업 뒤에 복구 연습(임시 DB에 복구해 보고 지움)
+    if [ "$(date +%u)" = "${GENIO_BACKUP_VERIFY_WEEKDAY:-7}" ] && [ -f /scripts/verify_backup.sh ]; then
+      bash /scripts/verify_backup.sh || echo "[backup] 복구 연습 실패(관리 > 시스템 상태 확인)" >&2
+    fi
   fi
   sleep 60
 done

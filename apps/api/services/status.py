@@ -203,6 +203,68 @@ def _backup(now: datetime) -> dict[str, Any]:
     )
 
 
+# 복구 연습이 이보다 오래되면 '주의'(매주 돌므로 여유를 둔다)
+VERIFY_STALE_DAYS = 8
+
+
+def _offsite() -> dict[str, Any]:
+    """운영 준비 1차(A3): 바깥 저장소 백업."""
+    from api.services import offsite_backup
+
+    if not offsite_backup.enabled():
+        return _item(
+            "warn",
+            "외부 백업",
+            "백업이 이 PC에만 있어요. PC가 망가지면 함께 사라져요. "
+            "GENIO_BACKUP_S3_BUCKET으로 바깥 저장소를 정해 주세요.",
+            mode="off",
+        )
+    st = offsite_backup.load_state()
+    if not st:
+        return _item("unknown", "외부 백업", "아직 한 번도 올리지 않았어요(한 시간 안에 올려요).")
+    if st.get("status") != "ok":
+        return _item("error", "외부 백업", str(st.get("message") or "올리지 못했어요."))
+    detail = f"마지막 확인 {st.get('last_success') or '없음'}"
+    if st.get("last_file"):
+        detail += f" · {st.get('last_file')}"
+    return _item("ok", "외부 백업", detail, last_success=st.get("last_success"))
+
+
+def _verify(now: datetime) -> dict[str, Any]:
+    """운영 준비 1차(A3): 복구 연습(scripts/verify_backup.sh) 결과."""
+    path = Path(get_settings().genio_backup_dir) / "verify.json"
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return _item(
+            "unknown",
+            "복구 연습",
+            "아직 복구 연습을 하지 않았어요. 매주 일요일 백업 뒤에 자동으로 해요.",
+        )
+    except Exception:
+        return _item("unknown", "복구 연습", "복구 연습 기록을 읽지 못했어요.")
+    when_raw = str(data.get("checked_at") or "")
+    if data.get("status") != "ok":
+        return _item(
+            "error",
+            "복구 연습",
+            f"{when_raw} 복구에 실패했어요. {data.get('message') or ''}".strip(),
+        )
+    detail = (
+        f"{when_raw} {data.get('file', '')} 복구 성공 · 표 {data.get('tables', '?')}개 · "
+        f"{data.get('seconds', '?')}초"
+    )
+    status = "ok"
+    try:
+        when = datetime.fromisoformat(when_raw.replace("Z", "+00:00"))
+        if now - when > timedelta(days=VERIFY_STALE_DAYS):
+            status = "warn"
+            detail += " · 일주일 넘게 연습하지 않았어요"
+    except ValueError:
+        status = "warn"
+    return _item(status, "복구 연습", detail, rows=data.get("rows") or {})
+
+
 def _disk() -> dict[str, Any]:
     target = get_settings().genio_backup_dir
     path = target if os.path.isdir(target) else "/"
@@ -231,6 +293,8 @@ def system_status(db: Session) -> dict[str, Any]:
         _queue(),
         _sandbox(),
         _backup(now),
+        _offsite(),
+        _verify(now),
         _disk(),
         _secret_key(),
     ]

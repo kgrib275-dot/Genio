@@ -118,9 +118,12 @@ services:
       TZ: ${GENIO_BACKUP_TZ:-Asia/Seoul}
       GENIO_BACKUP_HOUR: ${GENIO_BACKUP_HOUR:-3}
       GENIO_BACKUP_KEEP_DAYS: ${GENIO_BACKUP_KEEP_DAYS:-7}
+      GENIO_BACKUP_VERIFY_WEEKDAY: ${GENIO_BACKUP_VERIFY_WEEKDAY:-7}
     volumes:
       - ./backups:/backups
       - ./scripts/backup_loop.sh:/scripts/backup_loop.sh:ro
+      # 운영 준비 1차(A3): 복구 연습(매주, 또는 docker compose exec backup bash /scripts/verify_backup.sh)
+      - ./scripts/verify_backup.sh:/scripts/verify_backup.sh:ro
     depends_on:
       postgres:
         condition: service_healthy

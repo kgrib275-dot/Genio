@@ -237,3 +237,10 @@ COMPOSE_PROFILES=sandbox docker compose up -d --build
   - `genio_runs_24h{status}`, `genio_runs_running`, `genio_queue_length`, `genio_scheduler_last_run_seconds`, `genio_ai_cost_usd_month`, `genio_ai_tokens_24h{kind}`, `genio_users`, `genio_workspaces`, `genio_metrics_db_up`
 - **보기(선택)**: `COMPOSE_PROFILES=monitoring docker compose up -d prometheus grafana` → Grafana `http://127.0.0.1:53000`(admin / `GRAFANA_ADMIN_PASSWORD`). Prometheus 자료원은 자동 등록된다. 메모리가 빠듯하면 끄기: `docker compose stop prometheus grafana`.
 - 확인해 볼 만한 알림 기준(예시): 5xx 비율 > 1%, 대기 중인 작업 > 100, `genio_scheduler_last_run_seconds` > 300, `genio_metrics_db_up == 0`.
+
+## 외부 백업·복구 연습(운영 준비 1차 A3)
+- **외부 백업**: `.env`에 `GENIO_BACKUP_S3_BUCKET`(그리고 `GENIO_S3_ENDPOINT_URL`·`GENIO_S3_ACCESS_KEY`·`GENIO_S3_SECRET_KEY`)을 넣으면 scheduler가 한 시간마다 최근 2일 안의 백업(`genio-*.dump`) 중 아직 없는 것을 올리고, `GENIO_BACKUP_S3_KEEP_DAYS`(기본 30)일이 지난 바깥 백업은 지운다. 같은 PC의 RustFS(프로필 storage)는 PC가 망가지면 함께 사라지니 **다른 곳(클라우드 S3 등)**을 권한다. 상태: 관리 > 시스템 상태 '외부 백업'.
+- **복구 연습**: backup 서비스가 매주(기본 일요일, `GENIO_BACKUP_VERIFY_WEEKDAY`) 백업 뒤에 최근 백업을 임시 DB `genio_verify`에 복구해 보고 표·행 수를 센 뒤 지운다. 지금 DB는 건드리지 않는다. 결과는 `backups/verify.json`, 관리 > 시스템 상태 '복구 연습'.
+  - 바로 해 보기: `docker compose exec backup bash /scripts/verify_backup.sh`
+  - backup 서비스를 이 버전 전에 만들었다면 스크립트가 아직 안 붙어 있다: `docker compose up -d backup` 한 번.
+- 시점 복구(PITR, WAL 보관)는 아직 없다. 하루 한 번 백업이라 최악의 경우 하루치가 사라질 수 있다(ADR 0014 후보).

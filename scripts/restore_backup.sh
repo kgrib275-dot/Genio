@@ -21,8 +21,8 @@ if [[ "$ok" != "yes" ]]; then
   exit 0
 fi
 
-echo "[restore] api·worker 멈춤"
-docker compose stop api worker
+echo "[restore] api·worker·scheduler 멈춤"
+docker compose stop api worker scheduler
 
 SAFETY="before-restore-$(date +%Y%m%d-%H%M).dump"
 echo "[restore] 지금 DB를 backups/$SAFETY 로 먼저 백업"
@@ -31,6 +31,6 @@ docker compose exec -T postgres pg_dump -U "$PGUSER" -d "$PGDB" -Fc > "backups/$
 echo "[restore] $NAME 복구 중"
 docker compose exec -T postgres pg_restore -U "$PGUSER" -d "$PGDB" --clean --if-exists --no-owner < "$FILE"
 
-echo "[restore] api·worker 다시 시작"
-docker compose start api worker
+echo "[restore] api·worker·scheduler 다시 시작"
+docker compose start api worker scheduler
 echo "[restore] 끝났어요. 문제가 있으면 backups/$SAFETY 로 같은 방법으로 되돌릴 수 있어요."

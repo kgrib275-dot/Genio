@@ -47,6 +47,11 @@ class Settings(BaseSettings):
     # 운영 준비: 화면에 보일 버전(빌드할 때 커밋 짧은 해시를 넣음), 백업 폴더(status.json을 읽음)
     genio_version: str = "dev"
     genio_backup_dir: str = "/backups"
+    # 운영 준비 1차(A3): 백업을 바깥 S3 호환 저장소에도 올린다(버킷을 비우면 끔).
+    # 주소·접근 키는 GENIO_S3_*(파일 저장소)와 같은 것을 쓴다. 같은 PC가 망가져도 백업이 남게 다른 곳을 권한다.
+    genio_backup_s3_bucket: str = ""
+    genio_backup_s3_prefix: str = "genio-backups/"
+    genio_backup_s3_keep_days: int = 30
     # v0.6: 한 실행 안에서 동시에 도는 갈래 수(1~16)
     genio_run_parallelism: int = 4
     genio_public_rate_limit_per_minute: int = 30
