@@ -40,9 +40,18 @@ from nodes import LlmResult, NodeContext, NodeError, NodeResult, registry
 log = logging.getLogger("genio.engine")
 TERMINAL = {"succeeded", "failed"}
 # 실패해도 '실패하면 다른 앱 실행'을 부르지 않는 실행(빌더 시험·하위 실행·실패 처리 자신)
-NO_FAILURE_HOOK = {"on_failure", "test", "preview", "tool", "subflow", "batch"}
+NO_FAILURE_HOOK = {"on_failure", "test", "preview", "tool", "subflow", "batch", "eval"}
 # 일괄 실행(v0.8) 줄이 run.context에 달고 다니는 표시. 실행이 끝나며 context를 새로 쓸 때도 남긴다.
-BATCH_KEYS = ("batch_id", "row", "source", "dispatched", "dispatched_at", "cancelled", "created")
+BATCH_KEYS = (
+    "batch_id",
+    "row",
+    "source",
+    "dispatched",
+    "dispatched_at",
+    "cancelled",
+    "created",
+    "eval",
+)
 
 
 def _batch_meta(context: dict[str, Any]) -> dict[str, Any]:

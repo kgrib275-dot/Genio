@@ -2,6 +2,7 @@ import {
   Activity,
   CalendarClock,
   ChevronLeft,
+  ClipboardCheck,
   KeyRound,
   MessagesSquare,
   Rocket,
@@ -46,6 +47,7 @@ export function AppNav({
       ? [
           { to: `${base}/builder`, label: "만들기", Icon: Wand2 },
           { to: `${base}/features`, label: "기능", Icon: SlidersHorizontal },
+          { to: `${base}/evals`, label: "평가", Icon: ClipboardCheck },
         ]
       : []),
     ...(canViewRuns(role)

@@ -14,6 +14,8 @@ DEFAULT_FEATURES: dict[str, Any] = {
     "ai_notice": {"enabled": True, "text": AI_NOTICE_TEXT},
     # 후속(O2): 한 번 성공할 때 아끼는 시간(분). 0이면 효과 리포트에 세지 않는다(추정값)
     "time_saved": {"minutes_per_run": 0},
+    # 후속(O1): 평가 세트(질문·조건). 응답에는 싣지만 공개 챗 화면에는 보내지 않는다
+    "eval": {"cases": []},
     "suggested_questions": [],
     "follow_up": {"enabled": False},
     "citations": {"enabled": True},
