@@ -567,6 +567,8 @@ export interface AppFeatures {
   on_failure?: { app_id: string | null };
   /** 운영 준비 B6: 챗 화면의 "AI가 답해요" 안내(기본 켜짐) */
   ai_notice: AiNotice;
+  /** 후속 O2: 한 번 성공할 때 아끼는 시간(분). 0이면 효과 리포트에 세지 않는다 */
+  time_saved: { minutes_per_run: number };
 }
 
 export interface AiNotice {
@@ -587,6 +589,7 @@ export const DEFAULT_FEATURES: AppFeatures = {
   file_upload: { enabled: false, max_files: 3 },
   memory: { window: 0 },
   ai_notice: { enabled: true, text: AI_NOTICE_TEXT },
+  time_saved: { minutes_per_run: 0 },
 };
 
 /** 서버가 일부 키를 빠뜨려도 화면이 깨지지 않게 기본값과 합친다. */
@@ -603,6 +606,7 @@ export function normalizeFeatures(f: Partial<AppFeatures> | null | undefined): A
     file_upload: { ...DEFAULT_FEATURES.file_upload, ...src.file_upload },
     memory: { ...DEFAULT_FEATURES.memory, ...src.memory },
     ai_notice: { ...DEFAULT_FEATURES.ai_notice, ...src.ai_notice },
+    time_saved: { ...DEFAULT_FEATURES.time_saved, ...src.time_saved },
     ...(src.on_failure ? { on_failure: { app_id: src.on_failure.app_id ?? null } } : {}),
   };
 }

@@ -69,6 +69,7 @@ import { LlmKeysPanel } from "@/components/llm/LlmKeysPanel";
 import { asProviderV9 } from "@/lib/api/v9llm";
 import { downloadAuditCsv } from "@/lib/api/ops";
 import { SystemMailCard } from "@/pages/workspace/SystemMailCard";
+import { ImpactCard } from "@/pages/workspace/ImpactCard";
 import { PrivacyCard } from "@/pages/workspace/PrivacyCard";
 import { useResetMember2fa } from "@/lib/api/account";
 import { copyText, formatCost, formatDate } from "@/lib/cn";
@@ -1118,6 +1119,7 @@ export function UsageSection({ ws }: { ws: string }) {
         </div>
       )}
       <div className="grid gap-6 lg:grid-cols-2">
+        <ImpactCard ws={ws} />
         <CostEstimateCard ws={ws} />
         {(role === "owner" || role === "admin") && <LimitsCard ws={ws} />}
         {(role === "owner" || role === "admin") && <PrivacyCard ws={ws} />}

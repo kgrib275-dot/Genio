@@ -2,6 +2,7 @@ import {
   Headset,
   BookMarked,
   BadgeInfo,
+  Clock,
   Eye,
   EyeOff,
   FileUp,
@@ -244,6 +245,32 @@ export function FeaturesForm({
               onChange={(e) => setF({ ...f, ai_notice: { ...f.ai_notice, text: e.target.value } })}
             />
           )}
+        </FeatureRow>
+        <FeatureRow
+          icon={<Clock className="h-4 w-4" />}
+          title="아끼는 시간"
+          description="이 앱이 한 번 성공할 때 사람이 직접 했다면 걸렸을 시간(분)이에요. 관리 > 사용량의 '아낀 시간'에 쓰여요. 0이면 세지 않아요."
+        >
+          <label className="flex items-center gap-2 text-xs">
+            <Input
+              type="number"
+              min={0}
+              max={1440}
+              aria-label="한 번 성공할 때 아끼는 시간(분)"
+              className="w-28"
+              value={f.time_saved.minutes_per_run}
+              disabled={readOnly}
+              onChange={(e) =>
+                setF({
+                  ...f,
+                  time_saved: {
+                    minutes_per_run: Math.max(0, Math.min(Number(e.target.value) || 0, 1440)),
+                  },
+                })
+              }
+            />
+            <span className="text-slate-500">분</span>
+          </label>
         </FeatureRow>
         <FeatureRow
           icon={<Sparkles className="h-4 w-4" />}

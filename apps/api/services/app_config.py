@@ -12,6 +12,8 @@ DEFAULT_FEATURES: dict[str, Any] = {
     "opening_statement": "",
     # 운영 준비 1차(B6, AI 기본법 투명성): 챗 화면에 'AI가 답한다'는 안내를 늘 보여 준다(기본 켜짐)
     "ai_notice": {"enabled": True, "text": AI_NOTICE_TEXT},
+    # 후속(O2): 한 번 성공할 때 아끼는 시간(분). 0이면 효과 리포트에 세지 않는다(추정값)
+    "time_saved": {"minutes_per_run": 0},
     "suggested_questions": [],
     "follow_up": {"enabled": False},
     "citations": {"enabled": True},
@@ -93,6 +95,11 @@ def patch_features(saved: dict[str, Any] | None, patch: dict[str, Any]) -> dict[
     current["ai_notice"]["text"] = (
         str(current["ai_notice"]["text"] or "").strip()[:200] or AI_NOTICE_TEXT
     )
+    try:
+        minutes = int(current["time_saved"].get("minutes_per_run") or 0)
+    except (TypeError, ValueError):
+        minutes = 0
+    current["time_saved"]["minutes_per_run"] = max(0, min(minutes, 24 * 60))
     target = current["on_failure"].get("app_id")
     current["on_failure"]["app_id"] = (str(target).strip()[:36] or None) if target else None
     mcp_name = re.sub(r"[^A-Za-z0-9_-]+", "_", str(current["mcp"]["tool_name"] or "")).strip("_")

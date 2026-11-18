@@ -510,6 +510,19 @@ def masked_runs(db: Session, ws: str, rows: list[dict[str, Any]]) -> list[dict[s
     ]
 
 
+@router.get("/workspaces/{ws}/impact")
+def impact_report(
+    ws: str,
+    ctx: Viewers,
+    from_: Annotated[str | None, Query(alias="from")] = None,
+    to: str | None = None,
+) -> dict[str, Any]:
+    """효과 리포트: 앱별 성공 횟수와 아낀 시간(추정)."""
+    from api.services import impact
+
+    return impact.report(ctx.db, ws, _parse_dt(from_), _parse_dt(to))
+
+
 @router.get("/workspaces/{ws}/usage")
 def usage(
     ws: str,
