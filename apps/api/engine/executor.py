@@ -1007,6 +1007,20 @@ def _decide_person(
     return node_id, handle
 
 
+PIN_TRIGGERS = {"test", "preview"}
+PIN_BLOCKED_TYPES = {"input", "output", *PERSON_TYPES}
+
+
+def pinned_output(node: Any, trigger: str) -> dict[str, Any] | None:
+    """고정한 값이 있고 시험 실행이면 그 값. 실서비스 실행에서는 고정 값을 절대 쓰지 않는다."""
+    if trigger not in PIN_TRIGGERS or node.type in PIN_BLOCKED_TYPES:
+        return None
+    pin = node.data.get("_pinned")
+    if isinstance(pin, dict) and isinstance(pin.get("output"), dict):
+        return pin
+    return None
+
+
 def _invoke(spec: Any, node: Any, ctx: NodeContext) -> tuple[str, Any]:
     """단계 하나를 실행한다(스레드에서도 부름). ('ok', 결과) | ('error', 문장) | ('crash', 이름).
 
@@ -1366,6 +1380,20 @@ def _execute(db: Session, run_id: str) -> None:
                     _publish(run, step)
                     sched.done.add(node.id)
                     sched.resolve(node.id, sched.skip_handle(node.id))
+                    continue
+                pinned = pinned_output(node, run.trigger)
+                if pinned is not None:
+                    # 값 고정(시험 전용): 실제로 실행하지 않고 고정해 둔 결과를 쓴다
+                    out = dict(pinned["output"])
+                    step.status = "succeeded"
+                    step.output = out
+                    step.logs = "고정한 값을 썼어요. 이 단계는 실제로 실행하지 않았어요."
+                    step.finished_at = now()
+                    outputs[node.id] = out
+                    db.commit()
+                    _publish(run, step)
+                    sched.done.add(node.id)
+                    sched.resolve(node.id, pinned.get("handle"))
                     continue
                 spec = registry.get(node.type)
                 sched.running.add(node.id)

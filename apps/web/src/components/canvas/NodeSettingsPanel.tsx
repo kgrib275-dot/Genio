@@ -4,7 +4,7 @@ import validator from "@rjsf/validator-ajv8";
 import { useMemo } from "react";
 import { CurlImport } from "@/components/canvas/CurlImport";
 import { HttpPreview } from "@/components/canvas/HttpPreview";
-import { FailureSettings } from "@/components/canvas/FailureSettings";
+import { FailureSettings, PinSettings } from "@/components/canvas/FailureSettings";
 import { nodeFields, nodeTemplates, nodeWidgets } from "@/components/canvas/formRegistry";
 import { withTimingVisibility } from "@/components/canvas/humanTiming";
 import { toRjsfUiSchema } from "@/components/canvas/uiSchema";
@@ -140,6 +140,9 @@ export function NodeSettingsPanel({
         )}
         {spec && node.type !== "input" && node.type !== "output" && (
           <FailureSettings key={node.id} data={node.data} onChange={onChange} readOnly={readOnly} />
+        )}
+        {spec && node.type !== "input" && node.type !== "output" && (
+          <PinSettings data={node.data} onChange={onChange} readOnly={readOnly} />
         )}
         {lastStep?.output && Object.keys(lastStep.output).length > 0 && (
           <details className="mt-4 rounded-lg border border-slate-200" open>

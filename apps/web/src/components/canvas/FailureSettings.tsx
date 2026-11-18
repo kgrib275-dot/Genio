@@ -165,3 +165,43 @@ export function FailureSettings({
     </div>
   );
 }
+
+/** 값 고정 안내: 고정한 결과가 있으면 시험에서 이 단계를 건너뛰고 그 값을 쓴다. 해제하면 값을 지운다. */
+export function PinSettings({
+  data,
+  onChange,
+  readOnly,
+}: {
+  data: Record<string, unknown>;
+  onChange: (data: Record<string, unknown>) => void;
+  readOnly?: boolean;
+}) {
+  const pinned = data._pinned as { output?: Record<string, unknown> } | undefined;
+  if (!pinned?.output) return null;
+  const keys = Object.keys(pinned.output);
+  return (
+    <div
+      className="mt-4 rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2 text-xs text-indigo-900"
+      data-testid="pin-settings"
+    >
+      <p className="font-medium">고정한 값을 써요(시험 전용)</p>
+      <p className="mt-0.5 text-indigo-800">
+        시험 실행에서는 이 단계를 실행하지 않고 고정한 결과({keys.slice(0, 4).join(", ")}
+        {keys.length > 4 ? " 외" : ""})를 넘겨요. 실서비스 실행에는 영향이 없어요.
+      </p>
+      {!readOnly && (
+        <button
+          type="button"
+          className="mt-1.5 rounded-md border border-indigo-300 bg-white px-2 py-0.5 text-indigo-800 hover:bg-indigo-100"
+          onClick={() => {
+            const rest = { ...data };
+            delete rest._pinned;
+            onChange(rest);
+          }}
+        >
+          고정 해제
+        </button>
+      )}
+    </div>
+  );
+}

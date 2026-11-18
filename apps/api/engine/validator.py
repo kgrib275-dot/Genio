@@ -13,7 +13,7 @@ from api.schemas.graph import Graph, GraphError, ValidationResult
 from nodes import NodeRegistry, NodeSpec
 
 # 단계 설정에 담기지만 검증 대상에서 빼는 키(캔버스 UI용)
-_UI_KEYS = {"label", "note", "_retry", "_on_error", "_default", "_timeout"}
+_UI_KEYS = {"label", "note", "_retry", "_on_error", "_default", "_timeout", "_pinned"}
 # 사람 단계(승인·사람에게 묻기·할 일 맡기기): 기한이 지났을 때 '시간 초과' 길로 보낼 수 있다(v0.9)
 HUMAN_TYPES = ("approval", "ask_person", "assign_task")
 TIMEOUT_HANDLE = "timeout"

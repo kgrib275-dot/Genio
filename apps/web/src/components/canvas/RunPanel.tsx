@@ -1,4 +1,4 @@
-import { RotateCcw, Wand2 } from "lucide-react";
+import { Pin, RotateCcw, Wand2 } from "lucide-react";
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { DataView } from "@/components/DataView";
@@ -12,8 +12,11 @@ import type { GraphNode, Run, RunStep } from "@/lib/api/types";
 import { splitFailure, useRerunFromNode, type RunDetailStory, type StoryStep } from "@/lib/api/v5c";
 import { formatCost } from "@/lib/cn";
 import { runFilePath, type WithFiles } from "@/lib/fileKinds";
+import { useCanvas } from "@/store/canvas";
 
 const TERMINAL = new Set(["succeeded", "failed", "waiting_approval"]);
+/** 값을 고정할 수 없는 단계(시작·결과·사람 단계) */
+const PIN_BLOCKED = new Set(["input", "output", "approval", "ask_person", "assign_task"]);
 
 /** 실행 입력·출력 등 데이터를 읽기 쉬운 목록으로(원본 보기 가능) */
 export function JsonView({ value }: { value: unknown }) {
@@ -26,11 +29,14 @@ export function StepRow({
   label,
   onRerunFrom,
   rerunPending,
+  onPin,
 }: {
   step: StoryStep;
   label: string;
   onRerunFrom?: () => void;
   rerunPending?: boolean;
+  /** 이 단계의 결과를 고정(시험 실행에서 이 단계를 건너뛰고 이 값을 씀) */
+  onPin?: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const failed = step.status === "failed";
@@ -63,6 +69,17 @@ export function StepRow({
           >
             <RotateCcw className="h-3 w-3" />
             <span className="hidden sm:inline">이 단계부터 다시</span>
+          </button>
+        )}
+        {onPin && (
+          <button
+            type="button"
+            onClick={onPin}
+            title="이 결과를 고정해요. 시험할 때 이 단계는 다시 실행하지 않고 이 값을 써요(실서비스에는 영향 없음)"
+            className="inline-flex shrink-0 items-center gap-1 rounded px-1.5 py-0.5 text-slate-500 hover:bg-slate-100 hover:text-indigo-700"
+          >
+            <Pin className="h-3 w-3" />
+            <span className="hidden sm:inline">결과 고정</span>
           </button>
         )}
         <button
@@ -185,6 +202,7 @@ export function RunPanel({
   const rerun = useRerunFromNode(run?.app_id);
   const labelOf = (id: string) =>
     (nodes.find((n) => n.id === id)?.data.label as string | undefined) ?? id;
+  const nodeType = (id: string) => nodes.find((n) => n.id === id)?.type ?? "";
   if (!run) {
     return (
       <p className="px-3 py-4 text-xs text-slate-500">
@@ -195,6 +213,13 @@ export function RunPanel({
   const d = detail.data as RunDetailStory | undefined;
   const fresh = d && d.id === run.id ? d : undefined;
   const rows: StoryStep[] = fresh ? fresh.steps : steps;
+  const canPin = run.trigger === "test" || run.trigger === "preview";
+  const pinStep = (nodeId: string, output: Record<string, unknown> | null) => {
+    const node = useCanvas.getState().graph.nodes.find((n) => n.id === nodeId);
+    if (!node || !output) return;
+    useCanvas.getState().updateNodeData(nodeId, { ...node.data, _pinned: { output } });
+    toast.success(`'${labelOf(nodeId)}' 결과를 고정했어요. 다음 시험부터 이 단계는 건너뛰어요.`);
+  };
   const rerunFrom = (nodeId: string) =>
     rerun.mutate(
       { runId: run.id, fromNode: nodeId },
@@ -246,6 +271,14 @@ export function RunPanel({
             step={s}
             label={labelOf(s.node_id)}
             rerunPending={rerun.isPending}
+            onPin={
+              canPin &&
+              s.status === "succeeded" &&
+              s.output &&
+              !PIN_BLOCKED.has(nodeType(s.node_id))
+                ? () => pinStep(s.node_id, s.output)
+                : undefined
+            }
             onRerunFrom={
               ended && run.status !== "waiting_approval" && s.status !== "skipped"
                 ? () => rerunFrom(s.node_id)
