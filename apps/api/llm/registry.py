@@ -61,7 +61,7 @@ adapter_factory: AdapterFactory = default_factory
 def _no_provider() -> LlmError:
     return LlmError(
         "등록된 AI 연결이 없어요.",
-        "워크스페이스 설정 > AI 연결에서 API 키를 등록하세요.",
+        "관리 > AI 모델에서 API 키를 등록하세요. 키가 아직 없으면 같은 화면의 '키 없이 데모 AI로 체험하기'로 먼저 둘러볼 수 있어요.",
     )
 
 

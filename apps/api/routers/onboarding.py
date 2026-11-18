@@ -52,9 +52,12 @@ def onboarding_status(ws: str, ctx: Members) -> dict[str, Any]:
     )
     return {
         "ai_connected": _count(
-            ctx, select(func.count()).select_from(LlmProvider).where(LlmProvider.workspace_id == ws)
+            ctx,
+            select(func.count())
+            .select_from(LlmProvider)
+            .where(LlmProvider.workspace_id == ws, LlmProvider.provider != "demo"),
         )
-        > 0,
+        > 0,  # 데모 AI는 진짜 연결이 아니라서 세지 않는다(체험만 하는 중일 수 있다)
         "samples_installed": bool(
             ((workspace.settings if workspace else None) or {}).get("samples_version")
         ),

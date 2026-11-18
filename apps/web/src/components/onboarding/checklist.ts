@@ -26,7 +26,7 @@ const DEFS: Def[] = [
   {
     key: "ai",
     title: "AI 연결 등록하기",
-    hint: "관리 > AI 모델에서 키를 넣고 '연결 테스트'를 눌러요.",
+    hint: "관리 > AI 모델에서 키를 넣고 '연결 테스트'를 눌러요. 키가 아직 없으면 '데모 AI로 체험하기'로 먼저 둘러볼 수 있어요.",
     roles: MANAGERS,
     isDone: (s) => s.ai_connected,
   },

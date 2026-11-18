@@ -139,7 +139,7 @@ function CaseEditor({
                     disabled={readOnly}
                     onChange={(e) => set(i, { json_valid: e.target.checked })}
                   />
-                  답이 JSON 형식이어야 해요
+                  답이 정해진 형식(JSON)이어야 해요
                 </label>
               </div>
             </div>

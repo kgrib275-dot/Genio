@@ -165,3 +165,11 @@ def test_demo_connection_test_passes_without_network(client: TestClient, team: T
     )
     assert res.status_code == 200, res.text
     assert res.json()["ok"] is True and "데모" in res.json()["message"]
+
+
+def test_onboarding_does_not_count_demo_as_connected(client: TestClient, team: Team) -> None:
+    url = f"/api/v1/workspaces/{team.ws}/onboarding"
+    before = client.get(url, headers=team.h("owner"))
+    assert before.status_code == 200, before.text
+    _demo(client, team)
+    assert client.get(url, headers=team.h("owner")).json()["ai_connected"] is False

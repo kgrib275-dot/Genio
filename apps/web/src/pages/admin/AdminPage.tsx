@@ -20,18 +20,32 @@ import {
   MembersSection,
   SystemSection,
   UsageSection,
+  SafetySection,
+  ToolboxSection,
 } from "@/pages/workspace/sections";
 import { TracingSection } from "@/pages/admin/TracingSection";
 import { canManage, useSession } from "@/store/session";
 
 type Tab =
-  "overview" | "members" | "llm" | "usage" | "audit" | "keys" | "tracing" | "system" | "status";
+  | "overview"
+  | "members"
+  | "llm"
+  | "usage"
+  | "safety"
+  | "toolbox"
+  | "audit"
+  | "keys"
+  | "tracing"
+  | "system"
+  | "status";
 
 const TABS: { value: Tab; label: string }[] = [
   { value: "overview", label: "개요" },
   { value: "members", label: "멤버" },
   { value: "llm", label: "AI 모델" },
   { value: "usage", label: "사용량" },
+  { value: "safety", label: "안전·규칙" },
+  { value: "toolbox", label: "업무 요령·연결" },
   { value: "audit", label: "활동 기록" },
   { value: "keys", label: "API 키" },
   { value: "tracing", label: "외부 추적" },
@@ -243,6 +257,8 @@ export default function AdminPage() {
       {tab === "members" && <MembersSection ws={ws} manage />}
       {tab === "llm" && <LlmSection ws={ws} manage showDefaults />}
       {tab === "usage" && <UsageSection ws={ws} />}
+      {tab === "safety" && <SafetySection ws={ws} />}
+      {tab === "toolbox" && <ToolboxSection ws={ws} />}
       {tab === "audit" && <AuditSection ws={ws} />}
       {tab === "keys" && <AdminApiKeysSection ws={ws} />}
       {tab === "tracing" && <TracingSection ws={ws} />}

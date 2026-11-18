@@ -716,12 +716,12 @@ AGENT = NodeSpec(
             },
             "skill_ids": {
                 "type": "array",
-                "title": "쓸 수 있는 스킬(관리 > 스킬에서 만든 것의 id)",
+                "title": "쓸 수 있는 업무 요령(스킬)",
                 "items": {"type": "string"},
             },
             "approver_roles": {
                 "type": "array",
-                "title": "도구 승인할 수 있는 역할(승인 받기를 켠 도구가 있을 때)",
+                "title": "도구 사용을 승인할 수 있는 역할(사람 승인을 켠 도구가 있을 때)",
                 "items": {"type": "string", "enum": ["owner", "admin", "builder", "operator"]},
             },
             "notify": NOTIFY_SCHEMA,

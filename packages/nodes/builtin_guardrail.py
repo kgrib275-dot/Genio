@@ -112,7 +112,7 @@ GUARDRAIL = NodeSpec(
     category="AI",
     description=(
         "글에 개인정보·'이전 지시를 무시해' 같은 탈옥 문구·금지어가 있는지, 너무 긴지 검사해요. "
-        "결과의 passed가 참이면 통과예요. 다음에 조건 분기를 두어 걸린 글을 따로 처리하거나, "
+        "결과의 '통과 여부'가 참이면 통과예요. 다음에 '조건 분기' 단계를 두어 걸린 글을 따로 처리하거나, "
         "'걸리면 멈추기'로 그 자리에서 멈출 수 있어요. 규칙 검사라 비용이 없고 모든 경우를 잡지는 못해요."
     ),
     input_schema={
@@ -129,7 +129,7 @@ GUARDRAIL = NodeSpec(
             },
             "jailbreak": {
                 "type": "boolean",
-                "title": "지시 무시·탈옥 문구 검사",
+                "title": "속이는 문구 검사(예: 이전 지시를 무시해)",
                 "default": True,
             },
             "banned_words": {

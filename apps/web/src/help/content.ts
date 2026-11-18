@@ -7,6 +7,7 @@ import { CONVENIENCE_HELP_SECTIONS } from "@/help/content_convenience";
 import { DIFY_HELP_SECTIONS } from "@/help/content_dify";
 import { FILES_HELP_SECTIONS } from "@/help/content_files";
 import { EVENTS_HELP_SECTIONS } from "@/help/content_events";
+import { OPS2_HELP_SECTIONS } from "@/help/content_ops2";
 import { TRACE_HELP_SECTIONS } from "@/help/content_trace";
 import { KB_HELP_SECTIONS } from "@/help/content_kb";
 import { KBCANVAS_HELP_SECTIONS } from "@/help/content_kbcanvas";
@@ -501,6 +502,7 @@ export const HELP_SECTIONS: HelpSection[] = [
   ...DIFY_HELP_SECTIONS,
   ...CONVENIENCE_HELP_SECTIONS,
   ...EVENTS_HELP_SECTIONS,
+  ...OPS2_HELP_SECTIONS,
   ...COLLAB_HELP_SECTIONS,
   ...FILES_HELP_SECTIONS,
   ...TRACE_HELP_SECTIONS,

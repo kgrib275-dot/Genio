@@ -7,10 +7,15 @@ import { PageHeader } from "@/components/ui/card";
 import { Tabs } from "@/components/ui/tabs";
 import { HelpButton } from "@/help/HelpButton";
 import { ko } from "@/i18n/ko";
-import { LlmSection, MembersSection, UsageSection } from "@/pages/workspace/sections";
+import {
+  LlmSection,
+  MembersSection,
+  ToolboxSection,
+  UsageSection,
+} from "@/pages/workspace/sections";
 import { canEdit, canManage, canViewRuns, useSession } from "@/store/session";
 
-type Tab = "members" | "llm" | "usage";
+type Tab = "members" | "llm" | "usage" | "toolbox";
 
 /** 모든 역할이 보는 워크스페이스 정보. 바꾸는 일은 '관리'(소유자·관리자)에서 한다. */
 export default function WorkspacePage() {
@@ -20,6 +25,7 @@ export default function WorkspacePage() {
     { value: "members", label: "멤버" },
     ...(canEdit(role) ? [{ value: "llm" as Tab, label: "AI 연결" }] : []),
     ...(canViewRuns(role) ? [{ value: "usage" as Tab, label: "사용량" }] : []),
+    ...(canEdit(role) ? [{ value: "toolbox" as Tab, label: "업무 요령·연결" }] : []),
   ];
   const [tab, setTab] = useState<Tab>("members");
 
@@ -46,6 +52,7 @@ export default function WorkspacePage() {
       {tab === "members" && <MembersSection ws={ws} manage={false} />}
       {tab === "llm" && <LlmSection ws={ws} manage={false} />}
       {tab === "usage" && <UsageSection ws={ws} />}
+      {tab === "toolbox" && <ToolboxSection ws={ws} />}
     </PageContainer>
   );
 }
