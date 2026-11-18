@@ -28,10 +28,12 @@
 기능 정의서와 반영 현황: [docs/feature-spec.md](docs/feature-spec.md) · [docs/feature-coverage.md](docs/feature-coverage.md)
 다른 서비스와 비교(Dify·n8n·Zapier·Make·Flowise): [docs/dify-gap.md](docs/dify-gap.md)
 
-## 현재 상태 (2026-11-11)
-- 버전: v0.9 + 2026-11-06 보안·안정성 수정(커밋 60870a8). 기능 범위는 [기능 반영 현황](docs/feature-coverage.md), 결정 기록 ADR 0001~0013.
-- 운영 주소 반영: 서버 쪽 보안 수정은 운영에 들어가 있다. 마지막 문구 수정은 `docker compose restart api worker`, 화면 쪽 수정(초대 수락 단추·이동 주소 검사·dompurify·문구)은 `start_genio.bat -Rebuild`를 해야 반영된다(메모리가 빠듯하니 시험용 스택을 내린 뒤 빌드).
-- 다음 후보: 보안 남은 항목(외부 호출 DNS 재바인딩, 연결 정보 허용 호스트, 압축 폭탄 상한 등), 다중 서비스 운영 준비(속도 제한 Redis 이전, 예약 실행 분리, 외부 백업, 관측 도구), 실제 AI 키·메일로 수동 검수.
+## 현재 상태 (2026-11-18)
+- 버전: v0.9 + 운영 준비 1차([ADR 0014](docs/decisions/0014-운영-준비-1차.md)). 결정 기록 ADR 0001~0014.
+- 운영 준비 1차: 예약 실행 분리(`scheduler` 서비스)·속도 제한 보강, 워크스페이스 한도(동시·앱당·분당 실행, 파일 용량), 보안 남은 항목 F3~F21, 개인정보 가리기, AI 기본법 대응(AI 안내 문구·AI 생성 표시), 구조화 로그·`/metrics`, 외부 백업·매주 복구 연습.
+- **운영 반영 방법이 바뀌었다**: `docker compose up -d`(새 `scheduler` 서비스가 만들어져야 예약 실행이 돈다. `restart api worker`만 하면 예약이 멈춘다). api가 뜰 때 마이그레이션 0019. 화면 수정은 `start_genio.bat -Rebuild`.
+- 2026-11-18 확인 때 Docker가 꺼져 있었고 마지막 자동 백업은 11-16이었다. 공유 주소가 내려가 있을 수 있다.
+- 기능 후보 목록(골라 쓰기용): [docs/feature-candidates-2026-11-18.html](docs/feature-candidates-2026-11-18.html)
 
 ## 최근 점검 (2026-11-06) — 안정성·보안·전체 화면
 - 자동 검사 전부 통과(pytest 982, 화면 테스트 209). 200명 동시 20 시험: 요청 15,986개 **실패 0**, 사용자 간 접근 600/600 차단.
@@ -51,17 +53,17 @@
 - **꼭**: 데모 계정 비밀번호 바꾸기(공개 주소), 필요 없으면 회원가입 끄기(관리 > 시스템 설정), 실제 AI 키로 빌더·샘플 ⑧~⑩ 확인, 시스템 메일(SMTP) 설정, 약관·개인정보처리방침 법률 검토.
 - **판매형 전환 때 결정 필요**(작업 규칙상 범위 밖, [ADR 0011](docs/decisions/0011-오픈-준비.md)): 결제·요금제, 사용량 과금, 기본 제공 AI·체험 크레딧, SSO, 고객사별 데이터 격리, 클라우드 서버 이전.
 - v0.8 선택 설정: 파일을 S3·디스크에 두기(`GENIO_STORAGE`), 코드 실행 샌드박스(`GENIO_SANDBOX_URL`, 컴포즈 프로필 `sandbox`), Sentry(`SENTRY_DSN`). 자세히는 [runbook](docs/runbook.md)의 'v0.8 운영 안전'.
-- 보안 남은 항목(보통): 외부 호출 DNS 재바인딩, 연결 정보 허용 호스트, AI 연결 주소의 사설 IP 검사, XLSX·zip 폭탄 상한, 공개 업로드 총량 — [점검 보고서 §3.2](docs/test-report-2026-11-06.md).
+- 운영 준비 1차 선택 설정: 바깥 백업(`GENIO_BACKUP_S3_BUCKET`), JSON 로그(`GENIO_LOG_FORMAT=json`), 지표(`GENIO_METRICS_TOKEN`, 프로필 `monitoring`). 자세히는 [runbook](docs/runbook.md) '관측'·'외부 백업·복구 연습'.
 - 이 PC는 메모리가 빠듯하다: 운영 중에 이미지를 빌드하면 Docker가 멈출 수 있으니 다른 컨테이너를 줄인 뒤 빌드할 것.
 - 실제 계정으로 확인하지 못한 것: 새 커넥터 13개, AI 공급자 18곳, MCP 클라이언트, Langfuse·LangSmith, 메일 발송.
 
 ## 빠른 시작
 ```bash
 cp .env.example .env          # 키 채우기(GENIO_SECRET_KEY, GENIO_FERNET_KEY 등)
-docker compose up --build -d  # postgres, redis, api(프로세스 4), worker(+예약), web(nginx), backup(매일 3시), tailscale
+docker compose up --build -d  # postgres, redis, api(프로세스 4), worker, scheduler(예약), web(nginx), backup(매일 3시·매주 복구 연습), tailscale
 open http://127.0.0.1:5190
 ```
-- API 코드를 고친 뒤: `docker compose restart api worker` (운영 설정이라 자동 재시작 없음)
+- API 코드를 고친 뒤: `docker compose restart api worker scheduler` (운영 설정이라 자동 재시작 없음)
 - 개발 중 자동 재시작: `docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d api`
 - requirements를 바꾼 뒤: `docker compose up -d --build api worker`
 - 백업 복구: `scripts/restore_backup.sh <파일>`(지금 DB를 먼저 백업한 뒤 복구, [runbook](docs/runbook.md))
@@ -74,7 +76,7 @@ apps/worker     Celery(흐름 실행, 문서 임베딩, 1분마다 예약 실행
 apps/web        React · Vite · React Flow · TanStack Query · Zustand · Tailwind
 packages/nodes  NodeSpec 단계 레지스트리(26종)
 market-items    기본 제공 마켓 아이템
-docs            설계서, 기능 정의서·반영 현황, API 계약, 운영 안내, 결정 기록(ADR 0001~0013), 점검 보고서
+docs            설계서, 기능 정의서·반영 현황, 기능 후보 목록, API 계약, 운영 안내, 결정 기록(ADR 0001~0014), 점검 보고서
 ```
 
 ## 문서
