@@ -1,4 +1,10 @@
-"""SSRF 방지 HTTP 호출: 사설 IP·localhost 차단, 타임아웃, 응답 크기 제한, 리다이렉트 재검사."""
+"""SSRF 방지 HTTP 호출: 사설 IP·localhost 차단, 타임아웃, 응답 크기 제한, 리다이렉트 재검사.
+
+운영 준비 1차(B1·F3):
+- DNS 재바인딩 방지: 검사한 IP로 직접 연결한다(Host 헤더·TLS 이름은 원래 호스트). 검사와 연결 사이에
+  DNS 답이 바뀌어도 내부 IP로 가지 않는다.
+- 다른 호스트로 넘어갈 때(리다이렉트) 인증 헤더 등 호출한 쪽 헤더를 버리고 기본 헤더만 보낸다.
+"""
 
 import ipaddress
 import json
@@ -34,6 +40,11 @@ def _is_blocked_ip(ip: str) -> bool:
 
 def check_url(url: str, *, allowed_domains: list[str] | None = None) -> str:
     """막힌 주소면 NodeError. 통과하면 호스트 이름을 돌려준다."""
+    return _resolve(url, allowed_domains=allowed_domains)[0]
+
+
+def _resolve(url: str, *, allowed_domains: list[str] | None = None) -> tuple[str, str | None]:
+    """(호스트, 연결할 IP). 사설망 허용(시험 전용)이면 IP는 None(고정하지 않음)."""
     parsed = urlparse(url)
     if parsed.scheme not in ("http", "https"):
         raise NodeError("http 또는 https 주소만 호출할 수 있어요.")
@@ -46,7 +57,7 @@ def check_url(url: str, *, allowed_domains: list[str] | None = None) -> str:
     ):
         raise NodeError(f"'{host}'는 이 확장이 쓰겠다고 선언한 도메인이 아니에요.")
     if get_settings().genio_allow_private_network:
-        return host
+        return host, None
     if host_l in ("localhost", "localhost.localdomain") or host_l.endswith(".local"):
         raise NodeError("내부 주소(localhost)는 호출할 수 없어요. 외부 공개 주소를 써 주세요.")
     try:
@@ -55,10 +66,42 @@ def check_url(url: str, *, allowed_domains: list[str] | None = None) -> str:
         raise NodeError(
             f"'{host}' 주소를 찾지 못했어요. 철자를 확인해 주세요.", retryable=True
         ) from exc
-    for info in infos:
-        if _is_blocked_ip(str(info[4][0])):
+    ips = [str(info[4][0]) for info in infos]
+    for ip in ips:
+        if _is_blocked_ip(ip):
             raise NodeError("사내망·내부 IP 주소는 호출할 수 없어요. 외부 공개 주소를 써 주세요.")
-    return host
+    if not ips:
+        raise NodeError(f"'{host}' 주소를 찾지 못했어요. 철자를 확인해 주세요.", retryable=True)
+    return host, ips[0]
+
+
+# 다른 호스트로 넘어갈 때도 그대로 보내는 헤더(그 밖의 헤더 = 인증 등은 버린다)
+SAFE_CROSS_HOST_HEADERS = {"accept", "accept-language", "content-type", "user-agent"}
+
+
+def _prepare(
+    url: str, headers: dict[str, str], allowed_domains: list[str] | None
+) -> tuple[str, dict[str, str], dict[str, Any], str]:
+    """검사한 IP로 직접 가는 (주소, 헤더, 확장, 원래 호스트)."""
+    host, ip = _resolve(url, allowed_domains=allowed_domains)
+    if ip is None:
+        return url, headers, {}, host
+    parsed = urlparse(url)
+    ip_host = f"[{ip}]" if ":" in ip else ip
+    netloc = ip_host + (f":{parsed.port}" if parsed.port else "")
+    pinned = parsed._replace(netloc=netloc).geturl()
+    host_header = host + (f":{parsed.port}" if parsed.port else "")
+    out = {k: v for k, v in headers.items() if k.lower() != "host"}
+    out["Host"] = host_header
+    ext: dict[str, Any] = {"sni_hostname": host} if parsed.scheme == "https" else {}
+    return pinned, out, ext, host
+
+
+def _next_headers(headers: dict[str, str], from_host: str, to_url: str) -> dict[str, str]:
+    to_host = (urlparse(to_url).hostname or "").lower()
+    if to_host == from_host.lower():
+        return headers
+    return {k: v for k, v in headers.items() if k.lower() in SAFE_CROSS_HOST_HEADERS}
 
 
 def request(
@@ -73,10 +116,11 @@ def request(
     s = get_settings()
     limit = s.genio_http_max_response_bytes
     current = url
+    hdrs = dict(headers or {})
     with httpx.Client(timeout=s.genio_http_timeout_seconds, follow_redirects=False) as client:
         for _ in range(MAX_REDIRECTS + 1):
-            check_url(current, allowed_domains=allowed_domains)
-            kwargs: dict[str, Any] = {"headers": headers or {}}
+            target, sent, ext, host = _prepare(current, hdrs, allowed_domains)
+            kwargs: dict[str, Any] = {"headers": sent, "extensions": ext}
             if form is not None:
                 kwargs["data"] = form
             elif body is not None and method not in ("GET", "HEAD"):
@@ -85,9 +129,11 @@ def request(
                 else:
                     kwargs["content"] = str(body).encode("utf-8")
             try:
-                with client.stream(method, current, **kwargs) as resp:
+                with client.stream(method, target, **kwargs) as resp:
                     if resp.is_redirect and "location" in resp.headers:
-                        current = urljoin(current, resp.headers["location"])
+                        nxt = urljoin(current, resp.headers["location"])
+                        hdrs = _next_headers(hdrs, host, nxt)
+                        current = nxt
                         continue
                     chunks: list[bytes] = []
                     size = 0
@@ -143,13 +189,16 @@ def fetch_raw(
     """
     s = get_settings()
     current = url
+    hdrs = dict(headers or {})
     with httpx.Client(timeout=s.genio_http_timeout_seconds, follow_redirects=False) as client:
         for _ in range(MAX_REDIRECTS + 1):
-            check_url(current, allowed_domains=allowed_domains)
+            target, sent, ext, host = _prepare(current, hdrs, allowed_domains)
             try:
-                with client.stream("GET", current, headers=headers or {}) as resp:
+                with client.stream("GET", target, headers=sent, extensions=ext) as resp:
                     if resp.is_redirect and "location" in resp.headers:
-                        current = urljoin(current, resp.headers["location"])
+                        nxt = urljoin(current, resp.headers["location"])
+                        hdrs = _next_headers(hdrs, host, nxt)
+                        current = nxt
                         continue
                     chunks: list[bytes] = []
                     size = 0
@@ -190,9 +239,9 @@ def fetch_bytes(url: str, *, max_bytes: int) -> bytes:
     current = url
     with httpx.Client(timeout=s.genio_http_timeout_seconds, follow_redirects=False) as client:
         for _ in range(MAX_REDIRECTS + 1):
-            check_url(current)
+            target, sent, ext, _host = _prepare(current, {}, None)
             try:
-                with client.stream("GET", current) as resp:
+                with client.stream("GET", target, headers=sent, extensions=ext) as resp:
                     if resp.is_redirect and "location" in resp.headers:
                         current = urljoin(current, resp.headers["location"])
                         continue

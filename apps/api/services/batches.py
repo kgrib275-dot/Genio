@@ -21,12 +21,15 @@ from sqlalchemy.orm import Session
 from api.core.errors import AppError
 from api.models import App, Run, WorkflowVersion
 from api.services.chat import input_fields
+from api.services.zipguard import ZipBombError, check_zip
 
 MAX_ROWS_APP = 200
 MAX_ROWS_PUBLIC = 50
 MAX_ACTIVE_PUBLIC_BATCHES = 3
 CONCURRENCY = 5
 MAX_FILE_BYTES = 2 * 1024 * 1024
+# XLSX에서 읽을 최대 열 수(운영 준비 B1·F7)
+MAX_COLS = 200
 STUCK_AFTER = timedelta(minutes=5)
 
 STATUS_LABEL = {
@@ -94,12 +97,19 @@ def _read_table(filename: str, content: bytes) -> list[list[str]]:
         try:
             from openpyxl import load_workbook
 
+            check_zip(content)
             wb = load_workbook(io.BytesIO(content), read_only=True, data_only=True)
             ws = wb.worksheets[0]
-            return [
-                ["" if c is None else str(c).strip() for c in row]
-                for row in ws.iter_rows(values_only=True)
-            ]
+            rows: list[list[str]] = []
+            # 앱 안 최대 줄 수 + 열 이름 + 여유. 그보다 길면 읽지 않는다(빈 줄로 부풀린 파일)
+            for n, row in enumerate(ws.iter_rows(values_only=True, max_col=MAX_COLS)):
+                if n > MAX_ROWS_APP + 50:
+                    break
+                rows.append(["" if c is None else str(c).strip() for c in row])
+            wb.close()
+            return rows
+        except ZipBombError as exc:
+            raise AppError(422, *exc.parts()) from None
         except AppError:
             raise
         except Exception:

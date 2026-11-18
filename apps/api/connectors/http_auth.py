@@ -6,11 +6,16 @@ auth = {
   "header_name": "X-API-Key"          # type=header일 때. 비워 두면 연결 정보의 header_name
 }
 비밀값은 연결 정보에서만 꺼낸다(단계 설정에 직접 적지 않는다). 반환한 헤더는 로그에 남기지 않는다.
+
+운영 준비 1차(B1·F4): 연결 정보에 '보낼 수 있는 주소'(allowed_hosts, 쉼표로 구분)를 적어 두면
+그 호스트(또는 하위 도메인)로 가는 요청에만 인증 헤더를 붙인다. 빌더나 다른 사람이 만든 흐름이
+비밀값을 엉뚱한 주소로 보내지 못하게 한다. 비워 두면 예전처럼 어느 주소에나 쓸 수 있다.
 """
 
 import base64
 import re
 from typing import Any
+from urllib.parse import urlparse
 
 from sqlalchemy.orm import Session
 
@@ -36,8 +41,41 @@ def _secrets(db: Session, workspace_id: str, credential_id: str) -> dict[str, An
     return data if isinstance(data, dict) else {}
 
 
-def auth_headers(db: Session, workspace_id: str, auth: dict[str, Any] | None) -> dict[str, str]:
-    """인증 설정에 맞는 요청 헤더. type이 none이거나 auth가 비어 있으면 빈 dict."""
+def parse_hosts(raw: Any) -> list[str]:
+    """'api.example.com, *.foo.kr' → ['api.example.com', 'foo.kr'] (앞의 *. 와 공백은 지운다)."""
+    out: list[str] = []
+    for part in re.split(r"[,\s]+", str(raw or "")):
+        h = part.strip().lower()
+        h = h.removeprefix("*.").removeprefix("https://").removeprefix("http://").split("/")[0]
+        if h and h not in out:
+            out.append(h)
+    return out
+
+
+def host_allowed(url: str, allowed: list[str]) -> bool:
+    host = (urlparse(url).hostname or "").lower()
+    return bool(host) and any(host == h or host.endswith("." + h) for h in allowed)
+
+
+def check_destination(secrets: dict[str, Any], url: str | None) -> None:
+    allowed = parse_hosts(secrets.get("allowed_hosts"))
+    if not allowed:
+        return
+    if not url or not host_allowed(url, allowed):
+        host = urlparse(url or "").hostname or "?"
+        raise NodeError(
+            f"이 연결 정보는 '{host}' 주소에는 쓸 수 없어요(허용: {', '.join(allowed)}).\n"
+            "주소를 확인하거나, 연결 정보의 '보낼 수 있는 주소'에 이 주소를 더해 주세요."
+        )
+
+
+def auth_headers(
+    db: Session, workspace_id: str, auth: dict[str, Any] | None, *, url: str | None = None
+) -> dict[str, str]:
+    """인증 설정에 맞는 요청 헤더. type이 none이거나 auth가 비어 있으면 빈 dict.
+
+    url: 이 헤더를 보낼 주소. 연결 정보에 '보낼 수 있는 주소'가 있으면 맞는지 확인한다.
+    """
     if not auth:
         return {}
     kind = str(auth.get("type") or "none")
@@ -51,6 +89,7 @@ def auth_headers(db: Session, workspace_id: str, auth: dict[str, Any] | None) ->
     if not cred_id:
         raise NodeError("HTTP 인증에 쓸 연결 정보를 골라 주세요.")
     s = _secrets(db, workspace_id, cred_id)
+    check_destination(s, url)
     if kind == "bearer":
         token = str(s.get("token") or "")
         if not token:

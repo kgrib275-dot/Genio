@@ -15,7 +15,7 @@ from api.llm.chain import ChainAdapter, effective_fallback
 from api.llm.presets import is_rerank
 from api.llm.registry import resolve_llm
 from api.models import Workspace
-from api.routers.workspaces import probe_connection
+from api.routers.workspaces import check_ai_url, probe_connection
 from api.services import llm_keys as svc
 
 router = APIRouter(tags=["llm-v09"])
@@ -121,6 +121,7 @@ def test_key(ws: str, provider_id: str, key_id: str, ctx: Builders) -> dict[str,
     """키 하나만 연결해 본다. 성공하면 쉬고 있던 키를 바로 다시 쓴다."""
     row = svc.get_provider(ctx.db, ws, provider_id)
     secret = svc.key_secret(row, key_id)
+    check_ai_url(ctx.db, ws, row.base_url)
     out = probe_connection(row.provider, secret, row.base_url, row.default_model)
     if out.get("ok"):
         keypool.clear_cooldown(row.id, key_id)

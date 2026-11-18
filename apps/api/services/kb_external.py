@@ -58,16 +58,17 @@ def retrieve(
     """검색 서비스에 질문하고 받은 기록을 지식 검색 결과 모양으로 바꾼다."""
     headers = {"Content-Type": "application/json", "Accept": "application/json"}
     cred = str(ext.get("credential_id") or "")
+    url = str(ext["endpoint"]).rstrip("/") + "/retrieval"
     if cred:
-        headers.update(auth_headers(db, workspace_id, {"type": "bearer", "credential_id": cred}))
+        headers.update(
+            auth_headers(db, workspace_id, {"type": "bearer", "credential_id": cred}, url=url)
+        )
     body = {
         "knowledge_id": str(ext.get("knowledge_id") or ""),
         "query": query,
         "retrieval_setting": {"top_k": int(top_k), "score_threshold": float(threshold)},
     }
-    res = safe_http.request(
-        "POST", str(ext["endpoint"]).rstrip("/") + "/retrieval", headers=headers, body=body
-    )
+    res = safe_http.request("POST", url, headers=headers, body=body)
     status = int(res.get("status", 0))
     if status in (401, 403):
         raise NodeError(

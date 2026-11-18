@@ -90,8 +90,25 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     # 동기 엔드포인트·스트리밍 응답이 쓰는 작업 스레드 수(기본 40). 공개 챗은 답을 기다리는 동안
     # 스레드를 하나 쓰므로 넉넉히 둔다. DB 연결은 위에서 짧게만 쓰므로 스레드보다 적어도 된다.
     to_thread.current_default_thread_limiter().total_tokens = get_settings().genio_api_threads
+    check_secret_key()
     startup()
     yield
+
+
+def check_secret_key() -> None:
+    """운영 준비 1차(B1·F20): 운영 모드(GENIO_ENV=production)에서 기본·짧은 비밀 키면 기동을 멈춘다.
+    개발 모드에서는 경고만 남기고, 관리 > 시스템 상태에 '주의'로 보인다."""
+    from api.config import PRODUCTION_ENVS, secret_key_problem
+
+    st = get_settings()
+    problem = secret_key_problem(st)
+    if problem is None:
+        return
+    if st.genio_env.lower() in PRODUCTION_ENVS:
+        raise RuntimeError(
+            f"{problem}. .env의 GENIO_SECRET_KEY를 긴 무작위 값으로 바꾼 뒤 다시 시작하세요."
+        )
+    logging.getLogger("genio").warning("%s. 운영 전에 바꾸세요.", problem)
 
 
 app = FastAPI(

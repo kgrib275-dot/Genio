@@ -31,7 +31,8 @@ export function getAccessToken(): string | null {
 }
 
 export function getRefreshToken(): string | null {
-  return memoryRefresh ?? readStorage(REFRESH_KEY);
+  // 새로고침 토큰은 쓸 때마다 바뀐다(서버 회전). 다른 탭이 바꿔 둔 최신 값(localStorage)을 먼저 쓴다.
+  return readStorage(REFRESH_KEY) ?? memoryRefresh;
 }
 
 export function setTokens(tokens: Tokens | null): void {

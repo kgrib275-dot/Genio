@@ -25,6 +25,7 @@ from sqlalchemy.orm import Session
 
 from api.llm.base import LlmError
 from api.llm.registry import resolve_llm
+from api.services.zipguard import ZipBombError, check_zip
 
 STEP_ORDER = (
     "extract",
@@ -78,7 +79,53 @@ def default_pipeline() -> list[dict[str, Any]]:
     return json.loads(json.dumps(DEFAULT_PIPELINE))  # type: ignore[no-any-return]
 
 
+# 운영 준비 1차(B1·F12): 파이썬 re는 도는 중에 멈출 수 없어서, 아주 느려질 수 있는 모양을 미리 거절한다.
+# 반복이 들어간 묶음을 다시 반복((a+)+, (a|b*)*, (x{2,})+ 등)하거나, 앞에서 잡은 글을 다시 찾는 패턴(역참조).
+_BACKREF = re.compile(r"\\[1-9]|\(\?P=")
+_OPEN_REPEAT = re.compile(r"\{\d*,\d*\}")
+
+
+def _repeat_at(pattern: str, i: int) -> bool:
+    """pattern[i]에서 '여러 번 반복'(+, *, {n,}, {n,m})이 시작하는지."""
+    if i >= len(pattern):
+        return False
+    if pattern[i] in "+*":
+        return True
+    return pattern[i] == "{" and bool(_OPEN_REPEAT.match(pattern, i))
+
+
+def regex_risky(pattern: str) -> bool:
+    if _BACKREF.search(pattern):
+        return True
+    # 묶음마다 안에 반복이 있는지 기억하고, 그 묶음 자체가 다시 반복되면 위험
+    stack: list[bool] = []
+    i, in_class = 0, False
+    while i < len(pattern):
+        ch = pattern[i]
+        if ch == "\\":
+            i += 2
+            continue
+        if in_class:
+            in_class = ch != "]"
+        elif ch == "[":
+            in_class = True
+        elif ch == "(":
+            stack.append(False)
+        elif ch == ")" and stack:
+            inner = stack.pop()
+            if inner and _repeat_at(pattern, i + 1):
+                return True
+            if stack and (inner or _repeat_at(pattern, i + 1)):
+                stack[-1] = True
+        elif stack and _repeat_at(pattern, i):
+            stack[-1] = True
+        i += 1
+    return False
+
+
 def _regex_ok(pattern: str) -> bool:
+    if regex_risky(pattern):
+        return False
     try:
         re.compile(pattern)
     except re.error:
@@ -108,7 +155,8 @@ def normalize_pipeline(raw: Any) -> list[dict[str, Any]]:
             if bad:
                 raise PipelineError(
                     f"지울 글 패턴 '{bad[0]}'이(가) 올바르지 않아요.",
-                    "정규식 문법을 확인하거나 그 줄을 지워 주세요.",
+                    "정규식 문법을 확인하거나 그 줄을 지워 주세요"
+                    "(반복을 다시 반복하는 (a+)+ 같은 모양과 \\1 같은 되찾기는 쓸 수 없어요).",
                 )
             step["remove_patterns"] = pats
         if step["type"] == "translate":
@@ -151,6 +199,8 @@ def clean_text(text: str, cfg: dict[str, Any]) -> str:
         repeated = {ln for ln, n in counts.items() if n >= 3}
         out = "\n".join(ln for ln in out.split("\n") if ln.strip() not in repeated)
     for pat in cfg.get("remove_patterns") or []:
+        if not _regex_ok(str(pat)):  # 예전에 저장된 위험한 패턴은 건너뛴다
+            continue
         out = re.sub(pat, "", out)
     if cfg.get("mask_urls"):
         out = _URL.sub("[주소]", out)
@@ -167,7 +217,7 @@ def clean_text(text: str, cfg: dict[str, Any]) -> str:
 def pipeline_metadata(filename: str, cfg: dict[str, Any]) -> dict[str, str]:
     meta: dict[str, str] = dict(cfg.get("fixed") or {})
     pat = str(cfg.get("filename_pattern") or "")
-    if pat:
+    if pat and _regex_ok(pat):
         stem = re.sub(r"\.[A-Za-z0-9]+$", "", filename)
         m = re.search(pat, stem)
         if m:
@@ -196,13 +246,19 @@ def read_table(content: bytes, filename: str) -> list[list[str]]:
         try:
             from openpyxl import load_workbook
 
+            try:
+                check_zip(content)
+            except ZipBombError as bomb:
+                raise PipelineError(*bomb.parts()) from None
             wb = load_workbook(io.BytesIO(content), read_only=True, data_only=True)
             ws = wb.worksheets[0]
-            for n, row in enumerate(ws.iter_rows(values_only=True)):
+            for n, row in enumerate(ws.iter_rows(values_only=True, max_col=200)):
                 if n > MAX_QA_ROWS:
                     break
                 rows.append(["" if v is None else str(v).strip() for v in row])
             wb.close()
+        except PipelineError:
+            raise
         except Exception as exc:
             raise PipelineError(
                 "엑셀 파일을 읽지 못했어요.", "암호가 걸려 있거나 손상된 파일인지 확인하세요."

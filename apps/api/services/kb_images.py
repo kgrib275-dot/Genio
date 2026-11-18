@@ -29,6 +29,7 @@ from api.llm.registry import ResolvedLlm, resolve_llm
 from api.llm.vision import ALLOWED_MIME, MAX_IMAGE_BYTES, ImageInput, sniff_mime
 from api.models import Document, LlmProvider, StoredFile, Workspace
 from api.services import storage
+from api.services.zipguard import check_zip
 
 MAX_IMAGES_PER_DOC = 20
 MIN_SIDE = 100
@@ -152,6 +153,7 @@ def _pdf_images(content: bytes, add: Any) -> None:
 
 
 def _zip_media(content: bytes, prefix: str, add: Any) -> None:
+    check_zip(content)
     with zipfile.ZipFile(io.BytesIO(content)) as z:
         names = sorted(n for n in z.namelist() if n.startswith(prefix) and not n.endswith("/"))
         for n, name in enumerate(names):
@@ -168,6 +170,7 @@ def _pptx_images(content: bytes, add: Any) -> None:
     from pptx import Presentation
     from pptx.enum.shapes import MSO_SHAPE_TYPE
 
+    check_zip(content)
     prs = Presentation(io.BytesIO(content))
     scanned = 0
 

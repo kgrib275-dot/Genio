@@ -46,6 +46,8 @@ class Settings(BaseSettings):
     # v0.6: 한 실행 안에서 동시에 도는 갈래 수(1~16)
     genio_run_parallelism: int = 4
     genio_public_rate_limit_per_minute: int = 30
+    # 운영 준비 1차(B1·F8): 공개 앱 하나에 하루(24시간) 동안 올릴 수 있는 파일 총량(MB)
+    genio_public_upload_daily_mb: int = 500
     # API 프로세스 하나의 작업 스레드 수와 DB 연결 수(프로세스 수는 GENIO_API_WORKERS, compose)
     genio_api_threads: int = 200
     genio_db_pool_size: int = 10
@@ -82,6 +84,24 @@ class Settings(BaseSettings):
     # v0.8 오류 수집(Sentry). 비우면 아무것도 보내지 않는다.
     sentry_dsn: str = ""
     sentry_traces_sample_rate: float = 0.0
+
+
+# 운영 준비 1차(B1·F20): 저장소에 적혀 있는(누구나 아는) 비밀 키 값
+KNOWN_WEAK_SECRETS = {
+    "dev-secret-change-me-please-32bytes!!",
+    "change-me-to-a-long-random-string",
+}
+PRODUCTION_ENVS = ("prod", "production")
+
+
+def secret_key_problem(st: "Settings") -> str | None:
+    """비밀 키가 기본값이거나 짧으면 이유, 괜찮으면 None."""
+    key = st.genio_secret_key
+    if key in KNOWN_WEAK_SECRETS:
+        return "비밀 키(GENIO_SECRET_KEY)가 저장소에 적힌 기본값이에요"
+    if len(key) < 32:
+        return "비밀 키(GENIO_SECRET_KEY)가 32자보다 짧아요"
+    return None
 
 
 @lru_cache

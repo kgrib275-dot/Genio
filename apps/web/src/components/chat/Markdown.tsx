@@ -4,6 +4,7 @@ import { isValidElement, useState, type ReactNode } from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { cn, copyText } from "@/lib/cn";
+import { isSameOriginImage } from "@/lib/safeImage";
 
 function textOf(node: ReactNode): string {
   if (typeof node === "string" || typeof node === "number") return String(node);
@@ -87,6 +88,25 @@ const components: Components = {
     </blockquote>
   ),
   hr: () => <hr className="my-3 border-slate-200" />,
+  // 운영 준비 1차(B1·F21): 답변 속 외부 그림은 자동으로 불러오지 않는다. 그림 주소에 대화 내용을 실어
+  // 밖으로 보내는 수법(프롬프트 주입)을 막기 위해, 눌러서 여는 링크로만 보여 준다.
+  img: ({ src, alt }) => {
+    const url = typeof src === "string" ? src : "";
+    if (isSameOriginImage(url)) {
+      return <img src={url} alt={alt ?? ""} className="my-2 max-h-80 max-w-full rounded-lg" />;
+    }
+    if (!/^https?:\/\//i.test(url)) return <span>{alt ? `[그림: ${alt}]` : "[그림]"}</span>;
+    return (
+      <a
+        href={url}
+        target="_blank"
+        rel="noopener noreferrer nofollow"
+        className="font-medium text-[color:var(--chat-accent,#4f46e5)] underline underline-offset-2"
+      >
+        {alt ? `그림 열기: ${alt}` : "그림 열기"}
+      </a>
+    );
+  },
   p: ({ children }) => <p className="my-1 first:mt-0 last:mb-0">{children}</p>,
 };
 

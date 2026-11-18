@@ -110,6 +110,12 @@ class UserSession(Base):
     created_at: Mapped[datetime] = _created()
     last_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # 운영 준비 1차(B1·F18): 새로고침 토큰 회전. 지금 토큰 번호, 바로 앞 번호와 바꾼 시각(동시 새로고침 여유)
+    refresh_jti: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    prev_refresh_jti: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    refresh_rotated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
 
 class Membership(Base):

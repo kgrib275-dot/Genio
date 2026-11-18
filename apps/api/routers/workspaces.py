@@ -9,6 +9,7 @@ from typing import Annotated, Any, Literal
 from fastapi import APIRouter, Depends, Query, Request, Response
 from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy import func, or_, select
+from sqlalchemy.orm import Session
 
 from api.connectors.http_auth import auth_headers
 from api.core.audit import audit
@@ -92,10 +93,27 @@ def list_members(ws: str, ctx: Members) -> list[dict[str, Any]]:
         )
     )
     order = {"owner": 0, "admin": 1, "builder": 2, "operator": 3, "member": 4}
-    return sorted(
+    out = sorted(
         (_member(m, u, u.id not in shared) for m, u in rows),
         key=lambda x: (order.get(x["role"], 9), x["email"]),
     )
+    return [_member_view(x, ctx.role) for x in out]
+
+
+def mask_email(email: str) -> str:
+    local, _, domain = email.partition("@")
+    return (local[:1] + "***@" + domain) if domain else "***"
+
+
+def _member_view(row: dict[str, Any], viewer_role: str) -> dict[str, Any]:
+    """운영 준비 1차(B1·F15): 관리 정보(2단계 인증·계정 소속)는 소유자·관리자만, 메일 전체는 만들기 권한까지.
+    운영자·구성원은 이름과 가린 메일만 본다(멘션·담당자 고르기에는 이름과 id면 된다)."""
+    if viewer_role in ("owner", "admin"):
+        return row
+    view = {k: v for k, v in row.items() if k not in ("two_factor", "only_here")}
+    if viewer_role != "builder":
+        view["email"] = mask_email(str(row.get("email") or ""))
+    return view
 
 
 class InviteIn(BaseModel):
@@ -216,6 +234,30 @@ class ProviderIn(BaseModel):
     is_default: bool = False
 
 
+def check_ai_url(db: Session, ws: str, base_url: str | None) -> None:
+    """운영 준비 1차(B1·F6): AI 연결 주소가 사내망·내부 IP면 막는다.
+
+    사내 AI 서버는 관리자가 연결 정보 > '허용할 내부 주소'에 호스트를 등록하면 쓸 수 있다.
+    """
+    from urllib.parse import urlparse
+
+    from api.connectors.runtime import allowed_private_hosts
+
+    if not base_url:
+        return
+    host = (urlparse(base_url.strip()).hostname or "").lower()
+    if host and host in {h.strip().lower() for h in allowed_private_hosts(db, ws)}:
+        return
+    try:
+        safe_http.check_url(base_url.strip())
+    except NodeError as exc:
+        raise AppError(
+            422,
+            exc.message,
+            "사내 AI 서버라면 관리자에게 연결 정보 > '허용할 내부 주소'에 등록해 달라고 하세요.",
+        ) from None
+
+
 @router.post("/workspaces/{ws}/llm-providers")
 def add_provider(ws: str, body: ProviderIn, ctx: SecretManagers) -> dict[str, Any]:
     if body.provider not in PROVIDERS:
@@ -224,6 +266,7 @@ def add_provider(ws: str, body: ProviderIn, ctx: SecretManagers) -> dict[str, An
         raise AppError(
             422, "주소(base URL) 형식이 올바르지 않아요.", "https://로 시작하는 주소를 넣으세요."
         )
+    check_ai_url(ctx.db, ws, body.base_url)
     if body.provider == "openai-compatible" and not body.base_url:
         raise AppError(
             422, "호환 API는 주소(base URL)가 필요해요.", "예: https://api.example.com/v1"
@@ -327,7 +370,7 @@ def probe_connection(
 @router.post("/workspaces/{ws}/llm-providers/test")
 def test_new_provider(ws: str, body: ProviderTestIn, ctx: SecretManagers) -> dict[str, Any]:
     """저장하기 전에 키로 연결해 보고, 그 키로 쓸 수 있는 모델 목록을 돌려준다."""
-    del ws, ctx
+    check_ai_url(ctx.db, ws, body.base_url)
     return probe_connection(body.provider, body.api_key.strip(), body.base_url, body.model)
 
 
@@ -337,6 +380,7 @@ def test_saved_provider(ws: str, provider_id: str, ctx: Builders) -> dict[str, A
     row = ctx.db.get(LlmProvider, provider_id)
     if row is None or row.workspace_id != ws:
         raise not_found("AI 연결")
+    check_ai_url(ctx.db, ws, row.base_url)
     return probe_connection(
         row.provider, decrypt_str(row.api_key_encrypted), row.base_url, row.default_model
     )
@@ -663,7 +707,7 @@ def http_preview(ws: str, body: HttpPreviewIn, ctx: Builders) -> dict[str, Any]:
     started = time.perf_counter()
     try:
         headers = {str(k)[:100]: str(v)[:2000] for k, v in list(body.headers.items())[:30]}
-        headers.update(auth_headers(ctx.db, ws, body.auth))
+        headers.update(auth_headers(ctx.db, ws, body.auth, url=body.url))
         res = safe_http.request(body.method, body.url, headers=headers, body=body.body)
     except NodeError as exc:
         raise AppError(422, exc.message, "주소·인증·값을 확인한 뒤 다시 시험 호출하세요.") from None

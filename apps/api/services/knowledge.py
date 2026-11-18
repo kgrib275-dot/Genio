@@ -19,6 +19,7 @@ from api.llm.base import LlmError
 from api.llm.registry import resolve_llm
 from api.models import Chunk, Document, KnowledgeBase
 from api.services import storage
+from api.services.zipguard import check_zip
 from nodes import NodeError
 
 log = logging.getLogger("genio.knowledge")
@@ -125,6 +126,8 @@ def extract_text(content: bytes, filename: str, mime: str) -> str:
                 "PDF를 읽지 못했어요. 암호가 걸려 있거나 손상된 파일인지 확인하세요."
             ) from exc
         return "\n\n".join(pages)
+    if kind in ("docx", "pptx", "xlsx"):
+        check_zip(content)  # ZipBombError(ValueError): 문장 그대로 문서 오류로 보인다
     try:
         if kind == "docx":
             return _docx_text(content)

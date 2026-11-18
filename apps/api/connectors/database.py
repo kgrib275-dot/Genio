@@ -51,16 +51,18 @@ def check_sql(sql: str, mode: str) -> str:
     return s
 
 
-def check_host(host: str, port: int, allow_hosts: list[str]) -> None:
+def check_host(host: str, port: int, allow_hosts: list[str]) -> str | None:
+    """막힌 주소면 NodeError. 검사한 IP(그 IP로 바로 연결해 DNS 재바인딩을 막는다, F3)를 돌려준다.
+    관리자가 허용한 내부 주소이거나 사설망 허용(시험 전용)이면 None(호스트 이름으로 연결)."""
     host = (host or "").strip()
     if not host:
         raise NodeError("데이터베이스 주소(host)가 비어 있어요. 연결 정보를 확인하세요.")
     if not (1 <= int(port) <= 65535):
         raise NodeError("데이터베이스 포트가 올바르지 않아요. 연결 정보를 확인하세요.")
     if host.lower() in {h.strip().lower() for h in allow_hosts if h.strip()}:
-        return
+        return None
     try:
-        safe_http.check_url(f"https://{host}:{int(port)}/")
+        return safe_http._resolve(f"https://{host}:{int(port)}/")[1]
     except NodeError as exc:
         raise NodeError(
             f"{exc.message} 사내 DB라면 관리자에게 '허용할 내부 주소'에 등록해 달라고 하세요."
@@ -98,12 +100,12 @@ def run_sql(
     if engine not in ENGINES:
         raise NodeError("데이터베이스 종류는 postgresql 또는 mysql만 쓸 수 있어요.")
     stmt = check_sql(sql, mode)
-    check_host(host, port, allow_hosts)
+    ip = check_host(host, port, allow_hosts)
     args = {str(k): v for k, v in (params or {}).items()}
     try:
         if engine == "postgresql":
-            return _pg(host, port, database, user, password, ssl, stmt, args, mode)
-        return _mysql(host, port, database, user, password, ssl, stmt, args, mode)
+            return _pg(host, port, database, user, password, ssl, stmt, args, mode, hostaddr=ip)
+        return _mysql(ip or host, port, database, user, password, ssl, stmt, args, mode)
     except NodeError:
         raise
     except Exception as exc:  # 드라이버 오류(연결 실패·문법 오류 등)
@@ -131,12 +133,15 @@ def _pg(
     sql: str,
     params: dict[str, Any],
     mode: str,
+    hostaddr: str | None = None,
 ) -> dict[str, Any]:
     import psycopg
     from psycopg.rows import dict_row
 
+    extra: dict[str, Any] = {"hostaddr": hostaddr} if hostaddr else {}
     with psycopg.connect(
         host=host,
+        **extra,
         port=int(port),
         dbname=database,
         user=user,

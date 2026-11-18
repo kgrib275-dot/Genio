@@ -15,7 +15,7 @@ from sqlalchemy import delete, func, select, update
 from sqlalchemy.orm import Session
 
 from api.core.errors import AppError
-from api.core.security import create_tokens
+from api.core.security import create_tokens, new_jti
 from api.models import (
     App,
     AuditLog,
@@ -57,14 +57,53 @@ def _client(request: Request | None) -> tuple[str, str]:
 def issue_tokens(
     db: Session, user: User, request: Request | None, sid: str | None = None
 ) -> dict[str, str]:
-    """로그인·가입 성공: 새 기기를 만들고(또는 이어 쓰고) 토큰을 준다."""
+    """로그인·가입 성공: 새 기기를 만들고(또는 이어 쓰고) 토큰을 준다.
+
+    새로고침 토큰 번호는 기기에 적어 두고, 새로고침할 때마다 바꾼다(F18 회전).
+    """
+    jti = new_jti()
     if sid is None:
         ua, ip = _client(request)
-        sess = UserSession(user_id=user.id, user_agent=ua, ip=ip, last_seen_at=now())
+        sess = UserSession(
+            user_id=user.id, user_agent=ua, ip=ip, last_seen_at=now(), refresh_jti=jti
+        )
         db.add(sess)
         db.commit()
         sid = sess.id
-    return create_tokens(user.id, sid)
+    else:
+        existing = db.get(UserSession, sid)
+        if existing is not None:
+            existing.prev_refresh_jti = existing.refresh_jti
+            existing.refresh_jti = jti
+            existing.refresh_rotated_at = now()
+            db.commit()
+    return create_tokens(user.id, sid, refresh_jti=jti)
+
+
+# 여러 탭이 같은 새로고침 토큰을 거의 동시에 쓰는 경우 바로 앞 토큰을 받아 주는 시간
+REFRESH_REUSE_GRACE = timedelta(seconds=30)
+
+
+def refresh_reuse_detected(db: Session, payload: dict[str, Any]) -> bool:
+    """이미 바꾼(옛) 새로고침 토큰이 다시 왔는지. 그렇다면 그 기기 로그인을 끊는다(도난 의심).
+
+    회전 전에 발급된 토큰(기기에 번호가 없음)은 한 번 받아 준다.
+    """
+    sid = payload.get("sid")
+    if not sid:
+        return False
+    sess = db.get(UserSession, str(sid))
+    if sess is None or not sess.refresh_jti:
+        return False
+    jti = str(payload.get("jti") or "")
+    if jti == sess.refresh_jti:
+        return False
+    rotated = _aware(sess.refresh_rotated_at)
+    if jti and jti == sess.prev_refresh_jti and rotated and now() - rotated <= REFRESH_REUSE_GRACE:
+        return False
+    sess.revoked_at = now()
+    db.commit()
+    return True
 
 
 def token_still_valid(db: Session, user: User, payload: dict[str, Any]) -> bool:

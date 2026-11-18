@@ -90,6 +90,15 @@ def _sandbox() -> dict[str, Any]:
     )
 
 
+def _secret_key() -> dict[str, Any]:
+    from api.config import secret_key_problem
+
+    problem = secret_key_problem(get_settings())
+    if problem:
+        return _item("warn", "비밀 키", f"{problem}. .env에서 긴 무작위 값으로 바꿔 주세요.")
+    return _item("ok", "비밀 키", "직접 정한 값을 쓰고 있어요.")
+
+
 def _ratelimit(redis_ok: bool) -> dict[str, Any]:
     """속도 제한·로그인 시도 제한을 API 프로세스들이 함께 세는지(Redis) 따로 세는지(메모리)."""
     from api.core import ratelimit
@@ -223,6 +232,7 @@ def system_status(db: Session) -> dict[str, Any]:
         _sandbox(),
         _backup(now),
         _disk(),
+        _secret_key(),
     ]
     runs_24h = db.scalar(select(func.count()).select_from(Run).where(Run.created_at >= since)) or 0
     failed_24h = (

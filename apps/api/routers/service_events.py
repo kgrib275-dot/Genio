@@ -106,6 +106,9 @@ def _receive(
             return ignore("고르지 않은 이벤트라 건너뛰었어요")
         if ev.delivery_id and sev.seen_recently(f"{t.id}:{ev.delivery_id}"):
             return ignore("이미 받은 알림(다시 보내기)이라 건너뛰었어요")
+        body_key = sev.body_replay_key(preset.key, t.id, raw)
+        if body_key and sev.seen_recently(body_key, sev.BODY_DEDUPE_SECONDS):
+            return ignore("같은 내용을 이미 받았어요(다시 보내기)")
         run_input = sev.build_input(preset.key, ev, body_json, dict(cfg.get("mapping") or {}))
         run = svc.create_trigger_run(db, t, run_input)
         run_id = run.id

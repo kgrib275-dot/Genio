@@ -3,7 +3,7 @@
   "type": "connector",
   "name": "HTTP 인증 정보",
   "summary": "HTTP 요청 단계에서 쓸 토큰·아이디/비밀번호·API 키 헤더를 안전하게 보관해요.",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "publisher": "platform",
   "price": 0,
   "category": "기본",
@@ -46,6 +46,12 @@
         "key": "header_value",
         "label": "헤더 값(API 키)",
         "secret": true,
+        "required": false
+      },
+      {
+        "key": "allowed_hosts",
+        "label": "보낼 수 있는 주소(쉼표로 구분, 예: api.example.com) — 비우면 어디로나 보낼 수 있어요",
+        "secret": false,
         "required": false
       }
     ]

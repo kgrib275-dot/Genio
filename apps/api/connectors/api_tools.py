@@ -120,6 +120,7 @@ def call(
                 db,
                 workspace_id,
                 {"type": auth_type, "credential_id": tool_set["auth_credential_id"]},
+                url=url,
             )
         )
     method = str(op["method"]).upper()

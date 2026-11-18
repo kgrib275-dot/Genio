@@ -163,14 +163,14 @@ class RunServices:
         auth: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         if auth:
-            headers = {**headers, **self._auth_headers(auth)}
+            headers = {**headers, **self._auth_headers(auth, url)}
         return safe_http.request(method, url, headers=headers, body=body)
 
-    def _auth_headers(self, auth: dict[str, Any]) -> dict[str, str]:
+    def _auth_headers(self, auth: dict[str, Any], url: str | None = None) -> dict[str, str]:
         """연결 정보의 비밀값으로 인증 헤더를 만든다(시험 호출과 같은 함수). 비밀값은 기록에 남기지 않는다."""
         from api.connectors.http_auth import auth_headers
 
-        return auth_headers(self.db, self.workspace_id, auth)
+        return auth_headers(self.db, self.workspace_id, auth, url=url)
 
     def kb_search(
         self,

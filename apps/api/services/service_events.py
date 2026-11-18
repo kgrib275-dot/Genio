@@ -21,6 +21,18 @@ from api.engine.events import _client
 
 SLACK_TOLERANCE_SECONDS = 300
 DEDUPE_SECONDS = 600
+# 운영 준비 1차(B1·F17): 서명에 시각이 없는 서비스(GitHub·Shopify·Typeform)는 서명된 본문이 같으면
+# 오래(7일) 기억했다가 다시 오면 무시한다. 배달 번호(헤더)는 서명 밖이라 바꿔서 다시 보낼 수 있기 때문.
+UNTIMED_SIGNATURE_SERVICES = ("github", "shopify", "typeform")
+BODY_DEDUPE_SECONDS = 7 * 24 * 3600
+
+
+def body_replay_key(service: str, trigger_id: str, raw: bytes) -> str | None:
+    if service not in UNTIMED_SIGNATURE_SERVICES:
+        return None
+    return f"{trigger_id}:body:{hashlib.sha256(raw).hexdigest()}"
+
+
 MAX_MAPPING = 30
 MAX_PATH = 200
 MAX_VALUE_CHARS = 8000

@@ -1,6 +1,7 @@
 """배포(위젯·공유 링크·API)와 공개 챗 API, 위젯 스크립트, 위젯 모양(v0.4)."""
 
 import json
+import re
 import time
 from collections.abc import Iterator
 from typing import Annotated, Any, Literal
@@ -11,6 +12,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from api.config import get_settings
 from api.core import ratelimit
 from api.core.audit import audit
 from api.core.errors import AppError, not_found
@@ -485,6 +487,20 @@ def public_form_run(
     return {"run_id": run_id, "status": "queued"}
 
 
+_URL_IN_TEXT = re.compile(r"https?://\S+|\b(?:\d{1,3}\.){3}\d{1,3}(?::\d+)?\b")
+_EMAIL_IN_TEXT = re.compile(r"[\w.+-]+@[\w-]+(?:\.[\w-]+)+")
+
+
+def public_error_detail(error: str | None) -> str:
+    """운영 준비 1차(B1·F14): 로그인 없는 화면에 보일 실패 이유. 내부 주소·IP·메일·비밀값을 가린다."""
+    from api.services.error_log import scrub
+
+    text = scrub((error or "").strip())
+    text = _URL_IN_TEXT.sub("[주소]", text)
+    text = _EMAIL_IN_TEXT.sub("[메일]", text)
+    return text[:200]
+
+
 @router.get("/public/apps/{token}/runs/{run_id}")
 def public_form_result(token: str, run_id: str, db: DbDep, user: OptionalUser) -> dict[str, Any]:
     """그 공유 링크 앱의 실행 결과만. 단계 입력·출력 같은 내부 값은 보내지 않는다."""
@@ -503,11 +519,10 @@ def public_form_result(token: str, run_id: str, db: DbDep, user: OptionalUser) -
         if made:
             body["files"] = run_files.with_public_links(made, app.id, run.id)
     elif run.status == "failed":
-        msg = (run.error or "").strip()
         body["error"] = {
             "message": "흐름을 끝까지 실행하지 못했어요.",
             "hint": "입력을 확인하고 다시 실행하거나, 앱을 만든 사람에게 알려 주세요.",
-            "detail": msg[:300],
+            "detail": public_error_detail(run.error),
         }
     elif run.status == "waiting_approval":
         body["text"] = "담당자의 확인을 기다리고 있어요. 확인되면 이 화면에 결과가 나와요."
@@ -618,7 +633,8 @@ def _own_files(db: Session, app: App, ids: list[str]) -> list[str]:
     out = []
     for fid in ids:
         f = db.get(StoredFile, fid)
-        if f is None or f.workspace_id != app.workspace_id:
+        # 운영 준비 1차(B1·F13): 공개 화면은 이 앱에 올린 파일만 붙일 수 있다(워크스페이스의 다른 파일 X)
+        if f is None or f.workspace_id != app.workspace_id or f.app_id != app.id:
             raise AppError(404, "첨부한 파일을 찾을 수 없어요.", "파일을 다시 올려 주세요.")
         out.append(f.id)
     return out
@@ -639,7 +655,12 @@ async def public_upload(
     if _rate_limited(app, f"upload:{app.id}:{client_ip(request)}"):
         raise AppError(429, "요청이 너무 많아요.", "1분 뒤에 다시 시도하세요.")
     return await save_upload(
-        db, app.workspace_id, file, app_id=app.id, user_id=user.id if user else None
+        db,
+        app.workspace_id,
+        file,
+        app_id=app.id,
+        user_id=user.id if user else None,
+        daily_app_cap_bytes=get_settings().genio_public_upload_daily_mb * 1024 * 1024,
     )
 
 

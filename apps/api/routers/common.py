@@ -82,17 +82,49 @@ def client_ip(request: Request) -> str:
     return hops[0] if hops else peer
 
 
+LOCAL_HOSTS = ("localhost", "127.0.0.1", "::1")
+
+
+def _trusted_origin(origin: str) -> bool:
+    """링크에 써도 되는 주소인지: 이 PC(localhost)이거나 GENIO_CORS_ORIGINS에 적은 주소만.
+
+    운영 준비 1차(B1·F5): 아무 Origin·X-Forwarded-Host나 믿으면 비밀번호 재설정·초대 링크가
+    남의 주소로 만들어질 수 있다(링크 바꿔치기).
+    """
+    parsed = urlparse(origin)
+    if parsed.scheme not in ("http", "https") or not parsed.hostname:
+        return False
+    if parsed.hostname in LOCAL_HOSTS:
+        return True
+    allowed = {
+        o.strip().rstrip("/").lower()
+        for o in get_settings().genio_cors_origins.split(",")
+        if o.strip()
+    }
+    return origin.rstrip("/").lower() in allowed
+
+
 def public_origin(request: Request) -> str:
     """공유·초대 링크에 쓸 웹 주소.
 
     GENIO_PUBLIC_WEB_URL에 외부 주소(Tailscale 등)를 정했으면 늘 그것을 쓴다.
     그래야 localhost 화면에서 배포해도 다른 사람이 열 수 있는 링크가 나온다.
-    정하지 않았으면(localhost) 브라우저가 보낸 Origin을 쓴다.
+    정하지 않았으면(localhost) 브라우저가 보낸 Origin을 쓰되, 믿을 수 있는 주소일 때만 쓴다.
     """
     configured = get_settings().genio_public_web_url.rstrip("/")
     host = urlparse(configured).hostname or ""
-    if configured and host not in ("localhost", "127.0.0.1"):
+    if configured and host not in LOCAL_HOSTS:
         return configured
+    origin = (request.headers.get("origin") or "").rstrip("/")
+    if origin and _trusted_origin(origin):
+        return origin
+    fwd_host = request.headers.get("x-forwarded-host")
+    if fwd_host:
+        proto = request.headers.get("x-forwarded-proto", "https")
+        candidate = f"{proto}://{fwd_host}".rstrip("/")
+        if _trusted_origin(candidate):
+            return candidate
+    return configured
     origin = request.headers.get("origin")
     if origin and origin.startswith(("http://", "https://")):
         return origin.rstrip("/")

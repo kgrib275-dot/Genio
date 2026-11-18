@@ -214,6 +214,22 @@ def refresh(body: RefreshIn, request: Request, db: DbDep) -> dict[str, str]:
     user = db.get(User, str(payload["sub"])) if payload else None
     if payload is None or user is None or not accounts.token_still_valid(db, user, payload):
         raise expired
+    if accounts.refresh_reuse_detected(db, payload):
+        audit(
+            db,
+            workspace_id=None,
+            user_id=user.id,
+            action="auth.refresh_reuse",
+            target_type="session",
+            target_id=str(payload.get("sid") or ""),
+            meta={"ip": client_ip(request)},
+        )
+        db.commit()
+        raise AppError(
+            401,
+            "이미 쓴 로그인 정보가 다시 쓰여 이 기기의 로그인을 끊었어요.",
+            "다시 로그인하세요. 직접 한 일이 아니라면 비밀번호를 바꾸세요.",
+        )
     sid = payload.get("sid")
     return accounts.issue_tokens(db, user, request, str(sid) if sid else None)
 
