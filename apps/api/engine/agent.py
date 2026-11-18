@@ -1,5 +1,6 @@
 """agent 단계: AI가 도구(웹 읽기·지식 검색·서비스 연결·다른 앱)를 스스로 골라 쓰는 루프."""
 
+import hashlib
 import json
 import re
 from typing import TYPE_CHECKING, Any
@@ -19,6 +20,12 @@ if TYPE_CHECKING:
 MAX_TOOL_OUTPUT = 4000
 MAX_DEPTH = 2
 MAX_MCP_TOOLS = 20
+
+
+def tool_key(name: str, args: dict[str, Any]) -> str:
+    """같은 도구·같은 입력이면 같은 값. 승인 결정이 어느 호출에 대한 것인지 가린다."""
+    raw = json.dumps([name, args], sort_keys=True, ensure_ascii=False, default=str)
+    return hashlib.sha256(raw.encode()).hexdigest()[:16]
 
 
 def _safe_name(s: str) -> str:
@@ -106,6 +113,8 @@ def build_tools(
                     )
                 )
                 table[name] = {"type": "mcp", "credential_id": cred, "tool": tool["name"]}
+                if t.get("approval"):
+                    table[name]["approval"] = True
             continue
         elif kind == "app":
             app = services.db.get(App, str(t.get("app_id") or ""))
@@ -198,6 +207,18 @@ def run_child_app(services: "RunServices", app_id: str, inputs: dict[str, Any]) 
     return str((run.output or {}).get("text", ""))[:MAX_TOOL_OUTPUT]
 
 
+def _approval_wait(name: str, args: dict[str, Any], key: str) -> dict[str, Any]:
+    """도구 실행 전 사람 승인 요청(작업함에 '승인' 할 일로 생긴다)."""
+    shown = json.dumps(args, ensure_ascii=False, default=str)
+    return {
+        "kind": "approval",
+        "title": f"에이전트가 도구 '{name}'을(를) 쓰려고 해요"[:300],
+        "message": f"에이전트가 도구 '{name}'을(를) 아래 값으로 실행하려고 해요. 승인할까요?",
+        "detail": shown[:1500],
+        "agent_resume": {"key": key, "tool": name},
+    }
+
+
 def run_agent(
     services: "RunServices",
     *,
@@ -207,7 +228,10 @@ def run_agent(
     query: str,
     tools: list[dict[str, Any]],
     max_iterations: int,
+    decisions: dict[str, str] | None = None,
+    can_pause: bool = False,
 ) -> dict[str, Any]:
+    decisions = decisions or {}
     try:
         llm = resolve_llm(
             services.db, services.workspace_id, provider, model, fallback=services.app_fallback
@@ -246,6 +270,23 @@ def run_agent(
             try:
                 if spec is None:
                     raise NodeError(f"없는 도구: {call.name}")
+                if spec.get("approval"):
+                    key = tool_key(call.name, call.input)
+                    verdict = decisions.get(key)
+                    if verdict == "rejected":
+                        raise NodeError(
+                            "사람이 이 도구 실행을 거절했어요. 다른 방법으로 답하거나 못 한다고 알려 주세요."
+                        )
+                    if verdict != "approved":
+                        if not can_pause:
+                            raise NodeError(
+                                "이 실행에서는 사람 승인을 받을 수 없어 도구를 쓰지 않았어요."
+                            )
+                        return {
+                            "text": text,
+                            "tool_calls": calls,
+                            "__wait": _approval_wait(call.name, call.input, key),
+                        }
                 result, ok = call_tool(services, spec, call.input), True
             except NodeError as exc:
                 result, ok = exc.message, False

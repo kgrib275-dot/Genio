@@ -83,6 +83,8 @@ class RunServices:
         # (키를 바꿨어요·대체 연결로 답했어요). 단계가 끝나면 단계 기록(logs)에 옮겨 적는다.
         self.app_fallback: dict[str, Any] | None = None
         self.notes: list[str] = []
+        # 에이전트 도구 승인 결정: 단계 id → {도구 호출 지문: approved | rejected}
+        self.agent_decisions: dict[str, dict[str, str]] = {}
         self._privacy_cache: dict[str, bool] | None = None
 
     def llm_complete(
@@ -282,6 +284,8 @@ class RunServices:
             query=query,
             tools=tools,
             max_iterations=max_iterations,
+            decisions=self.agent_decisions.get(self.current_node, {}),
+            can_pause=True,
         )
 
     def connector_manifest(self, key: str) -> dict[str, Any] | None:
@@ -927,6 +931,10 @@ class _Sched:
         return None
 
 
+# 에이전트 도구 승인이 끝났다는 표시: 그 단계를 처음부터 다시 실행한다
+AGENT_RESUME = "__agent_resume__"
+
+
 def _decide_person(
     db: Session,
     run: Run,
@@ -954,6 +962,27 @@ def _decide_person(
     timed_out = bool(approval.get("timed_out"))
     t_mode = str(approval.get("timeout_mode") or "") if timed_out else ""
     use_branch = t_mode == "branch"
+    resume = approval.get("agent_resume") if kind == "approval" else None
+    if isinstance(resume, dict):
+        ok = bool(approval["approved"])
+        ctx_now = dict(run.context or {})
+        all_dec = {k: dict(v) for k, v in (ctx_now.get("agent_decisions") or {}).items()}
+        all_dec.setdefault(node_id, {})[str(resume.get("key"))] = "approved" if ok else "rejected"
+        run.context = {**ctx_now, "agent_decisions": all_dec}
+        services.agent_decisions = all_dec
+        if step is not None:
+            line = (
+                f"{who}님이 도구 '{resume.get('tool')}' 실행을 "
+                f"{'승인' if ok else '반려'}했어요." + (f" ({comment})" if comment else "")
+            )
+            step.output = {"approved": ok, "tool": resume.get("tool"), "comment": comment}
+            step.status = "succeeded"
+            step.finished_at = now()
+            step.logs = "\n".join(x for x in [step.logs or "", line] if x)
+        run.status = "running"
+        db.commit()
+        _publish(run, step)
+        return node_id, AGENT_RESUME
     if kind == "approval":
         ok = bool(approval["approved"])
         result_out: dict[str, Any] = {"approved": ok, "comment": comment, "approver": who}
@@ -1193,6 +1222,9 @@ def _execute(db: Session, run_id: str) -> None:
     run_input: dict[str, Any] = dict(run.input or {})
     env_vars = decrypt_env_vars(app.env_vars or [])
     conv_vars: dict[str, Any] = dict(context.get("conv") or run_input.pop("__conv", None) or {})
+    services.agent_decisions = {
+        str(k): dict(v) for k, v in (context.get("agent_decisions") or {}).items()
+    }
     services.depth = int(run_input.pop("__depth", 0) or 0)
     last_output_text = str((run.output or {}).get("text", ""))
     output_values: dict[str, Any] = dict((run.output or {}).get("outputs", {}))
@@ -1209,8 +1241,12 @@ def _execute(db: Session, run_id: str) -> None:
             return
         node_id, handle = decided
         sched.waiting = None
-        sched.done.add(node_id)
-        routed = sched.resolve(node_id, handle)
+        if handle == AGENT_RESUME:
+            sched.ready.append(node_id)  # 승인·반려를 반영해 에이전트 단계를 다시 실행한다
+            routed = True
+        else:
+            sched.done.add(node_id)
+            routed = sched.resolve(node_id, handle)
         if not routed and handle == "rejected":
             _finish(
                 db,
@@ -1415,6 +1451,7 @@ def _execute(db: Session, run_id: str) -> None:
                 local.app_id = app.id
                 local.depth = services.depth
                 local.app_fallback = services.app_fallback
+                local.agent_decisions = services.agent_decisions
                 local.on_delta = services.on_delta
                 local.current_node = node.id
                 ctx = make_ctx(node.id, local)

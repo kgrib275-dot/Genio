@@ -3,6 +3,7 @@
 import json
 from typing import Any
 
+from nodes.builtin import NOTIFY_SCHEMA, NOTIFY_UI, TIMEOUT_PROPS, TIMEOUT_UI, notify_config, timing
 from nodes.spec import NodeContext, NodeError, NodeRegistry, NodeResult, NodeSpec
 
 LABEL = {"type": "string", "title": "이름"}
@@ -650,6 +651,20 @@ def _run_agent(data: dict[str, Any], ctx: NodeContext) -> NodeResult:
     )
     for call in out.get("tool_calls", []):
         ctx.log(f"도구 사용: {call.get('name')} → {str(call.get('summary', ''))[:120]}")
+    wait = out.get("__wait")
+    if isinstance(wait, dict):
+        # 승인이 필요한 도구를 쓰려는 순간: 흐름을 멈추고 사람의 결정을 기다린다
+        ctx.log(f"승인 대기: 도구 {wait.get('agent_resume', {}).get('tool')}")
+        roles = data.get("approver_roles") or []
+        return NodeResult(
+            output={},
+            wait_approval={
+                **wait,
+                "approver_roles": roles if isinstance(roles, list) else [],
+                **timing(data),
+                "notify": notify_config(data, ctx),
+            },
+        )
     return NodeResult(output={"text": out.get("text", ""), "tool_calls": out.get("tool_calls", [])})
 
 
@@ -687,10 +702,22 @@ AGENT = NodeSpec(
                             "items": {"type": "string"},
                         },
                         "description": {"type": "string", "title": "언제 쓰는지 설명"},
+                        "approval": {
+                            "type": "boolean",
+                            "title": "쓰기 전에 사람 승인 받기",
+                            "default": False,
+                        },
                     },
                     "required": ["type"],
                 },
             },
+            "approver_roles": {
+                "type": "array",
+                "title": "도구 승인할 수 있는 역할(승인 받기를 켠 도구가 있을 때)",
+                "items": {"type": "string", "enum": ["owner", "admin", "builder", "operator"]},
+            },
+            "notify": NOTIFY_SCHEMA,
+            **TIMEOUT_PROPS,
             "max_iterations": {
                 "type": "integer",
                 "title": "최대 도구 사용 횟수",
@@ -705,7 +732,12 @@ AGENT = NodeSpec(
         "type": "object",
         "properties": {"text": {"type": "string"}, "tool_calls": {"type": "array"}},
     },
-    ui_schema={"instruction": {"ui:widget": "textarea"}, "query": {"ui:widget": "textarea"}},
+    ui_schema={
+        "instruction": {"ui:widget": "textarea"},
+        "query": {"ui:widget": "textarea"},
+        "notify": NOTIFY_UI,
+        **TIMEOUT_UI,
+    },
     run=_run_agent,
     outputs=lambda d: ["text", "tool_calls"],
 )
