@@ -42,25 +42,26 @@ export function AppNav({
   const role = useSession((s) => s.role);
   const { pathname } = useLocation();
   const base = `/apps/${appId}`;
+  // 처음 쓰는 순서대로: 만들기 → 공유·설정 → 대화 기록, 그 뒤에 가끔 쓰는 것들
   const tabs: Tab[] = [
+    ...(canEdit(role) ? [{ to: `${base}/builder`, label: "만들기", Icon: Wand2 }] : []),
+    { to: `${base}/settings`, label: "공유·설정", Icon: Rocket },
+    ...(canViewRuns(role)
+      ? [{ to: `${base}/logs`, label: "대화 기록", Icon: MessagesSquare, also: [`${base}/runs`] }]
+      : []),
     ...(canEdit(role)
       ? [
-          { to: `${base}/builder`, label: "만들기", Icon: Wand2 },
-          { to: `${base}/features`, label: "기능", Icon: SlidersHorizontal },
-          { to: `${base}/evals`, label: "평가", Icon: ClipboardCheck },
+          { to: `${base}/features`, label: "추가 기능", Icon: SlidersHorizontal },
+          { to: `${base}/evals`, label: "품질 점검", Icon: ClipboardCheck },
         ]
       : []),
     ...(canViewRuns(role)
-      ? [{ to: `${base}/triggers`, label: "자동 실행", Icon: CalendarClock }]
-      : []),
-    ...(canViewRuns(role)
       ? [
-          { to: `${base}/logs`, label: "로그", Icon: MessagesSquare, also: [`${base}/runs`] },
+          { to: `${base}/triggers`, label: "자동 실행", Icon: CalendarClock },
           { to: `${base}/monitor`, label: "실행 현황", Icon: Activity },
         ]
       : []),
     ...(canEdit(role) ? [{ to: `${base}/api`, label: "외부 연동", Icon: KeyRound }] : []),
-    { to: `${base}/settings`, label: "배포·설정", Icon: Rocket },
   ];
   return (
     <div className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-2 border-b border-slate-200 bg-white px-3 py-2 sm:px-4 lg:h-14 lg:flex-nowrap lg:py-0">

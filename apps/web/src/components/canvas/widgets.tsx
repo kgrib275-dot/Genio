@@ -117,7 +117,7 @@ export function SkillsWidget(props: WidgetProps) {
   if (list.length === 0)
     return (
       <p className="text-xs text-slate-500">
-        아직 업무 요령(스킬)이 없어요. 관리 &gt; 업무 요령·연결에서 먼저 만들어 주세요.
+        아직 업무 요령(스킬)이 없어요. 관리 &gt; 업무 요령·관계도에서 먼저 만들어 주세요.
       </p>
     );
   return (

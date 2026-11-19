@@ -23,9 +23,9 @@ export default function WorkspacePage() {
   const manage = canManage(role);
   const tabs: { value: Tab; label: string }[] = [
     { value: "members", label: "멤버" },
-    ...(canEdit(role) ? [{ value: "llm" as Tab, label: "AI 연결" }] : []),
+    ...(canEdit(role) ? [{ value: "llm" as Tab, label: "AI 모델" }] : []),
     ...(canViewRuns(role) ? [{ value: "usage" as Tab, label: "사용량" }] : []),
-    ...(canEdit(role) ? [{ value: "toolbox" as Tab, label: "업무 요령·연결" }] : []),
+    ...(canEdit(role) ? [{ value: "toolbox" as Tab, label: "업무 요령·관계도" }] : []),
   ];
   const [tab, setTab] = useState<Tab>("members");
 

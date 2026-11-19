@@ -20,7 +20,7 @@ export default function HubPage() {
   return (
     <div className="mx-auto w-full max-w-5xl space-y-4 px-4 py-6 sm:px-6">
       <div>
-        <h1 className="text-xl font-semibold text-slate-900">챗 허브</h1>
+        <h1 className="text-xl font-semibold text-slate-900">챗봇 모음</h1>
         <p className="text-sm text-slate-500">
           우리 팀이 배포한 챗봇과 흐름 중 내가 쓸 수 있는 것이에요. 골라서 바로 써 보세요.
         </p>

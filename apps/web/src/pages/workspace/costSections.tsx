@@ -142,8 +142,8 @@ export function UsageByUserList({ ws }: { ws: string }) {
         <div className="hidden grid-cols-[1fr_repeat(4,6rem)] gap-2 bg-slate-50 px-4 py-2 text-xs font-medium text-slate-500 md:grid">
           <span>사람</span>
           <span className="text-right">실행</span>
-          <span className="text-right">입력 토큰</span>
-          <span className="text-right">출력 토큰</span>
+          <span className="text-right">AI가 읽은 양(토큰)</span>
+          <span className="text-right">AI가 쓴 양(토큰)</span>
           <span className="text-right">비용</span>
         </div>
         <ul className="divide-y divide-slate-100">

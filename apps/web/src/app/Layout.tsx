@@ -60,7 +60,7 @@ interface NavItem {
 
 const NAV: NavItem[] = [
   { to: "/", label: ko.nav.dashboard, icon: LayoutGrid, end: true },
-  { to: "/hub", label: "챗 허브", icon: MessagesSquare },
+  { to: "/hub", label: "챗봇 모음", icon: MessagesSquare },
   { to: "/tasks", label: "작업함", icon: ClipboardList },
   { to: "/knowledge", label: ko.nav.knowledge, icon: BookOpen },
   { to: "/data", label: "데이터 표", icon: Table2 },

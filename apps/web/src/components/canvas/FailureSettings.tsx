@@ -132,7 +132,7 @@ export function FailureSettings({
           </label>
           {onError === "default" && (
             <label className="block space-y-1">
-              <span className="block font-medium text-slate-600">기본 출력(JSON)</span>
+              <span className="block font-medium text-slate-600">대신 쓸 결과(JSON 형식)</span>
               <Textarea
                 aria-label="기본 출력"
                 disabled={readOnly}

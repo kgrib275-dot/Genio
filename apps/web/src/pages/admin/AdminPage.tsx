@@ -45,10 +45,10 @@ const TABS: { value: Tab; label: string }[] = [
   { value: "llm", label: "AI 모델" },
   { value: "usage", label: "사용량" },
   { value: "safety", label: "안전·규칙" },
-  { value: "toolbox", label: "업무 요령·연결" },
+  { value: "toolbox", label: "업무 요령·관계도" },
   { value: "audit", label: "활동 기록" },
-  { value: "keys", label: "API 키" },
-  { value: "tracing", label: "외부 추적" },
+  { value: "keys", label: "접속 키" },
+  { value: "tracing", label: "외부 분석 연동" },
   { value: "system", label: "시스템 설정" },
   // 인스턴스 관리자(가장 먼저 만든 워크스페이스의 소유자)에게만 보인다
   { value: "status", label: "시스템 상태" },

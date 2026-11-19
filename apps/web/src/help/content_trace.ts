@@ -4,14 +4,14 @@ import type { HelpSection } from "@/help/content";
 export const TRACE_HELP_SECTIONS: HelpSection[] = [
   {
     id: "tracing",
-    title: "외부 추적(관측 도구 연결)",
+    title: "외부 분석 연동(관측 도구 연결)",
     summary:
       "끝난 실행의 단계·AI 사용량을 Langfuse·OpenTelemetry·Phoenix 같은 서비스로 보내 살펴봐요.",
     blocks: [
       {
         type: "steps",
         items: [
-          "**관리 > 외부 추적**에서 **서비스 추가**를 눌러 쓰는 곳을 골라요. 여러 곳을 함께 연결해도 돼요.",
+          "**관리 > 외부 분석 연동**에서 **서비스 추가**를 눌러 쓰는 곳을 골라요. 여러 곳을 함께 연결해도 돼요.",
           "주소와 키 같은 필수 칸(*)을 채우고 **저장**해요. 키는 암호화해 저장하고 다시 보여 주지 않아요.",
           "**연결 시험**을 누르면 '연결 시험' 기록 하나를 보내요. 상대 화면에서 보이면 성공이에요.",
           "서비스를 **켜짐**으로 두면 이제부터 끝나는 실행이 그쪽으로 가요.",

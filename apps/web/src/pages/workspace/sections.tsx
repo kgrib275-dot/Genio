@@ -1139,8 +1139,8 @@ export function UsageSection({ ws }: { ws: string }) {
             <div className="hidden grid-cols-[1fr_repeat(4,6rem)] gap-2 bg-slate-50 px-4 py-2 text-xs font-medium text-slate-500 md:grid">
               <span>앱</span>
               <span className="text-right">실행</span>
-              <span className="text-right">입력 토큰</span>
-              <span className="text-right">출력 토큰</span>
+              <span className="text-right">AI가 읽은 양(토큰)</span>
+              <span className="text-right">AI가 쓴 양(토큰)</span>
               <span className="text-right">비용</span>
             </div>
             <ul className="divide-y divide-slate-100">
@@ -1206,7 +1206,7 @@ export function SafetySection({ ws }: { ws: string }) {
   );
 }
 
-/** 업무 요령·연결: 스킬 관리와 '무엇을 어디서 쓰는지' 지도(제작자 이상) */
+/** 업무 요령·관계도: 스킬 관리와 '무엇을 어디서 쓰는지' 지도(제작자 이상) */
 export function ToolboxSection({ ws }: { ws: string }) {
   const role = useSession((s) => s.role);
   if (!canEdit(role)) return <p className="text-sm text-slate-500">제작자 이상만 볼 수 있어요.</p>;

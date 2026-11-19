@@ -54,7 +54,7 @@ const DEFS: Def[] = [
   {
     key: "deploy",
     title: "버전 저장하고 배포하기",
-    hint: "'버전 저장' 뒤 배포·설정에서 공유 링크를 만들어요.",
+    hint: "'버전 저장' 뒤 공유·설정에서 공유 링크를 만들어요.",
     roles: EDITORS,
     isDone: (s) => s.deployed,
   },
