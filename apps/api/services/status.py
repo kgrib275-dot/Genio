@@ -99,6 +99,36 @@ def _secret_key() -> dict[str, Any]:
     return _item("ok", "비밀 키", "직접 정한 값을 쓰고 있어요.")
 
 
+def _public_exposure(db: Session) -> dict[str, Any]:
+    """공개 주소로 열려 있는 서버의 가입·계정 보안 설정 점검(바꾸지는 않고 알려만 준다)."""
+    from api.config import is_production
+    from api.models import User
+    from api.services import mailer, system
+
+    st = get_settings()
+    if not is_production(st):
+        return _item("ok", "공개 서버 보안", "내 컴퓨터에서만 쓰는 설정이에요.")
+    problems: list[str] = []
+    sysset = system.get_system(db)
+    if sysset["allow_signup"] and not sysset["require_email_verification"]:
+        hint = (
+            "관리 > 시스템 설정에서 켜세요."
+            if mailer.configured(db)
+            else "먼저 시스템 메일을 설정하세요."
+        )
+        problems.append(f"누구나 가입할 수 있는데 이메일 인증이 꺼져 있어요({hint})")
+    demo = db.scalar(
+        select(func.count()).select_from(User).where(User.email == "owner@example.com")
+    )
+    if demo:
+        problems.append(
+            "공개 비밀번호를 쓰는 데모 계정(owner@example.com)이 남아 있어요. 지우거나 비밀번호를 바꾸세요"
+        )
+    if problems:
+        return _item("warn", "공개 서버 보안", " · ".join(problems))
+    return _item("ok", "공개 서버 보안", "가입·계정 설정이 안전해요.")
+
+
 def _ratelimit(redis_ok: bool) -> dict[str, Any]:
     """속도 제한·로그인 시도 제한을 API 프로세스들이 함께 세는지(Redis) 따로 세는지(메모리)."""
     from api.core import ratelimit
@@ -297,6 +327,7 @@ def system_status(db: Session) -> dict[str, Any]:
         _verify(now),
         _disk(),
         _secret_key(),
+        _public_exposure(db),
     ]
     runs_24h = db.scalar(select(func.count()).select_from(Run).where(Run.created_at >= since)) or 0
     failed_24h = (

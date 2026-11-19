@@ -1098,3 +1098,25 @@ def test_daily_limit_caps_public_chat(client: TestClient, team: Team) -> None:
         headers=team.h("builder"),
     )
     assert chat(client, token, "넷")
+
+
+def test_status_warns_about_public_exposure(
+    client: TestClient, team: Team, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from api.config import get_settings
+    from api.db import SessionLocal
+    from api.models import User
+    from api.services import status
+
+    monkeypatch.setattr(get_settings(), "genio_public_web_url", "http://localhost:5190")
+    monkeypatch.setattr(get_settings(), "genio_env", "dev")
+    with SessionLocal() as db:
+        assert (
+            status._public_exposure(db)["status"] == "ok"
+        )  # 내 컴퓨터용 설정이면 문제 삼지 않는다
+        monkeypatch.setattr(get_settings(), "genio_public_web_url", "https://genio.example.com")
+        item = status._public_exposure(db)
+        assert item["status"] == "warn" and "이메일 인증" in item["detail"]
+        db.add(User(email="owner@example.com", name="데모", password_hash="x"))  # noqa: S106
+        db.commit()
+        assert "데모 계정" in status._public_exposure(db)["detail"]
