@@ -157,6 +157,14 @@ def create_deployment(
         )
     else:
         version = app_svc.latest_version(ctx.db, app_id)
+    auto_saved = False
+    if version is None and body.version is None:
+        # 저장한 버전이 하나도 없으면 지금 작업본을 첫 버전으로 저장하고 배포한다(오류 있으면 저장 단계에서 안내)
+        version = app_svc.save_version(
+            ctx.db, app, app.draft_graph or {}, "배포하면서 자동 저장", ctx.user.id
+        )
+        ctx.db.flush()
+        auto_saved = True
     if version is None:
         raise AppError(
             422,
@@ -196,7 +204,7 @@ def create_deployment(
         meta={"channel": body.channel, "access": body.access, "version": version.version},
     )
     ctx.db.commit()
-    return _dep(dep, version.version, public_origin(request))
+    return {**_dep(dep, version.version, public_origin(request)), "auto_saved": auto_saved}
 
 
 @router.get("/apps/{app_id}/deployments")
@@ -338,6 +346,17 @@ def _load_public(db: Session, token: str) -> tuple[Deployment, App, WorkflowVers
     return dep, app, version
 
 
+def _check_open(app: App) -> None:
+    """점검 중으로 해 둔 앱은 새 질문·실행을 받지 않는다(안내 문구를 보여 준다)."""
+    m = merged_features(app.features).get("maintenance") or {}
+    if m.get("enabled"):
+        raise AppError(
+            503,
+            "지금은 점검 중이에요.",
+            str(m.get("message") or "") or "잠시 뒤에 다시 열어 주세요.",
+        )
+
+
 def _check_access(
     db: Session,
     dep: Deployment,
@@ -406,6 +425,10 @@ def public_app(token: str, db: DbDep, user: OptionalUser) -> dict[str, Any]:
             "ai_notice": f["ai_notice"],
         },
         "appearance": appearance_of(dep),
+        "maintenance": {
+            "enabled": bool(f["maintenance"]["enabled"]),
+            "message": f["maintenance"]["message"] or "잠시 뒤에 다시 열어 주세요.",
+        },
     }
 
 
@@ -436,6 +459,7 @@ def public_chat(
     if _rate_limited(app, f"chat:{app.id}:{client_ip(request)}"):
         raise AppError(429, "요청이 너무 많아요.", "1분 뒤에 다시 시도하세요.")
     _check_access(db, dep, app, user)
+    _check_open(app)
     files = _own_files(db, app, body.files)
     req = ChatRequest(
         app=app,
@@ -476,6 +500,7 @@ def public_form_run(
     if _rate_limited(app, f"run:{app.id}:{client_ip(request)}"):
         raise AppError(429, "요청이 너무 많아요.", "1분 뒤에 다시 시도하세요.")
     _check_access(db, dep, app, user)
+    _check_open(app)
     run_input = dict(body.input or {})
     if len(json.dumps(run_input, ensure_ascii=False, default=str)) > 20_000:
         raise AppError(413, "입력이 너무 길어요.", "내용을 줄여서 다시 보내 주세요.")

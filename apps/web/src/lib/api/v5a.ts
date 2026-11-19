@@ -243,8 +243,9 @@ export function useCreateDeploymentWithUsers(appId: string) {
       allowed_roles?: Role[];
       allowed_users?: string[];
       version?: number;
-    }) => api.post<DeploymentWithUsers>(`/apps/${appId}/deployments`, v),
+    }) => api.post<DeploymentWithUsers & { auto_saved?: boolean }>(`/apps/${appId}/deployments`, v),
     onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["versions", appId] });
       void qc.invalidateQueries({ queryKey: ["deployments", appId] });
       void qc.invalidateQueries({ queryKey: ["app", appId] });
       void qc.invalidateQueries({ queryKey: ["apps"] });

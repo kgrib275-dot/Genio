@@ -23,7 +23,7 @@ export function StartChecklist({ firstAppId }: { firstAppId?: string }) {
   const status = useOnboardingStatus(ws, !dismissed);
   const save = useSaveOnboarding();
   const navigate = useNavigate();
-  const [open, setOpen] = useState(true);
+  const [open, setOpen] = useState(false); // 처음엔 한 줄로 접어 둔다(입력칸에 눈이 가게)
   const stepsDone = ob?.steps_done ?? [];
   const items = checklistItems(role, status.data, stepsDone);
   const fresh = newlyDone(items, stepsDone);

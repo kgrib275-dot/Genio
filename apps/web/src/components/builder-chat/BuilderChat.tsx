@@ -1,6 +1,7 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { ArrowUp, RotateCcw, Sparkles, Undo2 } from "lucide-react";
 import { useEffect, useRef, useState, type FormEvent } from "react";
+import { Link } from "react-router-dom";
 import {
   AskUserCard,
   MarketSuggestionCard,
@@ -20,6 +21,7 @@ import {
 } from "@/lib/api/builder";
 import { ApiError, errorLines } from "@/lib/api/client";
 import { useInstallMarketItem } from "@/lib/api/resources";
+import { useEnableDemoAi } from "@/lib/api/workspace";
 import {
   normalizeGraph,
   type BuilderMessage,
@@ -40,6 +42,36 @@ const EXAMPLES = [
   "주간 보고 초안을 만들어서 승인 후 메일로 보내 줘",
 ];
 
+const NO_AI_TEXT = "등록된 AI 연결이 없어요";
+
+/** AI 연결이 없을 때 바로 누를 수 있는 길: 데모 AI로 이어 가기 / 키 등록하러 가기 */
+function NoAiActions({ wsId, onRetry }: { wsId: string; onRetry: () => void }) {
+  const role = useSession((s) => s.role);
+  const enable = useEnableDemoAi(wsId);
+  return (
+    <div className="mt-2 flex flex-wrap gap-2" data-testid="no-ai-actions">
+      <button
+        type="button"
+        disabled={enable.isPending}
+        className="rounded-lg bg-indigo-600 px-3 py-1.5 text-[13px] font-medium text-white hover:bg-indigo-700 disabled:opacity-60"
+        onClick={() =>
+          enable.mutate(undefined, { onSuccess: onRetry, onError: (e) => toast.error(e) })
+        }
+      >
+        {enable.isPending ? "켜는 중…" : "데모 AI로 이어서 해 보기"}
+      </button>
+      {canManage(role) && (
+        <Link
+          to="/admin?tab=llm"
+          className="rounded-lg border border-slate-300 px-3 py-1.5 text-[13px] text-slate-700 hover:bg-slate-50"
+        >
+          내 AI 키 등록하러 가기
+        </Link>
+      )}
+    </div>
+  );
+}
+
 function TurnBody({
   content,
   record,
@@ -49,6 +81,8 @@ function TurnBody({
   onInstall,
   installing,
   onRevert,
+  onNoAiRetry,
+  wsId,
 }: {
   content: string;
   record: TurnRecord | DraftTurn | null;
@@ -58,6 +92,8 @@ function TurnBody({
   onInstall: (key: string) => void;
   installing: boolean;
   onRevert?: () => void;
+  onNoAiRetry?: () => void;
+  wsId?: string;
 }) {
   const role = useSession((s) => s.role);
   const patch = record as TurnRecord | null;
@@ -65,6 +101,9 @@ function TurnBody({
     <div className="space-y-2">
       {content && (
         <p className="whitespace-pre-wrap text-[14px] leading-relaxed text-slate-800">{content}</p>
+      )}
+      {onNoAiRetry && wsId && content.includes(NO_AI_TEXT) && (
+        <NoAiActions wsId={wsId} onRetry={onNoAiRetry} />
       )}
       {(record?.tool_calls ?? []).length > 0 && (
         <ToolCallGroup calls={record?.tool_calls ?? []} busy={active && busy} />
@@ -158,8 +197,14 @@ export function BuilderChatView({
             }
           } else if (ev.event === "done") {
             finished = true;
-            setMessages((m) => [...m, ev.data as BuilderMessage]);
-            setDraft((d) => (d?.error ? { ...emptyDraft(), error: d.error } : null));
+            const saved = ev.data as BuilderMessage;
+            setMessages((m) => [...m, saved]);
+            // 같은 오류 문장이 저장된 답에 이미 있으면 빨간 상자를 또 보이지 않는다
+            setDraft((d) =>
+              d?.error && !saved.content.includes(d.error.message)
+                ? { ...emptyDraft(), error: d.error }
+                : null,
+            );
           } else {
             setDraft((d) => reduceDraft(d ?? emptyDraft(), ev));
           }
@@ -173,6 +218,11 @@ export function BuilderChatView({
       if (!finished) setDraft((d) => (d && (d.text || d.error || d.tool_calls.length) ? d : null));
       void qc.invalidateQueries({ queryKey: ["builder-messages", sessionId] });
     }
+  };
+
+  const retryLast = () => {
+    const last = [...messages].reverse().find((m) => m.role === "user");
+    if (last) void send({ content: last.content });
   };
 
   const revert = async (messageId: string) => {
@@ -307,6 +357,8 @@ ${err.hint}`)
                   onInstall={onInstall}
                   installing={install.isPending}
                   onRevert={() => void revert(m.id)}
+                  onNoAiRetry={i === lastAssistantIdx ? retryLast : undefined}
+                  wsId={wsId}
                 />
               </div>
             </div>

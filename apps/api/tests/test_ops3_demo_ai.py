@@ -2,6 +2,7 @@
 
 from typing import Any
 
+import pytest
 from fastapi.testclient import TestClient
 
 from api.llm.base import ToolDef
@@ -84,7 +85,7 @@ def test_builder_demo_sequence() -> None:
     ]
     t2 = a.chat(model="m", system="", messages=msgs, tools=tools)
     assert t2.tool_calls[0].name == "add_node"
-    assert t2.tool_calls[0].input["data"]["label"] == "데모 단계"
+    assert t2.tool_calls[0].input["type"] == "llm"  # '분류' 요청이라 종류 나누기 단계
     msgs += [
         {"role": "assistant", "content": "", "tool_calls": t2.tool_calls},
         {"role": "tool", "name": "add_node", "tool_call_id": "y", "content": "{}"},
@@ -133,7 +134,7 @@ def test_builder_works_with_demo_ai_and_real_key_takes_over(client: TestClient, 
     done = next(d for n, d in events if n == "done")
     assert DEMO_TAG in done["content"]
     graph = client.get(f"/api/v1/apps/{app_id}", headers=team.h("builder")).json()["draft_graph"]
-    assert any(n["data"].get("label") == "데모 단계" for n in graph["nodes"])
+    assert any(n["data"].get("label") == "종류 나누기" for n in graph["nodes"])
     # 진짜 키를 가진 연결을 등록하면 그것이 기본이 된다(데모만 있었을 때)
     res = client.post(
         f"/api/v1/workspaces/{team.ws}/llm-providers",
@@ -175,18 +176,34 @@ def test_onboarding_does_not_count_demo_as_connected(client: TestClient, team: T
     assert client.get(url, headers=team.h("owner")).json()["ai_connected"] is False
 
 
-def test_demo_builder_step_is_connected_and_flow_validates(client: TestClient, team: Team) -> None:
+@pytest.mark.parametrize(
+    ("request_text", "labels"),
+    [
+        ("아무거나 만들어 줘", ["답변 쓰기"]),
+        ("주간 보고 초안을 만들어서 승인 후 보내 줘", ["초안 쓰기", "담당자 승인"]),
+        ("회의 메모를 할 일로 정리해 줘", ["간추리기"]),
+    ],
+)
+def test_demo_builder_draws_connected_flow_that_validates(
+    client: TestClient, team: Team, request_text: str, labels: list[str]
+) -> None:
     _demo(client, team)
     app_id, sid = new_session(client, team, "데모 연결")
-    send(client, team, sid, "아무거나 만들어 줘")
+    send(client, team, sid, request_text)
     graph = client.get(f"/api/v1/apps/{app_id}", headers=team.h("builder")).json()["draft_graph"]
     ids = {n["id"] for n in graph["nodes"]}
-    demo = next(n for n in graph["nodes"] if n["data"].get("label") == "데모 단계")
-    assert any(e["target"] == demo["id"] for e in graph["edges"])  # 들어오는 선이 있다
-    assert any(e["source"] == demo["id"] for e in graph["edges"])  # 나가는 선도 있다
+    by_label = {n["data"].get("label"): n for n in graph["nodes"]}
+    chain = [by_label[x] for x in labels]
+    for node in chain:
+        assert any(e["target"] == node["id"] for e in graph["edges"])  # 들어오는 선이 있다
+        assert any(e["source"] == node["id"] for e in graph["edges"])  # 나가는 선도 있다
     assert all(e["source"] in ids and e["target"] in ids for e in graph["edges"])
+    # 마지막 결과가 AI가 쓴 글을 보여 준다(승인 단계는 글을 만들지 않는다)
+    out = next(n for n in graph["nodes"] if n["type"] == "output")
+    writer = next(n for n in chain if n["type"] == "llm")
+    assert writer["id"] in out["data"]["template"]
     v = client.post(f"/api/v1/apps/{app_id}/validate", json={}, headers=team.h("builder")).json()
-    assert v["valid"] is True, v["errors"]
+    assert v["valid"] is True, str(v["errors"])
 
 
 def test_builder_turn_texts_do_not_run_together(

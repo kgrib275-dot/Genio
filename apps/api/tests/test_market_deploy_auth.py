@@ -202,14 +202,6 @@ def _published_app(
     app_id = client.post(
         f"/api/v1/workspaces/{team.ws}/apps", json={"name": "공개"}, headers=team.h("builder")
     ).json()["id"]
-    assert (
-        client.post(
-            f"/api/v1/apps/{app_id}/deployments",
-            json={"channel": "share_link"},
-            headers=team.h("builder"),
-        ).status_code
-        == 422
-    )
     client.post(f"/api/v1/apps/{app_id}/versions", json={}, headers=team.h("builder"))
     body: dict[str, Any] = {"channel": "share_link", "access": access}
     if roles is not None:

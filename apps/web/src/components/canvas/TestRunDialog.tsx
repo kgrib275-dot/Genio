@@ -38,7 +38,7 @@ export function TestRunDialog({
   open: boolean;
   onClose: () => void;
   inputNode: GraphNode | undefined;
-  onRun: (input: Record<string, unknown>) => void;
+  onRun: (input: Record<string, unknown>, opts?: { dryRun: boolean }) => void;
   running: boolean;
   /** 흐름(워크플로우) 앱이면 '여러 건 한 번에' 탭을 보여 준다 */
   canBatch?: boolean;
@@ -51,6 +51,25 @@ export function TestRunDialog({
   const [picked, setPicked] = useState("");
   const [name, setName] = useState("");
   const [mode, setMode] = useState<"one" | "batch">("one");
+  // 시험 모드: 메일·슬랙 같은 보내기 동작을 하지 않고 보낼 내용만 보여 준다(기본 켜짐, 선택을 기억한다)
+  const sendsOut = useCanvas((s) =>
+    s.graph.nodes.some((n) => n.type === "connector" || n.type === "approval"),
+  );
+  const [dryRun, setDryRun] = useState(() => {
+    try {
+      return window.localStorage.getItem("genio.testDryRun") !== "0";
+    } catch {
+      return true;
+    }
+  });
+  const chooseDry = (v: boolean) => {
+    setDryRun(v);
+    try {
+      window.localStorage.setItem("genio.testDryRun", v ? "1" : "0");
+    } catch {
+      /* 저장하지 못해도 이번 실행에는 적용된다 */
+    }
+  };
 
   useEffect(() => {
     if (!open) return;
@@ -71,7 +90,7 @@ export function TestRunDialog({
 
   const submit = (e: FormEvent) => {
     e.preventDefault();
-    onRun(collect());
+    onRun(collect(), { dryRun: sendsOut && dryRun });
   };
 
   const items = saved.data ?? [];
@@ -220,6 +239,22 @@ export function TestRunDialog({
                 )}
               </div>
             </div>
+          )}
+          {sendsOut && (
+            <label className="flex cursor-pointer items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-2.5 text-sm text-amber-900">
+              <input
+                type="checkbox"
+                className="mt-0.5"
+                checked={dryRun}
+                onChange={(e) => chooseDry(e.target.checked)}
+              />
+              <span>
+                <b>시험 모드</b> — 메일·슬랙 등은 실제로 보내지 않고, 보낼 내용만 결과에 보여 줘요.
+                <span className="block text-xs text-amber-800">
+                  끄면 실제로 보내져요. 고객에게 나갈 수 있으니 주의하세요.
+                </span>
+              </span>
+            </label>
           )}
           {fields.length === 0 && <p className="text-sm text-slate-500">입력 항목이 없어요.</p>}
           {fields.map((f) => (

@@ -38,7 +38,12 @@ def send(
         return []
     label = KIND_LABEL.get(kind, "요청")
     link = task_link(token)
-    text = f"[{app_name}] {label}: {title}\n{detail}\n\n바로 처리하기: {link}".strip()
+    if kind == "approval":
+        # 메일·메신저에서 바로 고를 수 있게 승인·반려 링크를 따로 준다(눌러도 처리는 화면의 버튼을 눌러야 된다)
+        actions = f"승인하기: {link}?d=approve\n반려하기: {link}?d=reject"
+    else:
+        actions = f"바로 처리하기: {link}"
+    text = f"[{app_name}] {label}: {title}\n{detail}\n\n{actions}".strip()
     results: list[str] = []
     email = notify.get("email") or {}
     if email.get("credential_id") and email.get("to"):

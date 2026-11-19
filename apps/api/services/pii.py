@@ -72,6 +72,19 @@ def _replace(text: str, repl: Callable[[str, str], str]) -> str:
     return out
 
 
+def count_kinds(text: str) -> dict[str, int]:
+    """글에 든 개인정보 종류별 개수(이메일·전화 같은 흔한 것까지 모두 센다)."""
+    found: dict[str, int] = {}
+
+    def note(kind: str, found_text: str) -> str:
+        found[kind] = found.get(kind, 0) + 1
+        return found_text
+
+    if text:
+        _replace(text, note)
+    return found
+
+
 def mask(text: str) -> str:
     """개인정보를 '[종류]'로 바꾼다(되돌리지 않음)."""
     if not text:

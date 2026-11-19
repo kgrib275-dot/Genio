@@ -3,6 +3,7 @@ import {
   BookMarked,
   BadgeInfo,
   Clock,
+  Wrench,
   Eye,
   EyeOff,
   FileUp,
@@ -243,6 +244,27 @@ export function FeaturesForm({
               value={f.ai_notice.text}
               disabled={readOnly}
               onChange={(e) => setF({ ...f, ai_notice: { ...f.ai_notice, text: e.target.value } })}
+            />
+          )}
+        </FeatureRow>
+        <FeatureRow
+          icon={<Wrench className="h-4 w-4" />}
+          title="점검 중 표시"
+          description="고치는 동안 켜 두면, 공유 링크·위젯이 오류 대신 아래 안내만 보여 줘요. 만드는 화면의 시험 실행은 그대로 돼요."
+          enabled={f.maintenance.enabled}
+          disabled={readOnly}
+          onToggle={(v) => setF({ ...f, maintenance: { ...f.maintenance, enabled: v } })}
+        >
+          {f.maintenance.enabled && (
+            <Input
+              aria-label="점검 안내 문구"
+              maxLength={300}
+              placeholder="예: 오후 3시까지 고치는 중이에요. 급한 일은 인사팀(내선 123)에 문의해 주세요."
+              value={f.maintenance.message}
+              disabled={readOnly}
+              onChange={(e) =>
+                setF({ ...f, maintenance: { ...f.maintenance, message: e.target.value } })
+              }
             />
           )}
         </FeatureRow>

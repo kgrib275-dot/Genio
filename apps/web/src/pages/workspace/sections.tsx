@@ -2,6 +2,7 @@
 import {
   CheckCircle2,
   Copy,
+  ArrowRightLeft,
   Crown,
   Download,
   BarChart3,
@@ -33,8 +34,14 @@ import { Dialog } from "@/components/ui/dialog";
 import { Field, Input, Select } from "@/components/ui/input";
 import { toast } from "@/components/ui/toast-store";
 import { ko } from "@/i18n/ko";
+import { TransferAssetsDialog } from "@/pages/workspace/TransferAssetsDialog";
 import { ROLES, type Member, type Role } from "@/lib/api/types";
-import { baseUrlToSend, FALLBACK_PRESETS, groupPresets, presetName } from "@/lib/llmPresets";
+import {
+  baseUrlToSend,
+  FALLBACK_PRESETS,
+  groupPresetsWithPopular,
+  presetName,
+} from "@/lib/llmPresets";
 import {
   useAdminApiKeys,
   useCreateAccount,
@@ -292,6 +299,7 @@ export function MembersSection({ ws, manage }: { ws: string; manage: boolean }) 
   const [email, setEmail] = useState("");
   const [role, setRole] = useState<Role>("member");
   const [lastUrl, setLastUrl] = useState("");
+  const [handover, setHandover] = useState<Member | null>(null);
   const isOwner = myRole === "owner";
   const me = useMe();
   const reset = useResetPassword(ws);
@@ -487,6 +495,15 @@ export function MembersSection({ ws, manage }: { ws: string; manage: boolean }) 
                       <Button
                         size="sm"
                         variant="ghost"
+                        aria-label={`${m.name}이 만든 앱 넘기기`}
+                        title="만든 앱·키·예약 넘기기"
+                        onClick={() => setHandover(m)}
+                      >
+                        <ArrowRightLeft className="h-3.5 w-3.5" />
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
                         className="text-red-600"
                         aria-label={`${m.name} 내보내기`}
                         title="내보내기"
@@ -503,6 +520,7 @@ export function MembersSection({ ws, manage }: { ws: string; manage: boolean }) 
                     <>
                       {isOwner && <ActionSlot />}
                       <ActionSlot />
+                      <ActionSlot />
                     </>
                   ) : null}
                 </div>
@@ -513,6 +531,14 @@ export function MembersSection({ ws, manage }: { ws: string; manage: boolean }) 
           <ListPager c={mc} className="border-t border-slate-100 px-4 py-2 sm:px-5" />
         </CardBody>
       </Card>
+      {handover && (
+        <TransferAssetsDialog
+          ws={ws}
+          from={handover}
+          members={members.data ?? []}
+          onClose={() => setHandover(null)}
+        />
+      )}
       <CreateAccountDialog
         ws={ws}
         open={creating}
@@ -903,7 +929,7 @@ export function LlmSection({
                       setProbe(null);
                     }}
                   >
-                    {groupPresets(presets).map((g) => (
+                    {groupPresetsWithPopular(presets).map((g) => (
                       <optgroup key={g.group} label={g.group}>
                         {g.items.map((p) => (
                           <option key={p.key} value={p.key}>
@@ -1526,7 +1552,7 @@ export function AdminApiKeysSection({ ws }: { ws: string }) {
       <EmptyState
         icon={<KeyRound className="h-5 w-5" />}
         title="아직 만든 API 키가 없어요"
-        description="다른 시스템에서 앱을 부르려면 앱을 열고 'API' 탭에서 키를 만들어요. 만든 키는 여기서 한눈에 관리해요."
+        description="다른 시스템에서 앱을 부르려면 앱을 열고 '외부 연동' 탭에서 키를 만들어요. 만든 키는 여기서 한눈에 관리해요."
         action={{ label: "앱 고르러 가기", to: "/" }}
       />
     );

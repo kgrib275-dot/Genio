@@ -33,7 +33,13 @@ from nodes import LlmResult
 
 log = logging.getLogger("genio.llm.anthropic")
 FALLBACK_BETA = "server-side-fallback-2026-07-01"
-_FALLBACK_MODELS = {"claude-sonnet-5-5", "claude-opus-5-5", "claude-opus-5", "claude-fable-5-1"}
+_FALLBACK_MODELS = {
+    "claude-sonnet-5-5",
+    "claude-opus-5-5",
+    "claude-opus-5",
+    "claude-fable-5-1",
+    "claude-fable-5-2",
+}
 _EFFORT_MODEL = re.compile(r"^claude-(opus|sonnet|haiku|fable)-5")
 
 

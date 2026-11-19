@@ -350,6 +350,12 @@ def process_document(db: Session, document_id: str) -> None:
             raise ValueError(
                 "문서에서 글자를 찾지 못했어요. 스캔 이미지 PDF는 '이미지 설명'을 켜면 읽어 볼 수 있어요."
             )
+        # 개인정보가 든 문서는 챗봇이 그대로 말할 수 있어서, 종류별 개수를 남겨 화면에서 알려 준다
+        from api.services import pii as pii_svc
+
+        found = pii_svc.count_kinds("\n".join(p.content for p in pieces))
+        meta_now = {k: v for k, v in (doc.doc_metadata or {}).items() if k != "_pii"}
+        doc.doc_metadata = {**meta_now, "_pii": found} if found else meta_now
         vectors = _embed(db, kb.workspace_id, [p.content for p in pieces], kb.embedding_model)
         # 새 결과가 준비된 뒤에야 예전 조각·그림을 지운다(실패하면 예전 것이 남는다)
         old_images = kb_images.delete_document_images(db, doc)

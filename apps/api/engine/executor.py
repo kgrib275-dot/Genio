@@ -51,6 +51,7 @@ BATCH_KEYS = (
     "cancelled",
     "created",
     "eval",
+    "dry_run",
 )
 
 
@@ -94,6 +95,8 @@ class RunServices:
         self.notes: list[str] = []
         # 에이전트 도구 승인 결정: 단계 id → {도구 호출 지문: approved | rejected}
         self.agent_decisions: dict[str, dict[str, str]] = {}
+        # 시험 모드: 켜져 있으면 밖으로 내보내는 동작(메일·슬랙 보내기 등)은 하지 않고 '보낼 내용'만 보여 준다
+        self.dry_run = False
         self._privacy_cache: dict[str, bool] | None = None
 
     def llm_complete(
@@ -239,6 +242,16 @@ class RunServices:
     def run_connector(
         self, *, connector: str, credential_id: str, action: str, params: dict[str, Any]
     ) -> dict[str, Any]:
+        if self.dry_run and not is_read_action(action):
+            self.log_note("시험 모드라 실제로 보내지 않았어요. 보낼 내용만 보여 드려요.")
+            return {
+                "dry_run": True,
+                "sent": False,
+                "connector": connector,
+                "action": action,
+                "preview": params,
+                "note": "시험 모드예요. 실제로 보내려면 '실제로 보내기'를 켜고 다시 실행하세요.",
+            }
         return run_connector(
             self.db,
             self.workspace_id,
@@ -1052,6 +1065,27 @@ def _decide_person(
 
 
 PIN_TRIGGERS = {"test", "preview"}
+
+# 읽기만 하는 동작의 이름 앞부분(시험 모드에서도 그대로 실행한다)
+READ_ACTION_PREFIXES = (
+    "get",
+    "list",
+    "search",
+    "find",
+    "read",
+    "fetch",
+    "query",
+    "lookup",
+    "check",
+    "select",
+    "count",
+)
+
+
+def is_read_action(action: str) -> bool:
+    return action.strip().lower().startswith(READ_ACTION_PREFIXES)
+
+
 PIN_BLOCKED_TYPES = {"input", "output", *PERSON_TYPES}
 
 
@@ -1209,6 +1243,7 @@ def _execute(db: Session, run_id: str) -> None:
     services = RunServices(db, app.workspace_id)
     services.app_id = app.id
     services.app_fallback = merged_features(app.features).get("llm_fallback")
+    services.dry_run = bool((run.context or {}).get("dry_run")) and run.trigger in PIN_TRIGGERS
     run_id_for_events = run.id
 
     def delta_sink(node_id: str, text: str) -> None:
@@ -1504,6 +1539,9 @@ def _execute(db: Session, run_id: str) -> None:
         node_id = sched.waiting
         wait = dict(sched.wait_info or {})
         notify_cfg = wait.pop("notify", None) or {}
+        if services.dry_run and notify_cfg:
+            notify_cfg = {}  # 시험 모드에서는 사람에게 알림을 보내지 않는다(작업함에는 생겨요)
+            wait["dry_run_note"] = "시험 모드라 승인 요청 알림은 보내지 않았어요."
         from api.services.tasks import create_for_wait
 
         task, sent = create_for_wait(db, run, app, node_id, {**wait, "notify": notify_cfg})

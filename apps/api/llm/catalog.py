@@ -13,8 +13,18 @@ from api.engine.pricing import PRICES
 _MODELS: list[tuple[str, str, str, int, bool, bool, bool, int | None]] = [
     (
         "anthropic",
+        "claude-fable-5-2",
+        "Claude Fable 5.2 (가장 똑똑함)",
+        200_000,
+        True,
+        True,
+        False,
+        None,
+    ),
+    (
+        "anthropic",
         "claude-fable-5-1",
-        "Claude Fable 5.1 (가장 똑똑함)",
+        "Claude Fable 5.1 (이전 버전)",
         200_000,
         True,
         True,

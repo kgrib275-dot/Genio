@@ -1,4 +1,4 @@
-import { appNameFrom } from "@/lib/appName";
+import { appDescriptionFrom, appNameFrom } from "@/lib/appName";
 
 describe("appNameFrom", () => {
   it("부탁 끝말과 조사를 떼고 이름으로 만든다", () => {
@@ -20,5 +20,16 @@ describe("appNameFrom", () => {
 
   it("비면 새 앱", () => {
     expect(appNameFrom("   ")).toBe("새 앱");
+  });
+});
+
+describe("appDescriptionFrom", () => {
+  it("부탁 끝말을 뗀 한 줄을 설명으로 쓴다", () => {
+    expect(appDescriptionFrom("사내 휴가 규정 문서로 직원 질문에 답하는 챗봇을 만들어 줘")).toBe(
+      "사내 휴가 규정 문서로 직원 질문에 답하는 챗봇",
+    );
+  });
+  it("너무 길면 120자에서 줄인다", () => {
+    expect(appDescriptionFrom("가".repeat(200)).length).toBe(121);
   });
 });

@@ -106,7 +106,11 @@ export interface ImageReport {
   skipped?: string | null;
 }
 
-export type KbDocWithImages = KbDocumentV2 & { image_report?: ImageReport | null };
+export type KbDocWithImages = KbDocumentV2 & {
+  image_report?: ImageReport | null;
+  /** 올린 문서에서 찾은 개인정보 종류별 개수 */
+  pii?: Record<string, number> | null;
+};
 
 /** 검색 결과·인용에 붙는 그림 참조. url은 공개 챗에서만 서버가 붙인 24시간 서명 주소 */
 export interface CitationImage {

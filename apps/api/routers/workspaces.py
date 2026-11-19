@@ -835,6 +835,7 @@ class LimitsPatch(BaseModel):
     monthly_budget_usd: float | None = None
     cost_alert_usd: float | None = None
     alert_on_failure: bool | None = None
+    monthly_report: bool | None = None
     alert_emails: list[str] | None = None
     alert_credential_id: str | None = None
     retention_days: int | None = None

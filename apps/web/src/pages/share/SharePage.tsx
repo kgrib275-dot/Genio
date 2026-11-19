@@ -80,6 +80,23 @@ export default function SharePage() {
     );
   }
 
+  // 점검 중으로 해 둔 앱: 오류 대신 안내만 보여 준다
+  if (info.maintenance?.enabled)
+    return (
+      <div className="flex h-[100dvh] items-center justify-center bg-slate-50 px-4">
+        <div
+          role="status"
+          className="max-w-md rounded-2xl border border-amber-200 bg-white p-6 text-center shadow-sm"
+        >
+          <p className="text-3xl">🛠️</p>
+          <h1 className="mt-2 text-lg font-bold text-slate-900">{title} · 지금은 점검 중이에요</h1>
+          <p className="mt-2 whitespace-pre-wrap text-sm text-slate-600">
+            {info.maintenance.message || "잠시 뒤에 다시 열어 주세요."}
+          </p>
+        </div>
+      </div>
+    );
+
   // 워크플로우 앱은 대화가 아니라 입력 폼 → 결과로 쓴다
   if (info.type === "workflow")
     return (

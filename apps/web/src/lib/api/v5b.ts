@@ -92,6 +92,7 @@ export interface WorkspaceLimits {
   monthly_budget_usd: number | null;
   cost_alert_usd: number | null;
   alert_on_failure: boolean;
+  monthly_report?: boolean;
   alert_emails: string[];
   alert_credential_id: string | null;
   retention_days: number | null;

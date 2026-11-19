@@ -119,10 +119,13 @@ class DemoAdapter:
         return turn
 
     def _builder_turn(self, messages: list[Message]) -> ChatTurn:
-        """흐름 만들기 데모: 읽기 → '데모 단계' 하나 더하기 → 검사 → 안내, 순서로 툴을 부른다."""
+        """흐름 만들기 데모: 요청에 맞는 짧은 완성 흐름을 툴로 그린다(읽기 → 단계 더하기 → 결과 잇기 → 검사)."""
         start = max((i for i, m in enumerate(messages) if m["role"] == "user"), default=0)
+        request = str(messages[start].get("content") or "") if messages else ""
         done = [m for m in messages[start + 1 :] if m["role"] == "tool"]
         called = [str(m.get("name")) for m in done]
+        plan, kind = _demo_plan(request)
+        n = len(called)
 
         def call(name: str, args: dict[str, Any], text: str) -> ChatTurn:
             return ChatTurn(
@@ -132,40 +135,136 @@ class DemoAdapter:
                 model=DEMO_MODEL,
             )
 
-        if not called:
-            return call("get_graph", {}, f"{DEMO_TAG} 지금 흐름을 먼저 읽어 볼게요.")
-        if called == ["get_graph"]:
-            graph: dict[str, Any] = {}
-            try:
-                graph = json.loads(str(done[0].get("content") or "{}")).get("graph") or {}
+        def payload(msg: Message) -> dict[str, Any]:
+            try:  # 툴 결과 뒤에 '지금 흐름 요약' 글이 붙을 수 있어 앞쪽 JSON만 읽는다
+                out, _ = json.JSONDecoder().raw_decode(str(msg.get("content") or "{}").lstrip())
             except ValueError:
-                graph = {}
-            if len(graph.get("nodes", [])) > 2:
-                return ChatTurn(
-                    text=f"{DEMO_TAG} 이미 단계가 여럿 있어서 건드리지 않았어요. {DEMO_NOTE}",
-                    model=DEMO_MODEL,
-                )
-            # 입력 단계 바로 뒤에 끼워 넣어 연결이 끊기지 않게 한다
-            first = next(
-                (
-                    n
-                    for n in graph.get("nodes", [])
-                    if isinstance(n, dict) and n.get("type") == "input"
-                ),
-                None,
+                return {}
+            return out if isinstance(out, dict) else {}
+
+        if n == 0:
+            return call("get_graph", {}, f"{DEMO_TAG} 지금 흐름을 먼저 읽어 볼게요.")
+        graph = payload(done[0]).get("graph") or {}
+        nodes = [x for x in graph.get("nodes", []) if isinstance(x, dict)]
+        if n == 1 and len(nodes) > 2:
+            return ChatTurn(
+                text=f"{DEMO_TAG} 이미 단계가 여럿 있어서 건드리지 않았어요. {DEMO_NOTE}",
+                model=DEMO_MODEL,
             )
-            args: dict[str, Any] = {
-                "type": "template",
-                "data": {"label": "데모 단계", "template": "데모로 만든 단계예요."},
+        first = next((x for x in nodes if x.get("type") == "input"), None)
+        out_node = next((x for x in nodes if x.get("type") == "output"), None)
+        added = [
+            str((payload(m).get("data") or payload(m)).get("node_id") or "")
+            for m, name in zip(done, called, strict=False)
+            if name == "add_node"
+        ]
+        if n <= len(plan):
+            step = plan[n - 1]
+            llm_ids = [a for a, st in zip(added, plan, strict=False) if st["type"] == "llm"]
+            data = {
+                k: (v.replace("@LLM", llm_ids[-1]) if isinstance(v, str) and llm_ids else v)
+                for k, v in step["data"].items()
             }
-            if first and first.get("id"):
-                args["after"] = first["id"]
-            return call("add_node", args, "예시로 '데모 단계'를 하나 더할게요.")
-        if called == ["get_graph", "add_node"]:
+            args: dict[str, Any] = {"type": step["type"], "data": data}
+            prev = added[-1] if added else (str(first["id"]) if first and first.get("id") else "")
+            if prev:
+                args["after"] = prev
+            return call("add_node", args, step["say"])
+        if n == len(plan) + 1:
+            last = next((a for a, st in zip(added, plan, strict=False) if st["type"] == "llm"), "")
+            if out_node and out_node.get("id") and last:
+                return call(
+                    "update_node",
+                    {"id": out_node["id"], "data": {"template": "{{" + last + ".text}}"}},
+                    "마지막 결과가 이 단계의 답을 보여 주도록 이을게요.",
+                )
             return call("validate", {}, "잘 연결됐는지 검사할게요.")
-        return ChatTurn(
-            text=(
-                f"{DEMO_TAG} 데모 모드라 질문과 상관없이 간단한 단계 하나만 더했어요. {DEMO_NOTE}"
-            ),
-            model=DEMO_MODEL,
+        if n == len(plan) + 2 and called[-1] != "validate":
+            return call("validate", {}, "잘 연결됐는지 검사할게요.")
+        return ChatTurn(text=f"{DEMO_TAG} {_demo_summary(kind)} {DEMO_NOTE}", model=DEMO_MODEL)
+
+
+def _demo_plan(request: str) -> tuple[list[dict[str, Any]], str]:
+    """요청에 든 말로 데모 흐름을 고른다. 데모라서 내용은 짧고 고정이다."""
+    text = request.replace(" ", "")
+    if any(k in text for k in ("승인", "결재")):
+        return (
+            [
+                {
+                    "type": "llm",
+                    "say": "먼저 내용을 정리해 초안을 쓰는 단계를 더할게요.",
+                    "data": {
+                        "label": "초안 쓰기",
+                        "provider": "default",
+                        "system": "요청 내용을 보기 좋게 정리해 초안을 써 주세요.",
+                        "prompt": "{{n1.message}}",
+                    },
+                },
+                {
+                    "type": "approval",
+                    "say": "사람이 확인하고 승인하는 단계를 이어 붙일게요.",
+                    "data": {
+                        "label": "담당자 승인",
+                        "message": "아래 내용을 확인하고 승인해 주세요.\n\n{{@LLM.text}}",
+                        "branch": False,
+                    },
+                },
+            ],
+            "approve",
         )
+    if any(k in text for k in ("분류", "나눠", "담당", "배정")):
+        return (
+            [
+                {
+                    "type": "llm",
+                    "say": "내용을 읽고 종류를 나누는 단계를 더할게요.",
+                    "data": {
+                        "label": "종류 나누기",
+                        "provider": "default",
+                        "system": "문의를 결제·배송·기술·기타 중 하나로 나누고 이유를 한 줄로 적어 주세요.",
+                        "prompt": "{{n1.message}}",
+                    },
+                }
+            ],
+            "classify",
+        )
+    if any(k in text for k in ("요약", "정리", "회의", "보고")):
+        return (
+            [
+                {
+                    "type": "llm",
+                    "say": "내용을 간추리는 단계를 더할게요.",
+                    "data": {
+                        "label": "간추리기",
+                        "provider": "default",
+                        "system": "받은 글을 핵심 세 줄과 할 일 목록으로 정리해 주세요.",
+                        "prompt": "{{n1.message}}",
+                    },
+                }
+            ],
+            "summarize",
+        )
+    return (
+        [
+            {
+                "type": "llm",
+                "say": "질문에 답하는 단계를 더할게요.",
+                "data": {
+                    "label": "답변 쓰기",
+                    "provider": "default",
+                    "system": "당신은 친절한 사내 도우미입니다. 짧고 정확하게 답하세요.",
+                    "prompt": "질문: {{n1.message}}",
+                },
+            }
+        ],
+        "answer",
+    )
+
+
+def _demo_summary(kind: str) -> str:
+    return {
+        "approve": "초안을 쓰고 담당자가 승인하는 흐름을 그렸어요.",
+        "classify": "들어온 내용을 종류별로 나누는 흐름을 그렸어요.",
+        "summarize": "받은 글을 간추리는 흐름을 그렸어요.",
+        "answer": "질문에 답하는 흐름을 그렸어요.",
+    }.get(kind, "간단한 흐름을 그렸어요.")

@@ -114,7 +114,7 @@ describe("대시보드 프로젝트", () => {
     await waitFor(() =>
       expect(calls.find((c) => c.method === "POST")?.body).toMatchObject({
         project_id: "p1",
-        description: "회의 메모를 정리해 줘",
+        description: "회의 메모를 정리",
       }),
     );
     expect(await screen.findByText("빌더 화면")).toBeInTheDocument();

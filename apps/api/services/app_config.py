@@ -16,6 +16,8 @@ DEFAULT_FEATURES: dict[str, Any] = {
     "time_saved": {"minutes_per_run": 0},
     # 후속(O1): 평가 세트(질문·조건). 응답에는 싣지만 공개 챗 화면에는 보내지 않는다
     "eval": {"cases": []},
+    # 후속(C5): 점검 중이면 배포한 링크·위젯이 새 질문을 받지 않고 안내 문구를 보여 준다
+    "maintenance": {"enabled": False, "message": ""},
     "suggested_questions": [],
     "follow_up": {"enabled": False},
     "citations": {"enabled": True},
@@ -93,6 +95,10 @@ def patch_features(saved: dict[str, Any] | None, patch: dict[str, Any]) -> dict[
         str(w).strip()[:30] for w in current["handoff"]["keywords"] if str(w).strip()
     ][:30]
     current["handoff"]["message"] = str(current["handoff"]["message"] or "")[:300]
+    current["maintenance"]["enabled"] = bool(current["maintenance"].get("enabled"))
+    current["maintenance"]["message"] = str(current["maintenance"].get("message") or "").strip()[
+        :300
+    ]
     current["ai_notice"]["enabled"] = bool(current["ai_notice"]["enabled"])
     current["ai_notice"]["text"] = (
         str(current["ai_notice"]["text"] or "").strip()[:200] or AI_NOTICE_TEXT

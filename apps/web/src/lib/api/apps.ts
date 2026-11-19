@@ -112,8 +112,13 @@ export function startRun(
   appId: string,
   input: Record<string, unknown>,
   version?: number,
+  dryRun?: boolean,
 ): Promise<Run> {
-  return api.post<Run>(`/apps/${appId}/runs`, version ? { input, version } : { input });
+  return api.post<Run>(`/apps/${appId}/runs`, {
+    input,
+    ...(version ? { version } : {}),
+    ...(dryRun ? { dry_run: true } : {}),
+  });
 }
 
 export function useAppRuns(appId: string) {

@@ -483,6 +483,8 @@ export interface PublicApp {
   requires_login: boolean;
   can_use: boolean;
   input_fields: { key: string; label?: string; type?: string; required?: boolean }[];
+  /** 점검 중으로 해 둔 앱(배포한 링크·위젯이 새 질문을 받지 않는다) */
+  maintenance?: { enabled: boolean; message: string };
 }
 
 export type MarketType = "template" | "node" | "connector" | "prompt_pack";
@@ -574,6 +576,8 @@ export interface AppFeatures {
   ai_notice: AiNotice;
   /** 후속 O2: 한 번 성공할 때 아끼는 시간(분). 0이면 효과 리포트에 세지 않는다 */
   time_saved: { minutes_per_run: number };
+  /** 후속 C5: 점검 중 표시(켜면 배포한 링크·위젯이 안내만 보여 줘요) */
+  maintenance: { enabled: boolean; message: string };
 }
 
 export interface AiNotice {
@@ -595,6 +599,7 @@ export const DEFAULT_FEATURES: AppFeatures = {
   memory: { window: 0 },
   ai_notice: { enabled: true, text: AI_NOTICE_TEXT },
   time_saved: { minutes_per_run: 0 },
+  maintenance: { enabled: false, message: "" },
 };
 
 /** 서버가 일부 키를 빠뜨려도 화면이 깨지지 않게 기본값과 합친다. */
@@ -612,6 +617,7 @@ export function normalizeFeatures(f: Partial<AppFeatures> | null | undefined): A
     memory: { ...DEFAULT_FEATURES.memory, ...src.memory },
     ai_notice: { ...DEFAULT_FEATURES.ai_notice, ...src.ai_notice },
     time_saved: { ...DEFAULT_FEATURES.time_saved, ...src.time_saved },
+    maintenance: { ...DEFAULT_FEATURES.maintenance, ...src.maintenance },
     ...(src.on_failure ? { on_failure: { app_id: src.on_failure.app_id ?? null } } : {}),
   };
 }

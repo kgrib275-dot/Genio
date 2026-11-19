@@ -298,6 +298,7 @@ function LimitsForm({ ws, initial }: { ws: string; initial: WorkspaceLimits }) {
   const [budget, setBudget] = useState(initial.monthly_budget_usd?.toString() ?? "");
   const [alertAt, setAlertAt] = useState(initial.cost_alert_usd?.toString() ?? "");
   const [onFail, setOnFail] = useState(initial.alert_on_failure);
+  const [monthly, setMonthly] = useState(initial.monthly_report ?? false);
   const [emails, setEmails] = useState(initial.alert_emails.join(", "));
   const [cred, setCred] = useState(initial.alert_credential_id ?? "");
   const [retention, setRetention] = useState(initial.retention_days?.toString() ?? "");
@@ -338,7 +339,11 @@ function LimitsForm({ ws, initial }: { ws: string; initial: WorkspaceLimits }) {
           )}
         </div>
         <div className="grid gap-3 sm:grid-cols-2">
-          <Field label="월 한도(달러)" htmlFor="lim-budget" hint="비우면 제한이 없어요.">
+          <Field
+            label="월 한도(달러)"
+            htmlFor="lim-budget"
+            hint="비우면 제한이 없어요. 80%에 이르면 메일로 미리 알려요."
+          >
             <Input
               id="lim-budget"
               inputMode="decimal"
@@ -404,6 +409,15 @@ function LimitsForm({ ws, initial }: { ws: string; initial: WorkspaceLimits }) {
             />
             실행이 실패하면 메일로 알리기(5분마다 모아서)
           </label>
+          <label className="flex items-center gap-2 self-end pb-2 text-sm">
+            <input
+              type="checkbox"
+              className="accent-indigo-600"
+              checked={monthly}
+              onChange={(e) => setMonthly(e.target.checked)}
+            />
+            매달 1일, 지난달 이용 요약(성공·실패·아낀 시간)을 메일로 받기
+          </label>
         </div>
         <div className="border-t border-slate-100 pt-4 dark:border-slate-800">
           <p className="text-sm font-medium">실행·저장 한도</p>
@@ -441,6 +455,7 @@ function LimitsForm({ ws, initial }: { ws: string; initial: WorkspaceLimits }) {
                 monthly_budget_usd: numOrNull(budget),
                 cost_alert_usd: numOrNull(alertAt),
                 alert_on_failure: onFail,
+                monthly_report: monthly,
                 alert_emails: emails
                   .split(/[,;\s]+/)
                   .map((x) => x.trim())

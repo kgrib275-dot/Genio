@@ -43,6 +43,8 @@ import {
 import { cn, formatDate, timeAgo } from "@/lib/cn";
 import { PAGE_SIZES, useListControls, usePageSize, type FilterDef } from "@/lib/useListControls";
 import { AppNav } from "@/pages/apps/AppNav";
+import { ImprovementsPanel } from "@/pages/apps/ImprovementsPanel";
+import { useImprovements } from "@/lib/api/improvements";
 import { canEdit, useSession } from "@/store/session";
 import { useAgentReply, useCloseHandoff, useHandoffConversations } from "@/lib/api/v5a";
 import { EmptyState } from "@/components/EmptyState";
@@ -633,9 +635,12 @@ export default function AppLogsPage() {
   const { id: appId = "" } = useParams();
   const role = useSession((s) => s.role);
   const app = useApp(appId);
-  const [tab, setTab] = useState<"conversations" | "handoff" | "annotations">("conversations");
+  const [tab, setTab] = useState<"conversations" | "handoff" | "annotations" | "improve">(
+    "conversations",
+  );
   const editable = canEdit(role);
   const waiting = useHandoffConversations(appId).data?.length ?? 0;
+  const toFix = useImprovements(appId, editable).data?.open_count ?? 0;
   return (
     <div className="flex min-h-full flex-col">
       <AppNav appId={appId} title={app.data?.name ?? ""} icon={app.data?.icon} help="logs" />
@@ -650,7 +655,15 @@ export default function AppLogsPage() {
                 value: "handoff" as const,
                 label: waiting > 0 ? `상담원 응대 (${waiting})` : "상담원 응대",
               },
-              ...(editable ? [{ value: "annotations" as const, label: "모범 답변" }] : []),
+              ...(editable
+                ? [
+                    {
+                      value: "improve" as const,
+                      label: toFix > 0 ? `고칠 질문 (${toFix})` : "고칠 질문",
+                    },
+                    { value: "annotations" as const, label: "모범 답변" },
+                  ]
+                : []),
             ]}
           />
           <Link
@@ -664,6 +677,8 @@ export default function AppLogsPage() {
           <Conversations appId={appId} editable={editable} />
         ) : tab === "handoff" ? (
           <Handoffs appId={appId} editable={editable} />
+        ) : tab === "improve" ? (
+          <ImprovementsPanel appId={appId} />
         ) : (
           <Annotations appId={appId} editable={editable} />
         )}

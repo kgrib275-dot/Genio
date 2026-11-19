@@ -208,11 +208,11 @@ export default function BuilderPage() {
     }
   };
 
-  const onRun = async (input: Record<string, unknown>) => {
+  const onRun = async (input: Record<string, unknown>, dryRun = false) => {
     setRunning(true);
     try {
       await flush();
-      const r = await startRun(appId, input);
+      const r = await startRun(appId, input, undefined, dryRun);
       useCanvas.getState().setErrors([]);
       setTestOpen(false);
       setLogOpen(true);
@@ -482,7 +482,7 @@ export default function BuilderPage() {
         inputNode={inputNode}
         running={running}
         canBatch={app.data?.type === "workflow"}
-        onRun={(input) => void onRun(input)}
+        onRun={(input, opts) => void onRun(input, opts?.dryRun)}
       />
       <ConflictDialog appId={appId} />
       {previewOpen && (

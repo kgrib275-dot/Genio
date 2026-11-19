@@ -136,7 +136,14 @@ function Overview({ ws }: { ws: string }) {
           )}
         </CardBody>
       </Card>
-      <BuilderMetricsCard ws={ws} />
+      <details className="group rounded-2xl border border-slate-200 bg-white px-4 py-3">
+        <summary className="cursor-pointer select-none text-sm font-medium text-slate-700">
+          말로 만들기가 잘 되고 있나요? <span className="text-xs text-slate-400">(펼쳐 보기)</span>
+        </summary>
+        <div className="mt-3">
+          <BuilderMetricsCard ws={ws} />
+        </div>
+      </details>
     </div>
   );
 }
@@ -161,7 +168,7 @@ function BuilderMetricsCard({ ws }: { ws: string }) {
   return (
     <Card>
       <CardHeader
-        title="빌더 지표"
+        title="말로 만들기 지표"
         description="말로 만들기가 얼마나 잘 되는지 봐요. 첫 요청부터 검사를 통과한 앱까지 걸린 시간, 그 뒤 고쳐 달라고 한 횟수, 사람이 캔버스를 직접 고친 비율이에요."
       />
       <CardBody className="space-y-4">

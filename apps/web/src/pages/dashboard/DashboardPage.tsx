@@ -1,4 +1,10 @@
-import { appNameFrom } from "@/lib/appName";
+import {
+  ALL_DEPARTMENT,
+  DEPARTMENTS,
+  departmentById,
+  filterTemplatesByDepartment,
+} from "@/lib/departments";
+import { appDescriptionFrom, appNameFrom } from "@/lib/appName";
 import {
   GraduationCap,
   ArrowRight,
@@ -17,6 +23,7 @@ import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "rea
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { PageContainer } from "@/app/Layout";
 import { AppIcon, Avatar } from "@/components/AppIcon";
+import { DocBotDialog } from "@/components/docbot/DocBotDialog";
 import { DifyImportDialog } from "@/components/dify/DifyImportDialog";
 import { ProjectDialog, ProjectDot } from "@/components/projects/ProjectDialog";
 import { ErrorBox, Loading } from "@/components/ErrorBox";
@@ -52,17 +59,32 @@ const SUGGESTIONS = [
 ];
 
 /** 맨 위: 말로 앱 만들기 */
-function PromptHero({ projectId }: { projectId?: string }) {
+function PromptHero({
+  projectId,
+  dept,
+  onDept,
+}: {
+  projectId?: string;
+  dept: string;
+  onDept: (id: string) => void;
+}) {
   const ws = useSession((s) => s.workspaceId);
   const create = useCreateApp(ws);
   const navigate = useNavigate();
   const [text, setText] = useState("");
+  const [docBot, setDocBot] = useState(false);
 
   const start = (prompt: string) => {
     const p = prompt.trim();
     if (!p || create.isPending) return;
     create.mutate(
-      { name: appNameFrom(p), type: "chat", description: p, icon: "", project_id: projectId },
+      {
+        name: appNameFrom(p),
+        type: "chat",
+        description: appDescriptionFrom(p),
+        icon: "",
+        project_id: projectId,
+      },
       {
         onSuccess: (app) => {
           setPendingPrompt(app.id, p);
@@ -113,8 +135,30 @@ function PromptHero({ projectId }: { projectId?: string }) {
           </Button>
         </div>
       </form>
+      <div
+        className="mt-4 flex flex-wrap items-center gap-1.5"
+        role="group"
+        aria-label="부서 고르기"
+      >
+        <span className="mr-1 text-xs text-slate-500">내 부서</span>
+        {[{ id: ALL_DEPARTMENT, label: "모든 부서" }, ...DEPARTMENTS].map((d) => (
+          <button
+            key={d.id}
+            type="button"
+            aria-pressed={dept === d.id}
+            onClick={() => onDept(d.id)}
+            className={
+              dept === d.id
+                ? "rounded-full bg-indigo-600 px-2.5 py-1 text-xs font-medium text-white"
+                : "rounded-full border border-slate-200 bg-white/80 px-2.5 py-1 text-xs text-slate-600 hover:border-indigo-300"
+            }
+          >
+            {d.label}
+          </button>
+        ))}
+      </div>
       <div className="mt-3 flex flex-wrap gap-2">
-        {SUGGESTIONS.map((s) => (
+        {(departmentById(dept)?.examples ?? SUGGESTIONS).map((s) => (
           <button
             key={s}
             type="button"
@@ -125,18 +169,26 @@ function PromptHero({ projectId }: { projectId?: string }) {
             {s}
           </button>
         ))}
+        <button
+          type="button"
+          onClick={() => setDocBot(true)}
+          className="rounded-full border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-[13px] font-medium text-indigo-700 transition-colors hover:bg-indigo-100"
+        >
+          📚 내 문서로 챗봇 만들기
+        </button>
       </div>
       <ErrorBox error={create.error} />
+      <DocBotDialog open={docBot} onClose={() => setDocBot(false)} projectId={projectId} />
     </section>
   );
 }
 
-function TemplateRow({ projectId }: { projectId?: string }) {
+function TemplateRow({ projectId, dept }: { projectId?: string; dept: string }) {
   const ws = useSession((s) => s.workspaceId);
   const templates = useTemplates(ws);
   const create = useCreateApp(ws);
   const navigate = useNavigate();
-  const list = templates.data ?? [];
+  const list = filterTemplatesByDepartment(templates.data ?? [], dept);
   if (list.length === 0) return null;
   return (
     <section className="mt-8">
@@ -677,12 +729,31 @@ export default function DashboardPage() {
     setParams(next, { replace: true });
   };
 
+  const [dept, setDept] = useState(() => {
+    try {
+      return window.localStorage.getItem("genio.department") ?? ALL_DEPARTMENT;
+    } catch {
+      return ALL_DEPARTMENT;
+    }
+  });
+  const chooseDept = (id: string) => {
+    setDept(id);
+    try {
+      window.localStorage.setItem("genio.department", id);
+    } catch {
+      /* 저장하지 못해도 이번 화면에서는 적용된다 */
+    }
+  };
+
   return (
     <PageContainer>
-      <StartChecklist firstAppId={appList[0]?.id} />
-      <LearnBanner />
-      {editable && <PromptHero projectId={projectId} />}
-      {editable && <TemplateRow projectId={projectId} />}
+      {/* 처음엔 '무엇을 만들까요' 입력칸이 맨 위, 안내(체크리스트·배우기)는 그 아래에 접어 둔다 */}
+      {editable && <PromptHero projectId={projectId} dept={dept} onDept={chooseDept} />}
+      {editable && <TemplateRow projectId={projectId} dept={dept} />}
+      <div className="mt-6">
+        <StartChecklist firstAppId={appList[0]?.id} />
+        <LearnBanner />
+      </div>
 
       <section className="mt-10" data-tour="apps">
         {(projectList.length > 0 || filter) && (

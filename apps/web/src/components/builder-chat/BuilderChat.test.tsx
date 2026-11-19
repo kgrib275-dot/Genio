@@ -10,6 +10,21 @@ import { useCanvas } from "@/store/canvas";
 const sent: BuilderSendBody[] = [];
 const reverts: string[] = [];
 
+const demoCalls: string[] = [];
+vi.mock("@/lib/api/workspace", async (orig) => {
+  const actual = await orig<typeof import("@/lib/api/workspace")>();
+  return {
+    ...actual,
+    useEnableDemoAi: () => ({
+      isPending: false,
+      mutate: (_v: undefined, o?: { onSuccess?: () => void }) => {
+        demoCalls.push("demo");
+        o?.onSuccess?.();
+      },
+    }),
+  };
+});
+
 vi.mock("@/lib/api/builder", async (orig) => {
   const actual = await orig<typeof import("@/lib/api/builder")>();
   return {
@@ -160,5 +175,30 @@ describe("BuilderChatView", () => {
     fireEvent.click(screen.getByRole("button", { name: "보내기" }));
     await waitFor(() => expect(sent).toHaveLength(1));
     expect(sent[0]?.plan_only).toBe(true);
+  });
+
+  it("AI 연결이 없다는 답에는 데모 AI 버튼이 붙고, 누르면 방금 요청을 다시 보낸다", async () => {
+    sent.length = 0;
+    demoCalls.length = 0;
+    const now = new Date().toISOString();
+    renderChat(true, [
+      {
+        id: "u1",
+        role: "user",
+        content: "규정 챗봇 만들어 줘",
+        graph_patch: null,
+        created_at: now,
+      },
+      {
+        id: "a1",
+        role: "assistant",
+        content: "등록된 AI 연결이 없어요. 관리 > AI 모델에서 API 키를 등록하세요.",
+        graph_patch: null,
+        created_at: now,
+      },
+    ]);
+    fireEvent.click(await screen.findByRole("button", { name: "데모 AI로 이어서 해 보기" }));
+    await waitFor(() => expect(sent.map((x) => x.content)).toEqual(["규정 챗봇 만들어 줘"]));
+    expect(demoCalls).toEqual(["demo"]);
   });
 });

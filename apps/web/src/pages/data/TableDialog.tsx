@@ -7,8 +7,18 @@ import { Dialog } from "@/components/ui/dialog";
 import { Field, Input, Select, Textarea } from "@/components/ui/input";
 import type { DataColumn, DataColumnType, DataTable } from "@/lib/api/types";
 import { useProjects } from "@/lib/api/v3";
-import { useCreateDataTable, useUpdateDataTable } from "@/lib/api/v4";
-import { COLUMN_TYPES, columnsProblem, suggestKey } from "@/pages/data/values";
+import { importCsvText, useCreateDataTable, useUpdateDataTable } from "@/lib/api/v4";
+import { toast } from "@/components/ui/toast-store";
+import {
+  COLUMN_TYPES,
+  columnsProblem,
+  parsePastedTable,
+  suggestKey,
+  toCsv,
+  type PastedTable,
+} from "@/pages/data/values";
+
+const PASTE_EXAMPLE = ["이름\t부서\t입사일", "김하나\t인사팀\t2026-01-05"].join("\n");
 
 export function TableDialog({
   ws,
@@ -40,7 +50,17 @@ export function TableDialog({
   // 이미 있는 칸의 키는 바꾸지 않는다(저장된 값과 어긋나지 않게)
   const lockedKeys = new Set(editing?.columns.map((c) => c.key) ?? []);
   const problem = !name.trim() ? "표 이름을 적어 주세요." : columnsProblem(cols);
-  const pending = create.isPending || update.isPending;
+  const [pasteText, setPasteText] = useState("");
+  const [pasted, setPasted] = useState<PastedTable | null>(null);
+  const [importing, setImporting] = useState(false);
+  const pending = create.isPending || update.isPending || importing;
+
+  const applyPaste = (text: string) => {
+    setPasteText(text);
+    const t = parsePastedTable(text);
+    setPasted(t);
+    if (t) setCols(t.columns);
+  };
 
   const setCol = (i: number, patch: Partial<DataColumn>) =>
     setCols(cols.map((c, j) => (j === i ? { ...c, ...patch } : c)));
@@ -61,7 +81,23 @@ export function TableDialog({
       project_id: projectId || null,
     };
     if (editing) update.mutate({ id: editing.id, ...body }, { onSuccess: onSaved });
-    else create.mutate(body, { onSuccess: onSaved });
+    else
+      create.mutate(body, {
+        onSuccess: async (t) => {
+          if (pasted && pasted.rows.length > 0) {
+            setImporting(true);
+            try {
+              const r = await importCsvText(t.id, toCsv(cols, pasted.rows));
+              toast.success(`표를 만들고 ${r.imported}줄을 넣었어요.`);
+            } catch (err) {
+              toast.error(err);
+            } finally {
+              setImporting(false);
+            }
+          }
+          onSaved(t);
+        },
+      });
   };
 
   return (
@@ -116,6 +152,37 @@ export function TableDialog({
             onChange={(e) => setDescription(e.target.value)}
           />
         </Field>
+        {!editing && (
+          <details className="rounded-lg border border-slate-200 px-3 py-2 text-sm">
+            <summary className="cursor-pointer select-none text-slate-700">
+              엑셀·구글 시트에서 복사해 붙여넣기
+              <span className="ml-1 text-xs text-slate-400">(칸과 값이 한 번에 만들어져요)</span>
+            </summary>
+            <div className="mt-2 space-y-1.5">
+              <Textarea
+                aria-label="엑셀에서 복사한 표"
+                className="min-h-[96px] font-mono text-xs"
+                value={pasteText}
+                placeholder={PASTE_EXAMPLE}
+                onChange={(e) => applyPaste(e.target.value)}
+              />
+              <p className="text-xs text-slate-500">
+                첫 줄은 칸 이름이에요. 표 전체를 선택해 복사(Ctrl+C)한 뒤 여기에 붙여넣으세요.
+              </p>
+              {pasted && (
+                <p className="text-xs text-emerald-700" role="status">
+                  칸 {pasted.columns.length}개, 값 {pasted.rows.length}줄을 읽었어요. 아래 칸 이름과
+                  종류를 확인하세요.
+                </p>
+              )}
+              {pasteText.trim() !== "" && !pasted && (
+                <p className="text-xs text-red-700">
+                  표 모양을 읽지 못했어요. 첫 줄에 칸 이름이 있어야 해요.
+                </p>
+              )}
+            </div>
+          </details>
+        )}
         <div>
           <p className="mb-1 text-xs font-medium text-slate-600">칸</p>
           <div className="hidden grid-cols-[1fr_1fr_8rem_auto] gap-1.5 px-0.5 pb-1 text-[11px] text-slate-400 sm:grid">

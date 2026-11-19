@@ -325,6 +325,8 @@ def validate(app_id: str, body: ValidateIn, ctx: AppBuilders) -> dict[str, Any]:
 class RunIn(BaseModel):
     input: dict[str, Any] = Field(default_factory=dict)
     version: int | None = None
+    # 시험 모드: 메일·슬랙 같은 보내기 동작은 하지 않고 보낼 내용만 보여 준다
+    dry_run: bool = False
 
 
 @router.post("/apps/{app_id}/runs", status_code=201)
@@ -339,7 +341,12 @@ def create_run(app_id: str, body: RunIn, ctx: AppBuilders) -> dict[str, Any]:
         if v is None:
             raise not_found("버전")
         run = Run(
-            app_id=app.id, version_id=v.id, trigger="test", input=body.input, created_by=ctx.user.id
+            app_id=app.id,
+            version_id=v.id,
+            trigger="test",
+            input=body.input,
+            created_by=ctx.user.id,
+            context={"dry_run": True} if body.dry_run else {},
         )
     else:
         graph = app.draft_graph or {}
@@ -357,6 +364,7 @@ def create_run(app_id: str, body: RunIn, ctx: AppBuilders) -> dict[str, Any]:
             input=body.input,
             graph_snapshot=graph,
             created_by=ctx.user.id,
+            context={"dry_run": True} if body.dry_run else {},
         )
     ctx.db.add(run)
     ctx.db.commit()

@@ -8,6 +8,7 @@ import type { StatPoint } from "@/lib/api/types";
 import { useAppStats } from "@/lib/api/v2";
 import { cn, formatCost } from "@/lib/cn";
 import { AppNav } from "@/pages/apps/AppNav";
+import { DigestCard } from "@/pages/apps/DigestCard";
 
 const RANGES = [7, 14, 30];
 
@@ -38,7 +39,7 @@ export default function AppMonitorPage() {
       <AppNav appId={appId} title={app.data?.name ?? ""} icon={app.data?.icon} help="monitor" />
       <div className="mx-auto w-full max-w-6xl space-y-5 px-4 py-6 sm:px-6">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <h2 className="text-lg font-bold tracking-tight">모니터링</h2>
+          <h2 className="text-lg font-bold tracking-tight">실행 현황</h2>
           <div className="inline-flex rounded-lg bg-slate-100 p-1" role="group" aria-label="기간">
             {RANGES.map((r) => (
               <button
@@ -56,6 +57,7 @@ export default function AppMonitorPage() {
             ))}
           </div>
         </div>
+        <DigestCard appId={appId} />
         {stats.isLoading && <Loading />}
         <ErrorBox error={stats.error} />
         {d && (

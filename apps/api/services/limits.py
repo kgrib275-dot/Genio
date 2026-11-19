@@ -3,7 +3,9 @@
 설정은 workspaces.settings["limits"]에 둔다(마이그레이션 없음):
   monthly_budget_usd   이번 달 비용이 이 값을 넘으면 새 실행을 막는다(None = 제한 없음)
   cost_alert_usd       이번 달 비용이 이 값을 넘으면 한 번 메일로 알린다
+  (월 한도가 있으면 80%에 이를 때 한 번 미리 메일로 알린다)
   alert_on_failure     실행이 실패하면 메일로 알린다(5분마다 모아서)
+  monthly_report       매달 1일(그 뒤 처음 확인 때) 지난달 효과 리포트를 같은 받는 사람에게 메일로 보낸다
   alert_emails         받는 사람
   alert_credential_id  메일을 보낼 'Email (SMTP)' 연결 정보
   retention_days       이보다 오래된 실행 기록·대화를 지운다(None = 계속 보관)
@@ -34,6 +36,7 @@ DEFAULTS: dict[str, Any] = {
     "monthly_budget_usd": None,
     "cost_alert_usd": None,
     "alert_on_failure": False,
+    "monthly_report": False,
     "alert_emails": [],
     "alert_credential_id": None,
     "retention_days": None,
@@ -95,6 +98,8 @@ def clean_limits(patch: dict[str, Any], current: dict[str, Any]) -> dict[str, An
         out["cost_alert_usd"] = _num(patch["cost_alert_usd"], 0, 1_000_000, "비용 알림 기준")
     if "alert_on_failure" in patch:
         out["alert_on_failure"] = bool(patch["alert_on_failure"])
+    if "monthly_report" in patch:
+        out["monthly_report"] = bool(patch["monthly_report"])
     if "alert_emails" in patch:
         emails = [str(e).strip() for e in (patch["alert_emails"] or []) if str(e).strip()][:10]
         bad = [e for e in emails if not EMAIL_RE.match(e)]
@@ -315,9 +320,76 @@ def check_alerts(db: Session, now: datetime | None = None) -> int:
                 if _send_alert(db, ws, "[Genio] 비용 알림", body):
                     sent += 1
                 state["cost_alerted_month"] = month_key
+        budget = lim["monthly_budget_usd"]
+        if budget and state.get("budget_warned_month") != month_key:
+            used_now = month_cost(db, ws.id, n)
+            if used_now >= Decimal(str(budget)) * Decimal("0.8"):
+                pct = int(used_now / Decimal(str(budget)) * 100)
+                body = (
+                    f"이번 달 AI 비용이 ${float(used_now):,.2f}로 월 한도 ${float(budget):,.2f}의 {pct}%예요.\n"
+                    "한도를 넘으면 새 실행이 멈춰요. 관리 > 사용량에서 앱별 비용을 확인하거나 한도를 조정하세요."
+                )
+                if _send_alert(db, ws, "[Genio] 월 한도 80% 도달", body):
+                    sent += 1
+                state["budget_warned_month"] = month_key
+        if lim["monthly_report"]:
+            prev_start = (month_start(n) - timedelta(days=1)).replace(day=1)
+            prev_key = prev_start.strftime("%Y-%m")
+            if state.get("report_sent_month") != prev_key:
+                subject, body = monthly_report_mail(db, ws, prev_start, month_start(n))
+                if _send_alert(db, ws, subject, body):
+                    sent += 1
+                    state["report_sent_month"] = prev_key
         ws.settings = {**(ws.settings or {}), "limits_state": state}
     db.commit()
     return sent
+
+
+def monthly_report_mail(
+    db: Session, ws: Workspace, start: datetime, end: datetime
+) -> tuple[str, str]:
+    """지난달 효과 리포트 메일 글(추정값임을 밝힌다)"""
+    from api.services import impact
+
+    rep = impact.report(db, ws.id, start, end)
+    failed = (
+        db.scalar(
+            select(func.count())
+            .select_from(Run)
+            .join(App, App.id == Run.app_id)
+            .where(
+                App.workspace_id == ws.id,
+                Run.status == "failed",
+                Run.created_at >= start,
+                Run.created_at < end,
+                Run.trigger.not_in(impact.NOT_COUNTED_TRIGGERS),
+            )
+        )
+        or 0
+    )
+    label = f"{start.year}년 {start.month}월"
+    lines = [
+        f"{label} 제니오 이용 요약이에요.",
+        "",
+        f"- 성공한 실행: {rep['total_succeeded_runs']}건",
+        f"- 실패한 실행: {int(failed)}건",
+        f"- 아낀 시간(추정): 약 {rep['total_saved_hours']}시간",
+    ]
+    top = [r for r in rep["apps"] if r["succeeded_runs"]][:5]
+    if top:
+        lines += ["", "많이 쓴 앱"]
+        lines += [
+            f"- {r['app_name']}: {r['succeeded_runs']}건"
+            + (f" (약 {round(r['saved_minutes'] / 60, 1)}시간 절약)" if r["saved_minutes"] else "")
+            for r in top
+        ]
+    if rep["unset_apps"]:
+        lines += [
+            "",
+            f"※ {rep['unset_apps']}개 앱은 '한 번에 아끼는 시간'이 비어 있어 시간에 넣지 못했어요.",
+        ]
+    lines += ["", "아낀 시간은 앱마다 정해 둔 '한 번에 아끼는 시간'으로 계산한 추정값이에요."]
+    return f"[Genio] {label} 이용 요약", "\n".join(lines)
 
 
 # ---------------- 보관 기간(매일) ----------------

@@ -1,6 +1,6 @@
 // 이메일·슬랙으로 받은 링크(/t/:token)에서 로그인 없이 승인·답·완료를 처리하는 화면.
 import { CheckCircle2, ClipboardList, Clock } from "lucide-react";
-import { useParams } from "react-router-dom";
+import { useParams, useSearchParams } from "react-router-dom";
 import { ErrorBox, Loading } from "@/components/ErrorBox";
 import { Badge } from "@/components/ui/badge";
 import { Markdown } from "@/components/chat/Markdown";
@@ -16,6 +16,9 @@ import { TaskForm } from "@/pages/tasks/TaskForm";
 
 export default function TaskLinkPage() {
   const { token = "" } = useParams();
+  const [params] = useSearchParams();
+  const d = params.get("d");
+  const prefer = d === "approve" || d === "reject" ? d : undefined;
   const task = usePublicTask(token);
   const complete = useCompletePublicTask(token);
 
@@ -59,6 +62,7 @@ export default function TaskLinkPage() {
                   task={task.data}
                   pending={complete.isPending}
                   error={complete.error}
+                  prefer={prefer}
                   onSubmit={(body) => complete.mutate(body)}
                 />
               ) : (

@@ -11,11 +11,14 @@ export function TaskForm({
   onSubmit,
   pending,
   error,
+  prefer,
 }: {
   task: HumanTask;
   onSubmit: (body: CompleteTaskBody) => void;
   pending: boolean;
   error: unknown;
+  /** 메일의 [승인]·[반려] 링크로 왔을 때 미리 눈에 띄게 할 쪽(누르기 전에는 아무것도 처리하지 않는다) */
+  prefer?: "approve" | "reject";
 }) {
   const [values, setValues] = useState<Record<string, string>>({});
   const [comment, setComment] = useState("");
@@ -90,10 +93,18 @@ export function TaskForm({
       <ErrorBox error={error} />
       {task.kind === "approval" ? (
         <div className="grid grid-cols-2 gap-2">
+          {prefer && (
+            <p
+              className="col-span-2 rounded-lg bg-indigo-50 px-3 py-2 text-sm text-indigo-800"
+              role="status"
+            >
+              {prefer === "approve" ? "승인" : "반려"}하려고 오셨네요. 아래 버튼을 눌러야 처리돼요.
+            </p>
+          )}
           <Button
             type="button"
-            variant="outline"
-            className="text-red-600"
+            variant={prefer === "reject" ? "primary" : "outline"}
+            className={prefer === "reject" ? "" : "text-red-600"}
             disabled={pending}
             onClick={(e) => submit(e as unknown as FormEvent, false)}
           >
@@ -101,6 +112,7 @@ export function TaskForm({
           </Button>
           <Button
             type="button"
+            variant={prefer === "reject" ? "outline" : "primary"}
             disabled={pending}
             onClick={(e) => submit(e as unknown as FormEvent, true)}
           >

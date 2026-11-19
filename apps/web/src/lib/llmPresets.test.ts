@@ -1,4 +1,10 @@
-import { baseUrlToSend, FALLBACK_PRESETS, groupPresets, presetName } from "@/lib/llmPresets";
+import {
+  baseUrlToSend,
+  FALLBACK_PRESETS,
+  groupPresets,
+  groupPresetsWithPopular,
+  presetName,
+} from "@/lib/llmPresets";
 import type { ProviderPreset } from "@/lib/api/types";
 
 const deepseek: ProviderPreset = {
@@ -30,4 +36,15 @@ test("공급자 이름과 보낼 주소", () => {
     "https://proxy.example.com/v1",
   );
   expect(baseUrlToSend(deepseek, "")).toBeUndefined();
+});
+
+describe("groupPresetsWithPopular", () => {
+  it("많이 쓰는 곳을 맨 위에 두고 중복 없이 나머지를 묶는다", () => {
+    const groups = groupPresetsWithPopular(FALLBACK_PRESETS);
+    const all = groups.flatMap((g) => g.items.map((p) => p.key));
+    expect(new Set(all).size).toBe(all.length);
+    expect(all.length).toBe(FALLBACK_PRESETS.length);
+    expect(groups[0]?.group).toBe("많이 쓰는 곳");
+    expect(groups[0]?.items.map((p) => p.key)).toContain("openai");
+  });
 });

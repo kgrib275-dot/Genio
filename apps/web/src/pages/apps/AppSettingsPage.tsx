@@ -279,7 +279,14 @@ function DeploymentsCard({ appId, editable }: { appId: string; editable: boolean
         allowed_users: access === "roles" ? users : undefined,
         version: version ? Number(version) : undefined,
       },
-      { onSuccess: () => toast.success("배포했어요.") },
+      {
+        onSuccess: (d) =>
+          toast.success(
+            d.auto_saved
+              ? "저장한 버전이 없어 지금 작업본을 첫 버전으로 저장하고 배포했어요."
+              : "배포했어요.",
+          ),
+      },
     );
   };
 
@@ -343,7 +350,7 @@ function DeploymentsCard({ appId, editable }: { appId: string; editable: boolean
           <EmptyState
             compact
             title="아직 배포가 없어요"
-            description="만들기 화면에서 '버전 저장'을 한 뒤, 위에서 공유 링크·위젯·API 중 하나를 골라 배포하세요."
+            description="위에서 공유 링크·위젯·API 중 하나를 골라 배포하세요. 저장한 버전이 없으면 지금 작업본이 자동으로 저장돼요."
             action={{ label: "만들기 화면으로", to: `/apps/${appId}/builder` }}
           />
         )}

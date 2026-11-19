@@ -7,6 +7,8 @@ from decimal import Decimal
 
 PRICES: dict[str, tuple[str, str]] = {
     # model: (input, output)
+    # 5.2 가격은 5.1과 같게 둔 참고값이에요(공식 가격표 확인 필요)
+    "claude-fable-5-2": ("10", "50"),
     "claude-fable-5-1": ("10", "50"),
     "claude-opus-5-5": ("4", "20"),
     "claude-opus-5": ("5", "25"),

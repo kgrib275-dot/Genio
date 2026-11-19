@@ -20,7 +20,10 @@ import {
   Trash2,
   Upload,
 } from "lucide-react";
+import { useMutation } from "@tanstack/react-query";
 import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useNavigate } from "react-router-dom";
+import { createChatbotFromKb } from "@/lib/api/docBot";
 import { PageContainer } from "@/app/Layout";
 import { ErrorBox, Loading } from "@/components/ErrorBox";
 import { ListPager, ListToolbar, NoMatch } from "@/components/ListControls";
@@ -138,6 +141,19 @@ function DocRow({
         <ImageReportBadge report={(d as KbDocWithImages).image_report as ImageReport} />
       )}
       {!enabled && <Badge tone="gray">검색에서 뺌</Badge>}
+      {(d as KbDocWithImages).pii && (
+        <span
+          className="basis-full rounded-md bg-amber-50 px-2 py-1 text-xs text-amber-800"
+          role="note"
+        >
+          개인정보가 들어 있을 수 있어요(
+          {Object.entries((d as KbDocWithImages).pii ?? {})
+            .map(([k, n]) => `${k} ${n}건`)
+            .join(", ")}
+          ). 챗봇이 그대로 말할 수 있으니, 필요 없으면 문서를 고쳐 다시 올리거나 관리 &gt;
+          안전·규칙에서 개인정보 가리기를 켜세요.
+        </span>
+      )}
       {d.error && (
         <span className="basis-full text-xs text-red-600" title={d.error}>
           {d.error}
@@ -309,6 +325,15 @@ function SearchCard({ kb }: { kb: KnowledgeBaseV2 }) {
 }
 
 function KbDetail({ ws, kb, editable }: { ws: string; kb: KnowledgeBaseV2; editable: boolean }) {
+  const navigate = useNavigate();
+  const makeBot = useMutation({
+    mutationFn: () => createChatbotFromKb(kb.id, { name: `${kb.name} 챗봇` }),
+    onSuccess: (app) => {
+      toast.success("챗봇을 만들었어요. 위쪽 '대화로 시험'으로 물어보세요.");
+      navigate(`/apps/${app.id}/builder`);
+    },
+    onError: (err) => toast.error(err),
+  });
   const docs = useDocuments(kb.id);
   const upload = useUploadDocument(kb.id);
   const toggle = useToggleDocument(kb.id);
@@ -414,6 +439,15 @@ function KbDetail({ ws, kb, editable }: { ws: string; kb: KnowledgeBaseV2; edita
               action={
                 editable && (
                   <div className="flex flex-wrap gap-2">
+                    <Button
+                      size="sm"
+                      disabled={makeBot.isPending}
+                      onClick={() => makeBot.mutate()}
+                      title="이 문서로 답하는 챗봇을 바로 만들어요"
+                    >
+                      <MessagesSquare className="h-3.5 w-3.5" />
+                      {makeBot.isPending ? "만드는 중…" : "이 문서로 챗봇 만들기"}
+                    </Button>
                     <Button size="sm" variant="outline" onClick={() => setDialog("settings")}>
                       <Settings2 className="h-3.5 w-3.5" /> 설정
                     </Button>
@@ -700,24 +734,32 @@ export default function KnowledgePage() {
                   </Button>
                 </div>
               </Field>
-              <Field
-                label="임베딩 모델"
-                htmlFor="kb-embed"
-                hint="글을 숫자로 바꾸는 모델이에요. 만든 뒤에는 바꿀 수 없어요."
-              >
-                <Select
-                  id="kb-embed"
-                  value={embedModel}
-                  onChange={(e) => setEmbedModel(e.target.value)}
-                >
-                  <option value="">기본(text-embedding-3-small)</option>
-                  {(embedModels.data ?? []).map((m) => (
-                    <option key={m.model} value={m.model}>
-                      {m.label}
-                    </option>
-                  ))}
-                </Select>
-              </Field>
+              <details className="rounded-lg border border-slate-200 px-3 py-2 text-sm">
+                <summary className="cursor-pointer select-none text-slate-600">
+                  고급 설정{" "}
+                  <span className="text-xs text-slate-400">(잘 모르면 그대로 두세요)</span>
+                </summary>
+                <div className="mt-2">
+                  <Field
+                    label="임베딩 모델"
+                    htmlFor="kb-embed"
+                    hint="글을 숫자로 바꾸는 모델이에요. 만든 뒤에는 바꿀 수 없어요."
+                  >
+                    <Select
+                      id="kb-embed"
+                      value={embedModel}
+                      onChange={(e) => setEmbedModel(e.target.value)}
+                    >
+                      <option value="">기본(text-embedding-3-small)</option>
+                      {(embedModels.data ?? []).map((m) => (
+                        <option key={m.model} value={m.model}>
+                          {m.label}
+                        </option>
+                      ))}
+                    </Select>
+                  </Field>
+                </div>
+              </details>
               {projectList.length > 0 && (
                 <Select
                   aria-label="새 지식베이스를 넣을 프로젝트"

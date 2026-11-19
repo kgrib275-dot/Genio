@@ -37,6 +37,20 @@ export function groupPresets(list: ProviderPreset[]): { group: string; items: Pr
   return out;
 }
 
+const POPULAR = ["demo", "openai", "anthropic", "google"];
+
+/** 처음 보는 사람이 고르기 쉽게 '많이 쓰는 곳'을 맨 위에 두고 나머지는 그 아래로 묶는다 */
+export function groupPresetsWithPopular(
+  list: ProviderPreset[],
+): { group: string; items: ProviderPreset[] }[] {
+  const top = POPULAR.map((k) => list.find((p) => p.key === k)).filter((p): p is ProviderPreset =>
+    Boolean(p),
+  );
+  if (top.length < 2) return groupPresets(list);
+  const rest = list.filter((p) => !POPULAR.includes(p.key));
+  return [{ group: "많이 쓰는 곳", items: top }, ...groupPresets(rest)];
+}
+
 /** 저장된 연결의 공급자 키 → 화면 이름 */
 export function presetName(list: ProviderPreset[], key: string): string {
   return list.find((p) => p.key === key)?.name ?? key;

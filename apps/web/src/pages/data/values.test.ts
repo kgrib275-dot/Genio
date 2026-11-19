@@ -1,4 +1,12 @@
-import { columnsProblem, display, fromText, suggestKey, toText } from "@/pages/data/values";
+import {
+  columnsProblem,
+  display,
+  fromText,
+  parsePastedTable,
+  suggestKey,
+  toCsv,
+  toText,
+} from "@/pages/data/values";
 
 describe("데이터 표 값", () => {
   it("칸 종류에 맞게 읽고 쓴다", () => {
@@ -27,5 +35,33 @@ describe("데이터 표 값", () => {
     expect(suggestKey("Order ID", 0, [])).toBe("order_id");
     expect(suggestKey("주문 번호", 2, [])).toBe("col3");
     expect(suggestKey("email", 0, ["email"])).toBe("email_2");
+  });
+});
+
+describe("엑셀에서 붙여 넣은 표", () => {
+  const text =
+    ["이름", "부서", "금액", "입사일"].join("\t") +
+    "\n" +
+    ["김하나", "인사팀", "1,200", "2026.1.5"].join("\t") +
+    "\n" +
+    ["이둘", "총무팀", "300", "2026-02-10"].join("\t");
+  it("첫 줄을 칸 이름으로, 값 모양으로 종류를 짐작한다", () => {
+    const t = parsePastedTable(text);
+    expect(t?.columns.map((c) => [c.label, c.type])).toEqual([
+      ["이름", "text"],
+      ["부서", "text"],
+      ["금액", "number"],
+      ["입사일", "date"],
+    ]);
+    expect(t?.columns.map((c) => c.key)).toEqual(["col1", "col2", "col3", "col4"]);
+    expect(t?.rows[0]).toEqual(["김하나", "인사팀", "1200", "2026-01-05"]);
+  });
+  it("쉼표로 나뉜 글과 빈 입력도 다룬다", () => {
+    expect(parsePastedTable("a,b\n1,2")?.columns.map((c) => c.key)).toEqual(["a", "b"]);
+    expect(parsePastedTable("   ")).toBeNull();
+  });
+  it("CSV로 바꿀 때 쉼표·따옴표를 감싼다", () => {
+    const csv = toCsv([{ key: "a", label: "A", type: "text" }], [['x,"y"']]);
+    expect(csv).toBe('a\n"x,""y"""');
   });
 });

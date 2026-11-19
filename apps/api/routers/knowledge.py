@@ -209,6 +209,8 @@ def _doc(d: Document, chunks: int) -> dict[str, Any]:
         "enabled": d.enabled,
         # v0.9 이미지 색인: 그림 수·설명한 수·실패한 수(없으면 None)
         "image_report": (d.doc_metadata or {}).get(kb_images.IMG_REPORT_KEY),
+        # 올린 문서에서 찾은 개인정보 종류별 개수(없으면 None)
+        "pii": (d.doc_metadata or {}).get("_pii") or None,
     }
 
 

@@ -240,3 +240,16 @@ export async function downloadDataTableCsv(table: { id: string; name: string }):
   a.remove();
   window.setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
+
+/** 글로 만든 CSV를 표에 가져온다(붙여 넣기로 표를 만들 때) */
+export function importCsvText(
+  tableId: string,
+  csv: string,
+): Promise<{ imported: number; columns: DataColumn[] }> {
+  const form = new FormData();
+  form.append("file", new File([csv], "pasted.csv", { type: "text/csv" }));
+  return api.upload<{ imported: number; columns: DataColumn[] }>(
+    `/data-tables/${tableId}/import`,
+    form,
+  );
+}

@@ -56,10 +56,10 @@ export function AppNav({
     ...(canViewRuns(role)
       ? [
           { to: `${base}/logs`, label: "로그", Icon: MessagesSquare, also: [`${base}/runs`] },
-          { to: `${base}/monitor`, label: "모니터링", Icon: Activity },
+          { to: `${base}/monitor`, label: "실행 현황", Icon: Activity },
         ]
       : []),
-    ...(canEdit(role) ? [{ to: `${base}/api`, label: "API", Icon: KeyRound }] : []),
+    ...(canEdit(role) ? [{ to: `${base}/api`, label: "외부 연동", Icon: KeyRound }] : []),
     { to: `${base}/settings`, label: "배포·설정", Icon: Rocket },
   ];
   return (
