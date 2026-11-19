@@ -1205,3 +1205,35 @@ def test_status_reports_stuck_runs(client: TestClient, team: Team) -> None:
         db.commit()
         item = status._stuck_runs(db, now)
         assert item["status"] == "warn" and item["waiting"] == 1 and item["running"] == 1
+
+
+def test_attention_lists_failed_runs_and_disliked_answers(client: TestClient, team: Team) -> None:
+    from datetime import UTC, datetime
+
+    from api.db import SessionLocal
+    from api.models import Run
+    from api.tests.test_v02_features import chat, deploy, faq_app
+
+    app_id = faq_app(client, team)
+    token = deploy(client, team, app_id)
+    mid = next(d for n, d in chat(client, token, "질문") if n == "answer")["message_id"]
+    client.post(f"/api/v1/public/apps/{token}/messages/{mid}/feedback", json={"rating": "dislike"})
+    with SessionLocal() as db:
+        db.add(
+            Run(
+                app_id=app_id,
+                status="failed",
+                trigger="api",
+                input={},
+                created_at=datetime.now(UTC),
+            )
+        )
+        db.commit()
+    res = client.get(f"/api/v1/workspaces/{team.ws}/attention", headers=team.h("builder")).json()
+    assert res["failed"][0]["count"] == 1 and res["disliked"][0]["count"] == 1
+    assert (
+        client.get(
+            f"/api/v1/workspaces/{team.ws}/attention", headers=team.h("operator")
+        ).status_code
+        == 403
+    )

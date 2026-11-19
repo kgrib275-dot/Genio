@@ -108,3 +108,15 @@ const VALUE_LABELS: Record<string, string> = {
 export function valueLabel(v: string): string {
   return VALUE_LABELS[v] ?? v;
 }
+
+/** 글 속의 {{n1.message}} 같은 값 끌어오기를 「질문」처럼 사람 말로 바꿔 보여 준다(보기용, 저장값은 그대로). */
+export function humanizeRefs(text: string): string {
+  return text.replace(/\{\{\s*([^}]+?)\s*\}\}/g, (_m, ref: string) => {
+    const last =
+      ref
+        .split(/[.[\]]/)
+        .filter(Boolean)
+        .pop() ?? ref;
+    return `「${keyLabel(last)}」`;
+  });
+}

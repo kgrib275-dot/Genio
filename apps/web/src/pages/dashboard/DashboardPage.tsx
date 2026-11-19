@@ -36,6 +36,7 @@ import { Field, Input, Select, Textarea } from "@/components/ui/input";
 import { ko } from "@/i18n/ko";
 import { useApps, useCreateApp, useUpdateApp } from "@/lib/api/apps";
 import { EmptyState } from "@/components/EmptyState";
+import { AttentionCard } from "@/components/onboarding/AttentionCard";
 import { StartChecklist } from "@/components/onboarding/StartChecklist";
 import { useMe } from "@/lib/api/auth";
 import { useTemplates } from "@/lib/api/resources";
@@ -747,6 +748,7 @@ export default function DashboardPage() {
 
   return (
     <PageContainer>
+      {editable && <AttentionCard />}
       {/* 처음엔 '무엇을 만들까요' 입력칸이 맨 위, 안내(체크리스트·배우기)는 그 아래에 접어 둔다 */}
       {editable && <PromptHero projectId={projectId} dept={dept} onDept={chooseDept} />}
       {editable && <TemplateRow projectId={projectId} dept={dept} />}

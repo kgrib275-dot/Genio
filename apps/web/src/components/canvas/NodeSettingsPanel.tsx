@@ -23,8 +23,68 @@ export interface NodeSettingsFormProps {
   readOnly?: boolean;
 }
 
+/** 처음 쓰는 사람에게는 필요 없는 설정(보통은 그대로 두는 것)은 '고급 설정'으로 접는다. */
+const ADVANCED_KEYS: Record<string, string[]> = {
+  llm: ["provider", "model", "temperature", "output_schema", "mask_pii", "images"],
+  knowledge_search: ["method", "score_threshold", "metadata_filter", "top_k"],
+  http: ["headers", "pagination"],
+};
+
 /** NodeType.input_schema + ui_schema로 설정 폼을 자동으로 만든다. */
 export function NodeSettingsForm({ node, spec, wsId, onChange, readOnly }: NodeSettingsFormProps) {
+  const advanced = (ADVANCED_KEYS[spec.type] ?? []).filter(
+    (k) => k in ((spec.input_schema as { properties?: object }).properties ?? {}),
+  );
+  const schema = spec.input_schema as RJSFSchema;
+  const props = (schema.properties ?? {}) as NonNullable<RJSFSchema["properties"]>;
+  const pick = (keys: string[]): RJSFSchema => ({
+    ...schema,
+    properties: Object.fromEntries(Object.entries(props).filter(([k]) => keys.includes(k))),
+    required: (schema.required ?? []).filter((k) => keys.includes(k)),
+  });
+  if (advanced.length === 0) {
+    return (
+      <SettingsPart node={node} spec={spec} wsId={wsId} onChange={onChange} readOnly={readOnly} />
+    );
+  }
+  const basicKeys = Object.keys(props).filter((k) => !advanced.includes(k));
+  return (
+    <>
+      <SettingsPart
+        node={node}
+        spec={spec}
+        wsId={wsId}
+        onChange={onChange}
+        readOnly={readOnly}
+        schema={pick(basicKeys)}
+      />
+      <details className="mt-3 rounded-lg border border-slate-200">
+        <summary className="cursor-pointer px-3 py-2 text-xs font-medium text-slate-700">
+          고급 설정 <span className="font-normal text-slate-400">(보통은 그대로 두세요)</span>
+        </summary>
+        <div className="border-t border-slate-100 px-3 py-2">
+          <SettingsPart
+            node={node}
+            spec={spec}
+            wsId={wsId}
+            onChange={onChange}
+            readOnly={readOnly}
+            schema={pick(advanced)}
+          />
+        </div>
+      </details>
+    </>
+  );
+}
+
+function SettingsPart({
+  node,
+  spec,
+  wsId,
+  onChange,
+  readOnly,
+  schema,
+}: NodeSettingsFormProps & { schema?: RJSFSchema }) {
   const uiSchema = useMemo(
     () => withTimingVisibility(toRjsfUiSchema(spec), spec.type, node.data),
     [spec, node.data],
@@ -33,7 +93,7 @@ export function NodeSettingsForm({ node, spec, wsId, onChange, readOnly }: NodeS
   return (
     <Form
       className="genio-form"
-      schema={spec.input_schema as RJSFSchema}
+      schema={schema ?? (spec.input_schema as RJSFSchema)}
       uiSchema={uiSchema}
       formData={node.data}
       validator={validator}
@@ -46,8 +106,9 @@ export function NodeSettingsForm({ node, spec, wsId, onChange, readOnly }: NodeS
       showErrorList={false}
       noHtml5Validate
       onChange={(e) =>
-        // "_"로 시작하는 공통 설정(_retry 등)은 아래 '실패했을 때' 영역이 관리하므로 지키며 합친다
+        // 이 폼이 맡은 칸만 바꾸고 나머지(다른 폼의 칸, "_"로 시작하는 공통 설정)는 그대로 둔다
         onChange({
+          ...node.data,
           ...((e.formData ?? {}) as Record<string, unknown>),
           ...underscoreKeys(node.data),
         })

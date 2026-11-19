@@ -2,6 +2,7 @@ import { Handle, Position, type Node, type NodeProps } from "@xyflow/react";
 import { StatusBadge } from "@/components/ui/badge";
 import { NodeIcon } from "@/components/canvas/NodeIcon";
 import { toneOf } from "@/components/canvas/nodeStyle";
+import { humanizeRefs } from "@/lib/dataLabels";
 import { describeTiming, hasTimeoutHandle } from "@/components/canvas/humanTiming";
 import { branchHandles, hasFailHandle } from "@/components/canvas/nodeUtils";
 import type { PresenceUser } from "@/lib/api/collab";
@@ -29,6 +30,10 @@ export interface GenioNodeData extends Record<string, unknown> {
 export type GenioFlowNode = Node<GenioNodeData, "genio">;
 
 function summary(node: GraphNode): string {
+  return humanizeRefs(rawSummary(node));
+}
+
+function rawSummary(node: GraphNode): string {
   const d = node.data;
   switch (node.type) {
     case "llm":
@@ -187,7 +192,7 @@ export function NodeView({ data, selected }: NodeProps<GenioFlowNode>) {
           </div>
         )}
         {summary(node) && (
-          <p className="mt-2 truncate rounded-md bg-slate-50 px-2 py-1 font-mono text-[11px] text-slate-500">
+          <p className="mt-2 truncate rounded-md bg-slate-50 px-2 py-1 text-[11px] text-slate-500">
             {summary(node)}
           </p>
         )}
