@@ -1,0 +1,93 @@
+name: ci
+
+# 올릴 때마다 린트·타입·시험·의존성 점검을 자동으로 돌린다(수동으로 하던 make check와 같은 검사).
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: |
+            requirements.txt
+            requirements-dev.txt
+      - run: pip install -r requirements.txt -r requirements-dev.txt
+      - run: ruff check apps packages
+      - run: ruff format --check apps packages
+      - run: mypy apps/api
+      - run: pytest -q -p no:cacheprovider
+
+  web:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: apps/web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+      - run: npm ci
+      - run: npm run --silent lint
+      - run: npm run --silent format:check
+      - run: npx tsc --noEmit
+      - run: npx vitest run
+      - run: npm run build
+
+  # 진짜 PostgreSQL에서 동시 호출·마이그레이션 시험(SQLite로는 경합이 보이지 않는다)
+  postgres:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_PASSWORD: pgtest-only
+          POSTGRES_DB: genio_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 20
+    env:
+      GENIO_TEST_PG_URL: postgresql+psycopg://postgres:pgtest-only@127.0.0.1:5432/genio_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: |
+            requirements.txt
+            requirements-dev.txt
+      - run: pip install -r requirements.txt -r requirements-dev.txt
+      - run: pytest apps/api/tests/test_pg_concurrency.py -q -p no:cacheprovider
+
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install pip-audit && pip-audit -r requirements.txt --progress-spinner off
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - run: npm audit --omit=dev --audit-level=high
+        working-directory: apps/web
