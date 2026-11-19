@@ -398,7 +398,7 @@ export default function BuilderPage() {
                   )}
                 </div>
               )}
-              <FlowCanvas specs={specs} readOnly={readOnly} />
+              <FlowCanvas specs={specs} readOnly={readOnly} visibleKey={mobileTab} />
             </div>
             {panelOpen && (
               <div

@@ -113,7 +113,15 @@ function MenuItem({
   );
 }
 
-function Inner({ specs, readOnly }: { specs: NodeType[]; readOnly?: boolean }) {
+function Inner({
+  specs,
+  readOnly,
+  visibleKey,
+}: {
+  specs: NodeType[];
+  readOnly?: boolean;
+  visibleKey?: string;
+}) {
   const graph = useCanvas((s) => s.graph);
   const selectedId = useCanvas((s) => s.selectedId);
   const selectedIds = useCanvas((s) => s.selectedIds);
@@ -183,6 +191,20 @@ function Inner({ specs, readOnly }: { specs: NodeType[]; readOnly?: boolean }) {
     }, 60);
     return () => window.clearTimeout(t);
   }, [nodeIdsKey, fitView, getNodes, getNodesBounds, getViewport, setViewport]);
+
+  // 모바일은 캔버스를 숨겨 둔 채 불러와서(크기 0) 처음 맞춤이 어긋난다. 탭으로 다시 열 때 맞춘다.
+  useEffect(() => {
+    if (visibleKey !== "canvas") return;
+    const t = window.setTimeout(() => {
+      void fitView(FIT_OPTIONS).then(() => {
+        const vp = getViewport();
+        if (vp.zoom > FIT_OPTIONS.minZoom + 0.001) return;
+        const bounds = getNodesBounds(getNodes());
+        void setViewport({ x: 32 - bounds.x * vp.zoom, y: vp.y, zoom: vp.zoom });
+      });
+    }, 120);
+    return () => window.clearTimeout(t);
+  }, [visibleKey, fitView, getNodes, getNodesBounds, getViewport, setViewport]);
 
   const selectedSet = useMemo(
     () => new Set([...selectedIds, ...(selectedId ? [selectedId] : [])]),
@@ -657,10 +679,19 @@ function Inner({ specs, readOnly }: { specs: NodeType[]; readOnly?: boolean }) {
   );
 }
 
-export function FlowCanvas({ specs, readOnly }: { specs: NodeType[]; readOnly?: boolean }) {
+export function FlowCanvas({
+  specs,
+  readOnly,
+  visibleKey,
+}: {
+  specs: NodeType[];
+  readOnly?: boolean;
+  /** 이 값이 바뀌면 화면에 맞춰 다시 보여 준다(모바일에서 숨겨 뒀다가 탭으로 열 때) */
+  visibleKey?: string;
+}) {
   return (
     <ReactFlowProvider>
-      <Inner specs={specs} readOnly={readOnly} />
+      <Inner specs={specs} readOnly={readOnly} visibleKey={visibleKey} />
     </ReactFlowProvider>
   );
 }

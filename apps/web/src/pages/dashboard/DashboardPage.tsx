@@ -149,8 +149,8 @@ function PromptHero({
             onClick={() => onDept(d.id)}
             className={
               dept === d.id
-                ? "rounded-full bg-indigo-600 px-2.5 py-1 text-xs font-medium text-white"
-                : "rounded-full border border-slate-200 bg-white/80 px-2.5 py-1 text-xs text-slate-600 hover:border-indigo-300"
+                ? "rounded-full bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white"
+                : "rounded-full border border-slate-200 bg-white/80 px-3 py-1.5 text-xs text-slate-600 hover:border-indigo-300"
             }
           >
             {d.label}

@@ -321,7 +321,7 @@ ${err.hint}`)
               무엇을 만들어 볼까요?
             </p>
             <p className="mt-1 text-center text-sm text-slate-500">
-              말로 설명하면 오른쪽 캔버스에 흐름을 그려 드려요.
+              말로 설명하면 캔버스에 흐름을 그려 드려요.
             </p>
             <div className="mt-5 space-y-2">
               {EXAMPLES.map((ex) => (

@@ -86,9 +86,10 @@ export function HelpWidget({ hideButton = false }: { hideButton?: boolean }) {
           data-tour="help-widget"
           aria-label="도움·문의 열기"
           onClick={() => setOpen(true)}
-          className="fixed bottom-4 right-4 z-30 inline-flex h-11 items-center gap-1.5 rounded-full bg-indigo-600 px-4 text-sm font-semibold text-white shadow-lift hover:bg-indigo-500 md:bottom-6 md:right-6"
+          className="fixed bottom-4 right-4 z-30 inline-flex h-11 w-11 items-center justify-center gap-1.5 rounded-full bg-indigo-600 text-sm font-semibold text-white shadow-lift hover:bg-indigo-500 md:bottom-6 md:right-6 md:w-auto md:px-4"
         >
-          <LifeBuoy className="h-4 w-4" /> 도움
+          <LifeBuoy className="h-5 w-5 md:h-4 md:w-4" />{" "}
+          <span className="hidden md:inline">도움</span>
         </button>
       )}
       {open && (

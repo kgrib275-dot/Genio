@@ -608,6 +608,8 @@ export function Layout() {
         {workspaceId ? (
           <ErrorBoundary resetKey={pathname}>
             <Outlet />
+            {/* 오른쪽 아래 도움 버튼이 목록 맨 아래(다음 페이지 등)를 가리지 않게 여유를 둔다. 전체 화면인 만들기 화면은 제외 */}
+            {!/\/builder$/.test(pathname) && <div className="h-16 shrink-0" aria-hidden />}
           </ErrorBoundary>
         ) : (
           <div className="p-8">
