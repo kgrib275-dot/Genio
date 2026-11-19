@@ -1133,3 +1133,6 @@ ADR 0013. 마이그레이션 0015(`apps.draft_rev`·`updated_by`, `draft_snapsho
 - 문서 목록 응답에 `image_report{found, images, described, failed, calls, truncated, skipped}`(그림 색인을 안 돌렸으면 null)가 붙는다. 조각 목록에는 `kind`, `image_file_id`, `page`가 붙는다.
 - 검색 결과(`knowledge_search` 단계의 `results[]`, 검색 시험)에 그림 조각은 `kind:"image"`와 `image{file_id, caption, page, kb_id}`가 붙는다. 챗 인용(`citations`)에도 `image`가 실리고, **누구나 열 수 있는 배포**에서는 보낼 때 24시간 서명 주소 `image.url`을 붙인다(저장된 인용에는 주소를 남기지 않고, 지난 대화를 다시 열 때 새로 서명한다). 멤버 전용 배포·빌더 시험은 `url` 없이 `image.kb_id`로 로그인 상태에서 불러온다.
 - 서명 주소: `HMAC-SHA256(GENIO_SECRET_KEY, "kbimg\n{token}\n{file_id}\n{exp}")`(v0.9 실행 결과 파일의 서명과 이름이 겹치지 않게 접두어 `kbimg`를 쓴다).
+
+### 재시도해도 두 번 실행되지 않게: `Idempotency-Key`
+`POST /api/v1/service/workflows/run`에 `Idempotency-Key: <내가 정한 고유 값>` 헤더를 붙이면, 같은 값으로 다시 보냈을 때 새로 실행하지 않고 **처음 실행의 결과**를 돌려준다(24시간, 앱·키 단위). 네트워크 오류로 응답을 못 받았을 때 같은 값으로 다시 보내면 된다. 처음 요청이 아직 만들어지는 중이면 5초까지 기다리고, 그래도 없으면 409를 돌려준다.

@@ -1,10 +1,11 @@
 """서비스 API(앱 API 키 인증): 채팅 메시지, 흐름 실행, 파라미터. 다른 시스템이 Genio 앱을 부를 때 쓴다."""
 
+import hashlib
 import time
 from datetime import UTC, datetime
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Header, Request
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -164,15 +165,7 @@ class WorkflowRunIn(BaseModel):
     inputs: dict[str, Any] = Field(default_factory=dict)
 
 
-@router.post("/workflows/run")
-def workflows_run(body: WorkflowRunIn, k: KeyDep, db: DbDep) -> dict[str, Any]:
-    need_scope(k, "run")
-    started = time.time()
-    run = Run(app_id=k.app.id, version_id=k.version.id, trigger="api", input=body.inputs)
-    db.add(run)
-    db.commit()
-    run_id = run.id
-    enqueue_run(run_id)
+def _wait_run(run_id: str, started: float) -> dict[str, Any]:
     deadline = time.time() + RUN_WAIT_SECONDS
     while time.time() < deadline:
         with SessionLocal() as s:
@@ -193,6 +186,64 @@ def workflows_run(body: WorkflowRunIn, k: KeyDep, db: DbDep) -> dict[str, Any]:
         "error": None,
         "elapsed_ms": int((time.time() - started) * 1000),
     }
+
+
+def _idem_hash(key: str) -> str:
+    return hashlib.sha256(key.encode()).hexdigest()[:32]
+
+
+def _find_idem_run(app_id: str, digest: str, wait_seconds: float = 5.0) -> str | None:
+    """같은 Idempotency-Key로 이미 만든 실행을 찾는다(동시에 온 요청은 만들어질 때까지 잠깐 기다린다)."""
+    deadline = time.time() + wait_seconds
+    while True:
+        with SessionLocal() as s:
+            for r in s.scalars(
+                select(Run).where(Run.app_id == app_id).order_by(Run.created_at.desc()).limit(300)
+            ):
+                if (r.context or {}).get("idem") == digest:
+                    return r.id
+        if time.time() >= deadline:
+            return None
+        time.sleep(0.2)
+
+
+@router.post("/workflows/run")
+def workflows_run(
+    body: WorkflowRunIn,
+    k: KeyDep,
+    db: DbDep,
+    idempotency_key: Annotated[str | None, Header(max_length=100)] = None,
+) -> dict[str, Any]:
+    """흐름을 실행하고 결과를 기다려 돌려준다. `Idempotency-Key` 헤더를 같은 값으로 다시 보내면
+    새로 실행하지 않고 처음 실행의 결과를 돌려준다(네트워크 오류로 재시도해도 두 번 실행되지 않게, 24시간)."""
+    need_scope(k, "run")
+    started = time.time()
+    context: dict[str, Any] = {}
+    if idempotency_key:
+        digest = _idem_hash(idempotency_key)
+        first = ratelimit.allow(f"idem:{k.app.id}:{digest}", 1, window=86400)
+        if not first:
+            existing = _find_idem_run(k.app.id, digest)
+            if existing is None:
+                raise AppError(
+                    409,
+                    "같은 요청이 아직 처리 중이에요.",
+                    "잠시 뒤에 같은 Idempotency-Key로 다시 보내 결과를 받으세요.",
+                )
+            return _wait_run(existing, started)
+        context["idem"] = digest
+    run = Run(
+        app_id=k.app.id,
+        version_id=k.version.id,
+        trigger="api",
+        input=body.inputs,
+        context=context,
+    )
+    db.add(run)
+    db.commit()
+    run_id = run.id
+    enqueue_run(run_id)
+    return _wait_run(run_id, started)
 
 
 @router.get("/runs/{run_id}")

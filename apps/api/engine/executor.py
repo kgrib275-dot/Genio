@@ -52,6 +52,7 @@ BATCH_KEYS = (
     "created",
     "eval",
     "dry_run",
+    "idem",
 )
 
 
@@ -267,14 +268,23 @@ class RunServices:
                 "preview": params,
                 "note": "시험 모드예요. 실제로 보내려면 '실제로 보내기'를 켜고 다시 실행하세요.",
             }
-        return run_connector(
-            self.db,
-            self.workspace_id,
-            connector=connector,
-            credential_id=credential_id,
-            action=action,
-            params=params,
-        )
+        try:
+            return run_connector(
+                self.db,
+                self.workspace_id,
+                connector=connector,
+                credential_id=credential_id,
+                action=action,
+                params=params,
+            )
+        except NodeError as exc:
+            if exc.retryable and not is_read_action(action):
+                # 보내는 동작은 시간 초과처럼 결과를 모르는 실패에서 자동으로 다시 보내면 두 번 나갈 수 있다
+                raise NodeError(
+                    f"{exc.message} 이미 보내졌을 수 있어 자동으로 다시 보내지 않았어요. 받는 곳을 확인한 뒤 필요하면 다시 실행하세요.",
+                    retryable=False,
+                ) from None
+            raise
 
     def run_code(
         self, *, code: str, inputs: dict[str, Any], language: str = "python"

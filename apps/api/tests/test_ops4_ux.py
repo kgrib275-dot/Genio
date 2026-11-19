@@ -1120,3 +1120,60 @@ def test_status_warns_about_public_exposure(
         db.add(User(email="owner@example.com", name="데모", password_hash="x"))  # noqa: S106
         db.commit()
         assert "데모 계정" in status._public_exposure(db)["detail"]
+
+
+def test_service_run_idempotency_key_returns_same_run(client: TestClient, team: Team) -> None:
+    app_id = _new_app(client, team)
+    client.post(f"/api/v1/apps/{app_id}/versions", json={}, headers=team.h("builder"))
+    key = client.post(
+        f"/api/v1/apps/{app_id}/api-keys",
+        json={"name": "idem", "scopes": ["run"]},
+        headers=team.h("builder"),
+    ).json()["key"]
+    h = {"Authorization": f"Bearer {key}", "Idempotency-Key": "order-1001"}
+    first = client.post(
+        "/api/v1/service/workflows/run", json={"inputs": {"message": "a"}}, headers=h
+    )
+    again = client.post(
+        "/api/v1/service/workflows/run", json={"inputs": {"message": "a"}}, headers=h
+    )
+    assert first.status_code == again.status_code == 200, (first.text, again.text)
+    assert first.json()["run_id"] == again.json()["run_id"]
+    other = client.post(
+        "/api/v1/service/workflows/run",
+        json={"inputs": {"message": "a"}},
+        headers={"Authorization": f"Bearer {key}", "Idempotency-Key": "order-1002"},
+    )
+    assert other.json()["run_id"] != first.json()["run_id"]
+    plain = client.post(
+        "/api/v1/service/workflows/run",
+        json={"inputs": {"message": "a"}},
+        headers={"Authorization": f"Bearer {key}"},
+    )
+    assert plain.json()["run_id"] not in (first.json()["run_id"], other.json()["run_id"])
+
+
+def test_failed_send_is_not_retried_automatically(
+    client: TestClient, team: Team, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from api.db import SessionLocal
+    from api.engine import executor
+    from api.engine.executor import RunServices
+    from nodes import NodeError
+
+    def boom(*_a: object, **_k: object) -> dict[str, object]:
+        raise NodeError("응답 시간이 초과됐어요.", retryable=True)
+
+    monkeypatch.setattr(executor, "run_connector", boom)
+    with SessionLocal() as db:
+        svc = RunServices(db, team.ws)
+        with pytest.raises(NodeError) as send:
+            svc.run_connector(
+                connector="slack", credential_id="c", action="post_message", params={}
+            )
+        assert send.value.retryable is False and "이미 보내졌을 수" in send.value.message
+        with pytest.raises(NodeError) as read:
+            svc.run_connector(
+                connector="slack", credential_id="c", action="list_channels", params={}
+            )
+        assert read.value.retryable is True  # 읽기는 그대로 다시 시도한다
