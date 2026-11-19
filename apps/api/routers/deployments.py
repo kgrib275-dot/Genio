@@ -157,6 +157,11 @@ def create_deployment(
         )
     else:
         version = app_svc.latest_version(ctx.db, app_id)
+    from api.services import evals as evals_svc
+
+    problem = evals_svc.gate_problem(ctx.db, app)
+    if problem:
+        raise AppError(409, "품질 점검을 통과하지 못해 배포를 멈췄어요.", problem)
     auto_saved = False
     if version is None and body.version is None:
         # 저장한 버전이 하나도 없으면 지금 작업본을 첫 버전으로 저장하고 배포한다(오류 있으면 저장 단계에서 안내)

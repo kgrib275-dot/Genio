@@ -3,6 +3,7 @@
 from datetime import UTC, datetime, timedelta
 from typing import Any, ClassVar
 
+import pytest
 from fastapi.testclient import TestClient
 
 from api.models import Run
@@ -156,3 +157,89 @@ def test_validation_and_permissions(client: TestClient, team: Team) -> None:
         == 404
     )
     assert client.get(f"/api/v1/apps/{app_id}/evals").status_code == 401
+
+
+def test_ai_judge_scores_only_after_judging_and_gate_blocks_deploy(
+    client: TestClient, team: Team, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    app_id = _setup(client, team, "{{n1.message}} 은(는) 7일 안에 가능해요")
+    cases = [
+        {
+            "name": "환불",
+            "input": {"message": "환불"},
+            "contains": ["7일"],
+            "judge": "환불 기간을 정확히 말한다",
+        },
+        {
+            "name": "배송",
+            "input": {"message": "배송"},
+            "contains": ["7일"],
+            "judge": "배송비를 안내한다",
+        },
+    ]
+    assert _save(client, team, app_id, cases).status_code == 200
+    batch = client.post(f"/api/v1/apps/{app_id}/evals", headers=team.h("builder")).json()["batch"]
+
+    verdicts = {
+        "환불": {"ok": True, "reason": "기간을 맞게 말했어요."},
+        "배송": {"ok": False, "reason": "배송비 안내가 없어요."},
+    }
+    monkeypatch.setattr(evals, "judge_answer", lambda db, app, case, answer: verdicts[case["name"]])
+    # 내역(history)은 심판 전이라 합격·불합격을 세지 않는다
+    before = client.get(f"/api/v1/apps/{app_id}/evals", headers=team.h("operator")).json()[
+        "batches"
+    ][0]
+    assert before["pass_rate"] is None and before["pending_judge"] == 2
+    rep = client.get(f"/api/v1/apps/{app_id}/evals/{batch}", headers=team.h("operator")).json()
+    by = {r["name"]: r for r in rep["results"]}
+    assert by["환불"]["passed"] is True and by["배송"]["passed"] is False
+    assert any(
+        c["name"] == "AI 심판" and not c["ok"] and "배송비" in c["detail"]
+        for c in by["배송"]["checks"]
+    )
+    assert rep["pass_rate"] == 0.5 and rep["pending_judge"] == 0
+    # 한 번 판단한 것은 다시 부르지 않는다
+    monkeypatch.setattr(evals, "judge_answer", lambda *a, **k: pytest.fail("두 번 부르면 안 돼요"))
+    client.get(f"/api/v1/apps/{app_id}/evals/{batch}", headers=team.h("operator"))
+
+    # 배포 전 통과 조건: 80%를 요구하면 50%라 막고, 낮추면 통과
+    gate = f"/api/v1/apps/{app_id}/evals/gate"
+    assert client.put(
+        gate, json={"enabled": True, "min_pass_rate": 0.8}, headers=team.h("builder")
+    ).json()["enabled"]
+    assert client.put(gate, json={"enabled": True}, headers=team.h("operator")).status_code == 403
+    dep = {"channel": "share_link", "access": "workspace"}
+    blocked = client.post(f"/api/v1/apps/{app_id}/deployments", json=dep, headers=team.h("admin"))
+    assert blocked.status_code == 409 and "50%" in blocked.json()["detail"]["hint"]
+    # 질문을 다시 저장해도 조건은 그대로 남는다
+    _save(client, team, app_id, cases)
+    assert client.get(gate, headers=team.h("operator")).json()["min_pass_rate"] == 0.8
+    client.put(gate, json={"enabled": True, "min_pass_rate": 0.5}, headers=team.h("builder"))
+    ok = client.post(f"/api/v1/apps/{app_id}/deployments", json=dep, headers=team.h("admin"))
+    assert ok.status_code == 201, ok.text
+
+
+def test_gate_asks_for_a_check_first_and_judge_failure_is_not_a_pass(
+    client: TestClient, team: Team, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    app_id = _setup(client, team, "{{n1.message}} 답")
+    _save(client, team, app_id, [{"name": "a", "input": {"message": "x"}, "judge": "기준"}])
+    client.put(
+        f"/api/v1/apps/{app_id}/evals/gate",
+        json={"enabled": True, "min_pass_rate": 0.5},
+        headers=team.h("builder"),
+    )
+    dep = {"channel": "share_link", "access": "workspace"}
+    first = client.post(f"/api/v1/apps/{app_id}/deployments", json=dep, headers=team.h("admin"))
+    assert first.status_code == 409 and "먼저" in first.json()["detail"]["hint"]
+
+    # AI 연결이 없어 심판이 실패하면 합격으로 치지 않는다
+    from api.db import SessionLocal
+    from api.models import App
+
+    batch = client.post(f"/api/v1/apps/{app_id}/evals", headers=team.h("builder")).json()["batch"]
+    rep = client.get(f"/api/v1/apps/{app_id}/evals/{batch}", headers=team.h("operator")).json()
+    assert rep["results"][0]["passed"] is False
+    assert "AI 심판을 하지 못했어요" in str(rep["results"][0]["checks"])
+    with SessionLocal() as db:
+        assert db.get(App, app_id) is not None

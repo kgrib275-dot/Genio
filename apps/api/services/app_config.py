@@ -15,7 +15,7 @@ DEFAULT_FEATURES: dict[str, Any] = {
     # 후속(O2): 한 번 성공할 때 아끼는 시간(분). 0이면 효과 리포트에 세지 않는다(추정값)
     "time_saved": {"minutes_per_run": 0},
     # 후속(O1): 평가 세트(질문·조건). 응답에는 싣지만 공개 챗 화면에는 보내지 않는다
-    "eval": {"cases": []},
+    "eval": {"cases": [], "gate": {"enabled": False, "min_pass_rate": 0.8}},
     # 후속(C5): 점검 중이면 배포한 링크·위젯이 새 질문을 받지 않고 안내 문구를 보여 준다
     "maintenance": {"enabled": False, "message": ""},
     # 후속(B12): 배포한 링크·위젯이 하루에 받는 질문·실행 수 상한(0이면 제한 없음). 분산 주소로 비용이 새는 것을 막는다

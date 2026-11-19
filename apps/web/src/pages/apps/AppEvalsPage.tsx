@@ -12,6 +12,8 @@ import {
   formatRate,
   splitTerms,
   useEvalCases,
+  useEvalGate,
+  useSaveEvalGate,
   useEvalHistory,
   useEvalReport,
   useRunEval,
@@ -56,7 +58,7 @@ function CaseEditor({
   return (
     <Card>
       <CardHeader
-        title="평가 질문"
+        title="점검 질문"
         description="질문과 '꼭 들어가야 하는 말', '들어가면 안 되는 말'을 적어 두면 답이 맞는지 규칙으로 채점해요. 챗 앱은 질문 칸에, 흐름 앱은 입력 값 이름과 값에 적어요."
       />
       <CardBody className="space-y-3">
@@ -122,6 +124,18 @@ function CaseEditor({
                   />
                 </label>
               </div>
+              <label className="block space-y-1 text-xs">
+                <span className="font-medium text-slate-600">
+                  AI가 따로 확인할 기준(선택) — 말로 적으세요
+                </span>
+                <Input
+                  aria-label={`질문 ${i + 1} AI 심판 기준`}
+                  placeholder="예: 연차 일수를 정확히 말하고, 모르면 모른다고 답한다"
+                  value={c.judge ?? ""}
+                  disabled={readOnly}
+                  onChange={(e) => set(i, { judge: e.target.value })}
+                />
+              </label>
               <div className="flex flex-wrap items-center gap-4 text-xs text-slate-600">
                 <label className="flex items-center gap-1.5">
                   최대 시간
@@ -232,6 +246,55 @@ function Report({ appId, batch }: { appId: string; batch: string }) {
   );
 }
 
+function GateCard({ appId, readOnly }: { appId: string; readOnly: boolean }) {
+  const gate = useEvalGate(appId);
+  const save = useSaveEvalGate(appId);
+  const g = gate.data ?? { enabled: false, min_pass_rate: 0.8 };
+  const apply = (next: { enabled: boolean; min_pass_rate: number }) =>
+    save.mutate(next, {
+      onSuccess: () => toast.success("배포 전 조건을 저장했어요."),
+      onError: (err) => toast.error(err),
+    });
+  return (
+    <Card className="flex flex-wrap items-center gap-3 p-4">
+      <label className="flex items-center gap-2 text-sm font-medium text-slate-800">
+        <input
+          type="checkbox"
+          checked={g.enabled}
+          disabled={readOnly || save.isPending}
+          onChange={(e) => apply({ ...g, enabled: e.target.checked })}
+        />
+        배포하기 전에 품질 점검을 통과해야 해요
+      </label>
+      {g.enabled && (
+        <label className="flex items-center gap-1.5 text-xs text-slate-600">
+          통과율
+          <Input
+            type="number"
+            min={10}
+            max={100}
+            className="w-20"
+            aria-label="통과해야 하는 비율(%)"
+            defaultValue={Math.round(g.min_pass_rate * 100)}
+            disabled={readOnly}
+            onBlur={(e) =>
+              apply({
+                ...g,
+                min_pass_rate: Math.max(10, Math.min(100, Number(e.target.value) || 80)) / 100,
+              })
+            }
+          />
+          % 이상
+        </label>
+      )}
+      <p className="basis-full text-xs text-slate-500">
+        켜면 가장 최근 점검의 통과율이 기준보다 낮거나 점검한 적이 없을 때 배포가 멈춰요. AI가
+        확인할 기준을 적은 질문은 결과 화면을 열 때 AI가 한 번 판단해요(AI 사용량이 조금 들어요).
+      </p>
+    </Card>
+  );
+}
+
 export default function AppEvalsPage() {
   const { id: appId = "" } = useParams();
   const role = useSession((s) => s.role);
@@ -251,6 +314,7 @@ export default function AppEvalsPage() {
       <div className="mx-auto w-full max-w-5xl space-y-6 px-4 py-6 sm:px-6">
         {cases.isLoading && <Loading />}
         <ErrorBox error={cases.error ?? app.error} />
+        <GateCard appId={appId} readOnly={readOnly} />
         {latest?.dropped && (
           <div
             role="alert"
@@ -279,7 +343,7 @@ export default function AppEvalsPage() {
         )}
         <Card>
           <CardHeader
-            title="평가 돌리기"
+            title="점검하기"
             description="저장한 질문을 지금 작업본으로 한 번에 실행해 채점해요. 먼저 질문을 저장하세요."
             action={
               !readOnly && (
@@ -295,14 +359,14 @@ export default function AppEvalsPage() {
                     })
                   }
                 >
-                  <Play className="h-4 w-4" /> 평가 돌리기
+                  <Play className="h-4 w-4" /> 지금 점검하기
                 </Button>
               )
             }
           />
           <CardBody className="space-y-3">
             {batches.length === 0 && (
-              <p className="text-sm text-slate-500">아직 돌린 평가가 없어요.</p>
+              <p className="text-sm text-slate-500">아직 점검한 적이 없어요.</p>
             )}
             {batches.map((b) => (
               <div key={b.batch}>

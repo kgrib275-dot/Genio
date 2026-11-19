@@ -25,6 +25,7 @@ class CaseIn(BaseModel):
     not_contains: list[str] = Field(default_factory=list, max_length=svc.MAX_TERMS)
     max_seconds: float | None = Field(default=None, ge=0, le=600)
     json_valid: bool = False
+    judge: str = Field(default="", max_length=500)
 
 
 class CasesIn(BaseModel):
@@ -52,6 +53,33 @@ def put_cases(app_id: str, body: CasesIn, ctx: AppBuilders) -> dict[str, Any]:
     )
     ctx.db.commit()
     return {"cases": cleaned, "max_cases": svc.MAX_CASES}
+
+
+class GateIn(BaseModel):
+    enabled: bool = False
+    min_pass_rate: float = Field(default=0.8, ge=0.1, le=1.0)
+
+
+@router.get("/apps/{app_id}/evals/gate")
+def get_gate(app_id: str, ctx: AppViewers) -> dict[str, Any]:
+    return svc.get_gate(app_svc.get_app(ctx.db, app_id))
+
+
+@router.put("/apps/{app_id}/evals/gate")
+def put_gate(app_id: str, body: GateIn, ctx: AppBuilders) -> dict[str, Any]:
+    app = app_svc.get_app(ctx.db, app_id)
+    gate = svc.save_gate(ctx.db, app, body.enabled, body.min_pass_rate)
+    audit(
+        ctx.db,
+        workspace_id=app.workspace_id,
+        user_id=ctx.user.id,
+        action="app.eval_gate",
+        target_type="app",
+        target_id=app.id,
+        meta=gate,
+    )
+    ctx.db.commit()
+    return gate
 
 
 @router.post("/apps/{app_id}/evals", status_code=201)

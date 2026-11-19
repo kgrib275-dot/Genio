@@ -10,6 +10,8 @@ export interface EvalCase {
   not_contains: string[];
   max_seconds: number | null;
   json_valid: boolean;
+  /** AI 심판 기준(비우면 쓰지 않는다) */
+  judge?: string;
 }
 
 export interface EvalCheck {
@@ -104,4 +106,25 @@ export function splitTerms(text: string): string[] {
     .split(/[\n,]/)
     .map((t) => t.trim())
     .filter(Boolean);
+}
+
+export interface EvalGate {
+  enabled: boolean;
+  min_pass_rate: number;
+}
+
+export function useEvalGate(appId: string) {
+  return useQuery({
+    queryKey: ["eval-gate", appId],
+    queryFn: () => api.get<EvalGate>(`/apps/${appId}/evals/gate`),
+    enabled: Boolean(appId),
+  });
+}
+
+export function useSaveEvalGate(appId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (g: EvalGate) => api.put<EvalGate>(`/apps/${appId}/evals/gate`, g),
+    onSuccess: (data) => qc.setQueryData(["eval-gate", appId], data),
+  });
 }
