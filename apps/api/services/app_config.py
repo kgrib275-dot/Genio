@@ -18,6 +18,8 @@ DEFAULT_FEATURES: dict[str, Any] = {
     "eval": {"cases": []},
     # 후속(C5): 점검 중이면 배포한 링크·위젯이 새 질문을 받지 않고 안내 문구를 보여 준다
     "maintenance": {"enabled": False, "message": ""},
+    # 후속(B12): 배포한 링크·위젯이 하루에 받는 질문·실행 수 상한(0이면 제한 없음). 분산 주소로 비용이 새는 것을 막는다
+    "daily_limit": {"per_day": 0},
     "suggested_questions": [],
     "follow_up": {"enabled": False},
     "citations": {"enabled": True},
@@ -95,6 +97,11 @@ def patch_features(saved: dict[str, Any] | None, patch: dict[str, Any]) -> dict[
         str(w).strip()[:30] for w in current["handoff"]["keywords"] if str(w).strip()
     ][:30]
     current["handoff"]["message"] = str(current["handoff"]["message"] or "")[:300]
+    try:
+        per_day = int(current["daily_limit"].get("per_day") or 0)
+    except (TypeError, ValueError):
+        per_day = 0
+    current["daily_limit"]["per_day"] = max(0, min(per_day, 1_000_000))
     current["maintenance"]["enabled"] = bool(current["maintenance"].get("enabled"))
     current["maintenance"]["message"] = str(current["maintenance"].get("message") or "").strip()[
         :300

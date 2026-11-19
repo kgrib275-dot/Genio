@@ -3,6 +3,7 @@ import {
   BookMarked,
   BadgeInfo,
   Clock,
+  Gauge,
   Wrench,
   Eye,
   EyeOff,
@@ -267,6 +268,27 @@ export function FeaturesForm({
               }
             />
           )}
+        </FeatureRow>
+        <FeatureRow
+          icon={<Gauge className="h-4 w-4" />}
+          title="하루 사용 상한"
+          description="공유 링크·위젯이 하루에 받는 질문·실행 수예요. 넘으면 그날은 더 받지 않아요. 0이면 제한이 없어요(분당 제한은 따로 있어요)."
+        >
+          <label className="flex items-center gap-2 text-xs">
+            <Input
+              type="number"
+              min={0}
+              max={1000000}
+              aria-label="하루 사용 상한"
+              className="w-28"
+              value={f.daily_limit.per_day}
+              disabled={readOnly}
+              onChange={(e) =>
+                setF({ ...f, daily_limit: { per_day: Math.max(0, Number(e.target.value) || 0) } })
+              }
+            />
+            건/일
+          </label>
         </FeatureRow>
         <FeatureRow
           icon={<Clock className="h-4 w-4" />}

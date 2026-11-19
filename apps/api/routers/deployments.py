@@ -359,6 +359,17 @@ def _check_open(app: App) -> None:
         )
 
 
+def _check_daily(app: App) -> None:
+    """앱 기능에서 정한 하루 상한(질문·실행 합산)을 넘으면 더 받지 않는다."""
+    per_day = int((merged_features(app.features).get("daily_limit") or {}).get("per_day") or 0)
+    if per_day and not ratelimit.allow(f"day:{app.id}", per_day, window=86400):
+        raise AppError(
+            429,
+            "오늘은 이 앱이 받을 수 있는 질문을 모두 받았어요.",
+            "내일 다시 이용하거나 앱 담당자에게 상한을 늘려 달라고 요청하세요.",
+        )
+
+
 def _check_access(
     db: Session,
     dep: Deployment,
@@ -489,6 +500,7 @@ def public_chat(
         raise AppError(429, "요청이 너무 많아요.", "1분 뒤에 다시 시도하세요.")
     _check_access(db, dep, app, user)
     _check_open(app)
+    _check_daily(app)
     files = _own_files(db, app, body.files)
     req = ChatRequest(
         app=app,
@@ -530,6 +542,7 @@ def public_form_run(
         raise AppError(429, "요청이 너무 많아요.", "1분 뒤에 다시 시도하세요.")
     _check_access(db, dep, app, user)
     _check_open(app)
+    _check_daily(app)
     run_input = dict(body.input or {})
     if len(json.dumps(run_input, ensure_ascii=False, default=str)) > 20_000:
         raise AppError(413, "입력이 너무 길어요.", "내용을 줄여서 다시 보내 주세요.")

@@ -578,6 +578,8 @@ export interface AppFeatures {
   time_saved: { minutes_per_run: number };
   /** 후속 C5: 점검 중 표시(켜면 배포한 링크·위젯이 안내만 보여 줘요) */
   maintenance: { enabled: boolean; message: string };
+  /** 후속 B12: 하루에 받는 질문·실행 수 상한(0이면 제한 없음) */
+  daily_limit: { per_day: number };
 }
 
 export interface AiNotice {
@@ -600,6 +602,7 @@ export const DEFAULT_FEATURES: AppFeatures = {
   ai_notice: { enabled: true, text: AI_NOTICE_TEXT },
   time_saved: { minutes_per_run: 0 },
   maintenance: { enabled: false, message: "" },
+  daily_limit: { per_day: 0 },
 };
 
 /** 서버가 일부 키를 빠뜨려도 화면이 깨지지 않게 기본값과 합친다. */
@@ -618,6 +621,7 @@ export function normalizeFeatures(f: Partial<AppFeatures> | null | undefined): A
     ai_notice: { ...DEFAULT_FEATURES.ai_notice, ...src.ai_notice },
     time_saved: { ...DEFAULT_FEATURES.time_saved, ...src.time_saved },
     maintenance: { ...DEFAULT_FEATURES.maintenance, ...src.maintenance },
+    daily_limit: { ...DEFAULT_FEATURES.daily_limit, ...src.daily_limit },
     ...(src.on_failure ? { on_failure: { app_id: src.on_failure.app_id ?? null } } : {}),
   };
 }

@@ -1075,3 +1075,26 @@ def test_template_blocks_memory_bombs_but_keeps_normal_use() -> None:
 def test_webhook_rejects_oversized_declared_body(client: TestClient) -> None:
     res = client.post("/api/v1/hooks/nothing", content=b"x" * (1_048_576 + 10))
     assert res.status_code == 413
+
+
+def test_daily_limit_caps_public_chat(client: TestClient, team: Team) -> None:
+    from api.tests.test_v02_features import chat, deploy, faq_app
+
+    app_id = faq_app(client, team)
+    token = deploy(client, team, app_id)
+    res = client.patch(
+        f"/api/v1/apps/{app_id}/features",
+        json={"daily_limit": {"per_day": 2}},
+        headers=team.h("builder"),
+    )
+    assert res.json()["features"]["daily_limit"]["per_day"] == 2
+    assert chat(client, token, "하나") and chat(client, token, "둘")
+    third = client.post(f"/api/v1/public/apps/{token}/chat", json={"message": "셋"})
+    assert third.status_code == 429 and "내일" in third.json()["detail"]["hint"]
+    # 상한을 끄면(0) 다시 받는다
+    client.patch(
+        f"/api/v1/apps/{app_id}/features",
+        json={"daily_limit": {"per_day": 0}},
+        headers=team.h("builder"),
+    )
+    assert chat(client, token, "넷")
