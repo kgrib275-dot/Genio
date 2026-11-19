@@ -159,10 +159,14 @@ class MfaLoginIn(BaseModel):
 
 def _check_second_factor(db: DbDep, user: User, code: str) -> bool:
     """앱 코드 6자리 또는 복구 코드(한 번 쓰면 사라짐)."""
-    if user.totp_secret_encrypted and totp.verify(
-        decrypt_str(user.totp_secret_encrypted.encode()), code
-    ):
-        return True
+    if user.totp_secret_encrypted:
+        step = totp.match_step(decrypt_str(user.totp_secret_encrypted.encode()), code)
+        last = int((user.preferences or {}).get("totp_last_step") or 0)
+        if step is not None and step > last:
+            # 한 번 쓴 코드(와 그 이전 코드)는 다시 받지 않는다(엿본 코드의 재사용 방지)
+            user.preferences = {**(user.preferences or {}), "totp_last_step": step}
+            db.commit()
+            return True
     h = totp.hash_code(code)
     codes = list(user.recovery_codes or [])
     if h in codes:
@@ -243,15 +247,41 @@ class PasswordCodeIn(BaseModel):
     code: str | None = Field(default=None, max_length=20)
 
 
+SECRET_TRY_LIMIT = 5
+SECRET_TRY_WINDOW = 15 * 60
+
+
+def guard_attempts(user: User, kind: str) -> None:
+    """로그인한 사람이 비밀번호·2단계 코드를 계속 틀려 보지 못하게 한다(토큰을 훔친 사람의 무차별 대입 방지)."""
+    from api.core import ratelimit
+
+    if ratelimit.fail_count(f"acct:{kind}:{user.id}", SECRET_TRY_WINDOW) >= SECRET_TRY_LIMIT:
+        raise AppError(
+            429,
+            "확인에 너무 많이 실패했어요.",
+            "15분 뒤에 다시 시도하세요. 본인이 아니라면 비밀번호를 바꾸세요.",
+        )
+
+
+def note_failure(user: User, kind: str) -> None:
+    from api.core import ratelimit
+
+    ratelimit.add_fail(f"acct:{kind}:{user.id}", SECRET_TRY_WINDOW)
+
+
 def _need_password(user: User, password: str) -> None:
+    guard_attempts(user, "password")
     if not verify_password(password, user.password_hash):
+        note_failure(user, "password")
         raise AppError(400, "비밀번호가 맞지 않아요.", "지금 쓰는 비밀번호를 넣으세요.")
 
 
 @router.post("/me/2fa/disable")
 def disable_2fa(body: PasswordCodeIn, user: CurrentUser, db: DbDep) -> dict[str, Any]:
     _need_password(user, body.password)
+    guard_attempts(user, "totp")
     if user.totp_enabled and not _check_second_factor(db, user, body.code or ""):
+        note_failure(user, "totp")
         raise AppError(400, "인증 코드가 맞지 않아요.", "앱의 6자리 숫자나 복구 코드를 넣으세요.")
     user.totp_enabled = False
     user.totp_secret_encrypted = None

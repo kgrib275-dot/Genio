@@ -5,6 +5,15 @@ import sys
 import types
 from typing import Any
 
+try:  # 리눅스·맥에서만 있다. 사용자 코드가 메모리·CPU를 끝없이 쓰지 못하게 자식 프로세스에 한도를 둔다.
+    import importlib
+
+    _res: Any = importlib.import_module("resource")
+    _res.setrlimit(_res.RLIMIT_AS, (768 * 1024 * 1024, 768 * 1024 * 1024))
+    _res.setrlimit(_res.RLIMIT_CPU, (30, 30))
+except (ImportError, ValueError, OSError):
+    pass
+
 # 코드에서 쓸 수 있게 열어 주는 이름(모듈별). 실제 모듈 객체는 코드에 넘기지 않고, 이 이름만 담은
 # 껍데기(SimpleNamespace)를 넘긴다. 실제 모듈을 넘기면 `statistics.sys.modules["os"]`처럼 모듈이
 # 안에 품은 sys·os 같은 모듈로 빠져나갈 수 있다(2026-11 보안 점검에서 확인).

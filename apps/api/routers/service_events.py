@@ -120,6 +120,9 @@ def _receive(
 
 @router.post("/events/{token}")
 async def receive_event(token: str, request: Request) -> JSONResponse:
+    declared = request.headers.get("content-length", "")
+    if declared.isdigit() and int(declared) > MAX_BODY_BYTES:
+        raise AppError(413, "보낸 내용이 너무 커요(256KB 초과).", "필요한 값만 담아 다시 보내세요.")
     raw = await request.body()
     if len(raw) > MAX_BODY_BYTES:
         raise AppError(413, "보낸 내용이 너무 커요(256KB 초과).", "필요한 값만 담아 다시 보내세요.")

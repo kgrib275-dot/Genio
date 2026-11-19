@@ -3,6 +3,7 @@
 import json
 from typing import Any, cast
 
+import httpx
 import openai
 
 from api.llm.base import (
@@ -113,6 +114,10 @@ class OpenAIAdapter:
         kwargs: dict[str, Any] = {"api_key": api_key, "max_retries": 2, "timeout": 120.0}
         if http_client is not None:  # 테스트용 전송 계층 주입
             kwargs["http_client"] = http_client
+        elif base_url:
+            # 사용자가 적은 주소로 나가는 호출은 리다이렉트를 따라가지 않는다(공개 주소가 내부 주소로
+            # 돌려보내는 방식으로 사설망 검사를 피하지 못하게)
+            kwargs["http_client"] = httpx.Client(follow_redirects=False, timeout=120.0)
         if provider == "azure":
             # Azure OpenAI: base_url = https://<리소스>.openai.azure.com/ (?api-version=... 선택)
             # 모델 이름 자리에는 Azure의 '배포 이름'을 쓴다.

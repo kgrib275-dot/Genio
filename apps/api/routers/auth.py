@@ -124,6 +124,9 @@ def auth_config(db: DbDep) -> dict[str, bool]:
 def signup(body: SignupIn, request: Request, db: DbDep) -> dict[str, Any]:
     if not system.get_system(db)["allow_signup"]:
         raise AppError(403, "지금은 새로 가입할 수 없어요.", "관리자에게 초대 링크를 요청하세요.")
+    # 같은 주소에서 계정·워크스페이스를 대량으로 만들지 못하게 한다(1시간에 10번)
+    if not ratelimit.allow(f"signup:{client_ip(request)}", 10, window=3600):
+        raise AppError(429, "가입 요청이 너무 많아요.", "1시간 뒤에 다시 시도하세요.")
     email = body.email.lower()
     agreements = _require_agreement(body.agree_terms, body.agree_privacy)
     check_password(body.password, email)
@@ -461,7 +464,11 @@ class PasswordIn(BaseModel):
 def change_password(
     body: PasswordIn, request: Request, user: CurrentUser, db: DbDep
 ) -> dict[str, Any]:
+    from api.routers.account import guard_attempts, note_failure
+
+    guard_attempts(user, "password")
     if not verify_password(body.current_password, user.password_hash):
+        note_failure(user, "password")
         raise AppError(400, "지금 비밀번호가 맞지 않아요.", "한/영 키를 확인하고 다시 입력하세요.")
     if body.current_password == body.new_password:
         raise AppError(400, "새 비밀번호가 지금과 같아요.", "다른 비밀번호를 정하세요.")

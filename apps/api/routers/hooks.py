@@ -153,6 +153,9 @@ async def _handle(token: str, request: Request, raw: bytes) -> JSONResponse:
 
 @router.post("/hooks/{token}")
 async def hook_post(token: str, request: Request) -> JSONResponse:
+    declared = request.headers.get("content-length", "")
+    if declared.isdigit() and int(declared) > 1_048_576:
+        raise AppError(413, "보낸 내용이 너무 커요.", "필요한 값만 담아 다시 보내세요.")
     return await _handle(token, request, await request.body())
 
 

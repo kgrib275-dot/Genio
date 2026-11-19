@@ -6,7 +6,7 @@ from collections.abc import Iterator
 from typing import Any
 
 from jinja2 import ChainableUndefined, Undefined
-from jinja2.exceptions import TemplateError
+from jinja2.exceptions import SecurityError, TemplateError
 from jinja2.sandbox import SandboxedEnvironment
 from simpleeval import EvalWithCompoundTypes
 
@@ -22,7 +22,35 @@ def _finalize(value: Any) -> Any:
     return value
 
 
-_env = SandboxedEnvironment(autoescape=False, finalize=_finalize, undefined=ChainableUndefined)
+MAX_RENDER_CHARS = 1_000_000  # 문장 틀 결과 길이 한도
+_MAX_SEQ = 200_000  # 'a' * 큰수 같은 곱셈으로 만들 수 있는 길이 한도
+
+
+class _LimitedEnvironment(SandboxedEnvironment):
+    """곱셈·거듭제곱을 가로채 터무니없이 큰 값을 만들지 못하게 한다(시간·메모리 폭주 방지)."""
+
+    intercepted_binops = frozenset({"*", "**"})
+
+    def call_binop(self, context: Any, operator: str, left: Any, right: Any) -> Any:
+        if operator == "*":
+            for seq, n in ((left, right), (right, left)):
+                if (
+                    isinstance(seq, str | bytes | list | tuple)
+                    and isinstance(n, int)
+                    and len(seq) * max(n, 0) > _MAX_SEQ
+                ):
+                    raise SecurityError("반복해서 만드는 글이 너무 길어요.")
+        if (
+            operator == "**"
+            and isinstance(left, int)
+            and isinstance(right, int)
+            and abs(left).bit_length() * max(right, 0) > 100_000
+        ):
+            raise SecurityError("거듭제곱 값이 너무 커요.")
+        return super().call_binop(context, operator, left, right)
+
+
+_env = _LimitedEnvironment(autoescape=False, finalize=_finalize, undefined=ChainableUndefined)
 
 
 class TemplateRenderError(Exception):
@@ -33,7 +61,14 @@ def render(template: str, scope: dict[str, Any]) -> str:
     if "{{" not in template and "{%" not in template:
         return template
     try:
-        return _env.from_string(template).render(scope)
+        out: list[str] = []
+        size = 0
+        for chunk in _env.from_string(template).generate(scope):
+            size += len(chunk)
+            if size > MAX_RENDER_CHARS:
+                raise TemplateRenderError("문장 틀의 결과가 너무 길어요. 반복을 줄여 주세요.")
+            out.append(chunk)
+        return "".join(out)
     except TemplateError as exc:
         raise TemplateRenderError(f"문장 틀을 채우지 못했어요: {exc.message}") from exc
 

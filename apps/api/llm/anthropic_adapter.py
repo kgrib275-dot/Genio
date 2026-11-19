@@ -11,6 +11,7 @@ import re
 from typing import Any
 
 import anthropic
+import httpx
 
 from api.llm.base import (
     KIND_AUTH,
@@ -113,6 +114,8 @@ class AnthropicAdapter:
             kwargs["base_url"] = base_url
         if http_client is not None:  # 테스트용 전송 계층 주입
             kwargs["http_client"] = http_client
+        elif base_url:
+            kwargs["http_client"] = httpx.Client(follow_redirects=False, timeout=120.0)
         self.client = anthropic.Anthropic(**kwargs)
 
     def _extra(self, model: str, effort: str | None) -> dict[str, Any]:

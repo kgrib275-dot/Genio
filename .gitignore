@@ -28,3 +28,6 @@ Thumbs.db
 
 # DB 자동 백업 파일(docker-compose backup 서비스)
 backups/
+
+# 개발용 SQLite
+genio-dev.db

@@ -993,3 +993,85 @@ def test_improvement_answer_is_idempotent(client: TestClient, team: Team) -> Non
     assert first["annotation_id"] == second["annotation_id"]
     anns = client.get(f"/api/v1/apps/{app_id}/annotations", headers=team.h("builder")).json()
     assert len(anns) == 1
+
+
+# ---------------- 인증·입력 방어 ----------------
+def test_totp_code_cannot_be_replayed_and_password_checks_are_limited(
+    client: TestClient, team: Team
+) -> None:
+    from api.core import ratelimit, totp
+
+    ratelimit.reset()
+    h = team.h("operator")
+    secret = client.post("/api/v1/me/2fa/setup", headers=h).json()["secret"]
+    client.post("/api/v1/me/2fa/enable", json={"code": totp.totp(secret)}, headers=h)
+
+    def login() -> str:
+        return str(
+            client.post(
+                "/api/v1/auth/login",
+                json={"email": "operator@test.local", "password": "password123!"},
+            )
+            .json()
+            .get("mfa_token", "")
+        )
+
+    code = totp.totp(secret)
+    first = client.post("/api/v1/auth/login/mfa", json={"mfa_token": login(), "code": code})
+    again = client.post("/api/v1/auth/login/mfa", json={"mfa_token": login(), "code": code})
+    assert first.status_code == 200
+    assert again.status_code == 401  # 같은 코드를 엿봐서 다시 써도 받지 않는다
+    # 비밀번호 확인 API는 계속 틀려 볼 수 없다
+    ratelimit.reset()
+    for _ in range(5):
+        r = client.post(
+            "/api/v1/me/password",
+            json={"current_password": "wrong-password-1", "new_password": "NewPassw0rd!x"},
+            headers=h,
+        )
+        assert r.status_code == 400
+    blocked = client.post(
+        "/api/v1/me/password",
+        json={"current_password": "wrong-password-1", "new_password": "NewPassw0rd!x"},
+        headers=h,
+    )
+    assert blocked.status_code == 429 and "15분" in blocked.json()["detail"]["hint"]
+    ratelimit.reset()
+
+
+def test_signup_is_rate_limited_per_address(client: TestClient) -> None:
+    from api.core import ratelimit
+
+    ratelimit.reset()
+    codes = []
+    for i in range(12):
+        res = client.post(
+            "/api/v1/auth/signup",
+            json={
+                "email": f"bulk{i}@example.com",
+                "password": "Passw0rd!test",
+                "name": "대량",
+                "workspace_name": f"팀{i}",
+                "agree_terms": True,
+                "agree_privacy": True,
+            },
+        )
+        codes.append(res.status_code)
+    assert 429 in codes and codes[0] in (200, 201)
+    ratelimit.reset()
+
+
+def test_template_blocks_memory_bombs_but_keeps_normal_use() -> None:
+    from api.engine.templating import TemplateRenderError, render
+
+    assert render("{{ name }}님 {{ 2 * 3 }} {{ '-' * 3 }}", {"name": "하나"}) == "하나님 6 ---"
+    for bomb in ("{{ 'a' * 100000000 }}", "{{ 9 ** 99999 }}", "{{ [0] * 99999999 }}"):
+        with pytest.raises(TemplateRenderError):
+            render(bomb, {})
+    with pytest.raises(TemplateRenderError):
+        render("{% for i in range(5000) %}{{ 'x' * 1000 }}{% endfor %}", {})
+
+
+def test_webhook_rejects_oversized_declared_body(client: TestClient) -> None:
+    res = client.post("/api/v1/hooks/nothing", content=b"x" * (1_048_576 + 10))
+    assert res.status_code == 413

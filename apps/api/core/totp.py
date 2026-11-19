@@ -36,13 +36,22 @@ def totp(secret: str, at: float | None = None) -> str:
     return hotp(secret, int((at if at is not None else time.time()) // PERIOD))
 
 
-def verify(secret: str, code: str, at: float | None = None, window: int = 1) -> bool:
-    """앞뒤 30초(window=1)까지 맞으면 통과. 시계가 조금 어긋나도 된다."""
+def match_step(secret: str, code: str, at: float | None = None, window: int = 1) -> int | None:
+    """맞는 코드의 30초 번호(없으면 None). 같은 번호를 두 번 받지 않으려고 쓴다."""
     code = "".join(ch for ch in str(code) if ch in "0123456789")
     if len(code) != DIGITS:
-        return False
+        return None
     now = int((at if at is not None else time.time()) // PERIOD)
-    return any(hmac.compare_digest(hotp(secret, now + d), code) for d in range(-window, window + 1))
+    found: int | None = None
+    for d in range(-window, window + 1):
+        if hmac.compare_digest(hotp(secret, now + d), code):
+            found = now + d
+    return found
+
+
+def verify(secret: str, code: str, at: float | None = None, window: int = 1) -> bool:
+    """앞뒤 30초(window=1)까지 맞으면 통과. 시계가 조금 어긋나도 된다."""
+    return match_step(secret, code, at, window) is not None
 
 
 def otpauth_uri(secret: str, account: str, issuer: str = "Genio") -> str:

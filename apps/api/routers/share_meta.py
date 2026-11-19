@@ -62,7 +62,7 @@ def share_logo(token: str, db: DbDep) -> Response:
     f = db.get(StoredFile, file_id) if file_id else None
     if app is None or f is None or not svc.logo_ok(f, app.workspace_id):
         return Response(status_code=404)
-    return Response(f.content, media_type=f.mime, headers=CACHE)
+    return Response(storage.read_content(f), media_type=f.mime, headers=CACHE)
 
 
 @router.api_route(
