@@ -12,7 +12,7 @@ import {
   PackagePlus,
 } from "lucide-react";
 import { useState, type ReactNode } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { PageContainer } from "@/app/Layout";
 import { ErrorBox } from "@/components/ErrorBox";
 import { Button } from "@/components/ui/button";
@@ -28,6 +28,7 @@ import {
   writeDone,
   type SampleStatus,
 } from "@/lib/api/learn";
+import { useCreateApp } from "@/lib/api/apps";
 import { cn } from "@/lib/cn";
 import { canEdit, useSession } from "@/store/session";
 
@@ -59,7 +60,7 @@ function SampleLinks({ lesson, status }: { lesson: Lesson; status?: SampleStatus
         return a ? (
           <Link
             key={no}
-            to={`/apps/${a.id}/builder`}
+            to={`/apps/${a.id}/builder?lesson=${lesson.id}`}
             className="inline-flex items-center gap-1 rounded-lg border border-indigo-200 bg-indigo-50 px-2.5 py-1.5 text-xs font-medium text-indigo-700 hover:bg-indigo-100"
           >
             <ExternalLink className="h-3.5 w-3.5" /> {a.name} 열기
@@ -84,6 +85,8 @@ function LessonCard({
   status,
   open,
   onToggle,
+  onPractice,
+  practicing,
 }: {
   lesson: Lesson;
   done: boolean;
@@ -91,6 +94,9 @@ function LessonCard({
   status?: SampleStatus;
   open: boolean;
   onToggle: () => void;
+  /** 빈 앱을 만들고 빌더에서 이 강좌의 단계를 따라 하게 한다(편집 권한이 있을 때만) */
+  onPractice?: () => void;
+  practicing?: boolean;
 }) {
   return (
     <Card className={cn("overflow-hidden", done && "opacity-80")}>
@@ -156,9 +162,17 @@ function LessonCard({
               <b className="text-slate-700">Dify·n8n을 써 봤다면</b> — {lesson.compare}
             </p>
           )}
-          <Button size="sm" variant={done ? "outline" : "primary"} onClick={onToggleDone}>
-            <CheckCircle2 className="h-3.5 w-3.5" /> {done ? "다시 볼게요" : "다 해 봤어요"}
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            {onPractice && (
+              <Button size="sm" onClick={onPractice} disabled={practicing}>
+                <GraduationCap className="h-3.5 w-3.5" />
+                {practicing ? "만드는 중…" : "여기서 실습하기"}
+              </Button>
+            )}
+            <Button size="sm" variant={done ? "outline" : "outline"} onClick={onToggleDone}>
+              <CheckCircle2 className="h-3.5 w-3.5" /> {done ? "다시 볼게요" : "다 해 봤어요"}
+            </Button>
+          </div>
         </div>
       )}
     </Card>
@@ -180,6 +194,23 @@ export default function LearnPage() {
   const install = useInstallSamples(ws);
   const [done, setDone] = useState<string[]>(readDone);
   const [open, setOpen] = useState<string | null>(LESSONS[0]?.id ?? null);
+  const navigate = useNavigate();
+  const create = useCreateApp(ws);
+  const canPractice = canEdit(role);
+  // 실습: 빈 앱을 만들고 빌더에서 강좌의 다음 할 일을 옆에 띄워 준다
+  const practice = (l: Lesson) =>
+    create.mutate(
+      {
+        name: `실습 · ${l.title.replace(/^\d+\.\s*/, "")}`,
+        type: "chat",
+        description: "배우기 강좌를 따라 하려고 만든 연습용 앱이에요. 지워도 돼요.",
+        icon: "🎓",
+      },
+      {
+        onSuccess: (app) => navigate(`/apps/${app.id}/builder?lesson=${l.id}`),
+        onError: (err) => toast.error(err),
+      },
+    );
 
   const toggleDone = (id: string) =>
     setDone((d) => {
@@ -262,6 +293,8 @@ export default function LearnPage() {
                 status={status.data}
                 open={open === l.id}
                 onToggle={() => setOpen((o) => (o === l.id ? null : l.id))}
+                onPractice={canPractice && l.samples.length === 0 ? () => practice(l) : undefined}
+                practicing={create.isPending}
               />
             ))}
           </div>

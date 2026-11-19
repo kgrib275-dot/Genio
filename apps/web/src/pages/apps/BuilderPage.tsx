@@ -21,6 +21,7 @@ import { viewportCenter } from "@/components/canvas/viewportBridge";
 import { defaultData } from "@/components/canvas/nodeUtils";
 import { RunPanel } from "@/components/canvas/RunPanel";
 import { TestRunDialog } from "@/components/canvas/TestRunDialog";
+import { PracticePanel } from "@/components/learn/PracticePanel";
 import { ErrorBox, Loading } from "@/components/ErrorBox";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/components/ui/toast-store";
@@ -484,6 +485,16 @@ export default function BuilderPage() {
         canBatch={app.data?.type === "workflow"}
         onRun={(input, opts) => void onRun(input, opts?.dryRun)}
       />
+      {params.get("lesson") && (
+        <PracticePanel
+          lessonId={params.get("lesson") ?? ""}
+          onClose={() => {
+            const next = new URLSearchParams(params);
+            next.delete("lesson");
+            setParams(next, { replace: true });
+          }}
+        />
+      )}
       <ConflictDialog appId={appId} />
       {previewOpen && (
         <Suspense fallback={null}>

@@ -1,20 +1,42 @@
 """DB 엔진·세션. 운영은 PostgreSQL, 단위 테스트는 SQLite를 쓴다."""
 
 from collections.abc import Iterator
+from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import JSON, Text, create_engine, event
+from sqlalchemy import JSON, DateTime, Text, create_engine, event
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 from sqlalchemy.pool import StaticPool
-from sqlalchemy.types import TypeEngine
+from sqlalchemy.types import TypeDecorator, TypeEngine
 
 from api.config import get_settings
 
 # PostgreSQL 전용 타입을 SQLite에서도 쓸 수 있게 변형한다.
 JsonType: TypeEngine[Any] = JSONB().with_variant(JSON(), "sqlite")
 TextArray: TypeEngine[Any] = ARRAY(Text()).with_variant(JSON(), "sqlite")
+
+
+class UTCDateTime(TypeDecorator[datetime]):
+    """시각은 늘 UTC 기준으로 다룬다.
+
+    PostgreSQL(timestamptz)은 원래 시간대가 붙어 나오지만 SQLite는 붙지 않아서, 개발·시험 환경에서만
+    '9시간 전'처럼 어긋나 보였다. 읽을 때 시간대 없는 값에 UTC를 붙여 두 환경이 같게 동작하게 한다.
+    """
+
+    impl = DateTime
+    cache_ok = True
+
+    def process_bind_param(self, value: datetime | None, dialect: Any) -> datetime | None:
+        if value is not None and value.tzinfo is not None:
+            return value.astimezone(UTC)
+        return value
+
+    def process_result_value(self, value: datetime | None, dialect: Any) -> datetime | None:
+        if value is not None and value.tzinfo is None:
+            return value.replace(tzinfo=UTC)
+        return value
 
 
 class Base(DeclarativeBase):

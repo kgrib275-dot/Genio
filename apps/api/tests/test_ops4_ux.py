@@ -449,3 +449,141 @@ def test_maintenance_mode_blocks_public_chat_but_still_shows_page(
     )
     assert chat(client, token, "안녕")
     assert client.get(f"/api/v1/public/apps/{token}").json()["maintenance"]["enabled"] is False
+
+
+def _signed_slack(secret: str, body: str, ts: float | None = None) -> dict[str, str]:
+    import time
+
+    from api.services import messenger as m
+
+    stamp = str(int(ts if ts is not None else time.time()))
+    return {
+        "x-slack-request-timestamp": stamp,
+        "x-slack-signature": m.slack_signature(secret, stamp, body.encode()),
+        "content-type": "application/x-www-form-urlencoded",
+    }
+
+
+def test_slack_slash_command_answers_via_response_url(
+    client: TestClient, team: Team, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from urllib.parse import urlencode
+
+    from api.routers import messenger as router_mod
+    from api.tests.test_v02_features import deploy, faq_app
+
+    app_id = faq_app(client, team)
+    token = deploy(client, team, app_id)
+    base = f"/api/v1/public/messenger/{token}/slack"
+    assert client.get(f"/api/v1/apps/{app_id}/messenger", headers=team.h("builder")).json()[
+        "slack"
+    ] == {"configured": False, "hint": ""}
+    form = urlencode(
+        {
+            "text": "연차는 며칠이에요?",
+            "user_id": "U1",
+            "team_id": "T1",
+            "response_url": "https://hooks.slack.com/commands/T1/1/abc",
+        }
+    )
+    # 연결하기 전에는 있는지도 알려 주지 않는다
+    assert client.post(base, content=form, headers=_signed_slack("x" * 12, form)).status_code == 404
+    # 설정: 제작자만, 짧은 비밀값은 거절
+    put = f"/api/v1/apps/{app_id}/messenger/slack"
+    assert client.put(put, json={"secret": "abc"}, headers=team.h("builder")).status_code == 422
+    assert (
+        client.put(put, json={"secret": "s3cret-signing"}, headers=team.h("operator")).status_code
+        == 403
+    )
+    ok = client.put(put, json={"secret": "s3cret-signing"}, headers=team.h("builder"))
+    assert ok.status_code == 200, ok.text
+    info = ok.json()
+    assert info["slack"]["configured"] is True and "s3cret-signing" not in str(info)
+    assert info["slack_url"].endswith(f"/public/messenger/{token}/slack")
+    # 서명이 틀리거나 오래되면 거절
+    assert (
+        client.post(base, content=form, headers=_signed_slack("wrong-secret", form)).status_code
+        == 401
+    )
+    old = client.post(base, content=form, headers=_signed_slack("s3cret-signing", form, ts=1))
+    assert old.status_code == 401
+    # 맞는 서명: 바로 '찾는 중'을 돌려주고, 답은 response_url로 보낸다
+    sent: list[tuple[str, str]] = []
+    monkeypatch.setattr(router_mod, "_post_slack", lambda url, text: sent.append((url, text)))
+    res = client.post(base, content=form, headers=_signed_slack("s3cret-signing", form))
+    assert res.status_code == 200, res.text
+    assert res.json()["response_type"] == "ephemeral" and "찾아보는 중" in res.json()["text"]
+    assert len(sent) == 1 and sent[0][0].startswith("https://hooks.slack.com/")
+    assert "연차는 며칠이에요?" in sent[0][1]  # 에코 앱이라 질문이 그대로 돌아온다
+    # 빈 질문은 사용법을 알려 준다
+    empty = urlencode({"text": "  ", "response_url": "https://hooks.slack.com/x"})
+    r2 = client.post(base, content=empty, headers=_signed_slack("s3cret-signing", empty))
+    assert "궁금한 것" in r2.json()["text"]
+    # 연결 끊기
+    assert client.delete(put, headers=team.h("builder")).json()["slack"]["configured"] is False
+    assert (
+        client.post(base, content=form, headers=_signed_slack("s3cret-signing", form)).status_code
+        == 404
+    )
+
+
+def test_teams_outgoing_webhook_answers_inline_and_checks_hmac(
+    client: TestClient, team: Team
+) -> None:
+    import base64
+    import json
+
+    from api.services import messenger as m
+    from api.tests.test_v02_features import deploy, faq_app
+
+    app_id = faq_app(client, team)
+    token = deploy(client, team, app_id)
+    secret = base64.b64encode(b"teams-shared-secret-bytes").decode()
+    client.put(
+        f"/api/v1/apps/{app_id}/messenger/teams", json={"secret": secret}, headers=team.h("builder")
+    )
+    url = f"/api/v1/public/messenger/{token}/teams"
+    body = json.dumps(
+        {
+            "type": "message",
+            "text": "<at>제니오</at> 재택은 며칠?",
+            "from": {"id": "u1"},
+            "conversation": {"id": "c1"},
+        }
+    ).encode()
+    bad = client.post(url, content=body, headers={"authorization": "HMAC AAAA"})
+    assert bad.status_code == 401
+    good = client.post(
+        url, content=body, headers={"authorization": m.teams_signature(secret, body)}
+    )
+    assert good.status_code == 200, good.text
+    out = good.json()
+    assert out["type"] == "message" and "재택은 며칠?" in out["text"] and "<at>" not in out["text"]
+
+
+def test_messenger_helpers() -> None:
+    from api.services import messenger as m
+
+    assert m.clean_question("<at>제니오</at>&nbsp; 안녕하세요 <b>!</b>") == "안녕하세요 !"
+    assert m.valid_slack_response_url("https://hooks.slack.com/commands/a")
+    assert not m.valid_slack_response_url("https://evil.example.com/x")
+    assert not m.valid_slack_response_url("http://hooks.slack.com/x")
+    sig = m.slack_signature("secret-123", "1000", b"a=b")
+    assert m.verify_slack("secret-123", "1000", sig, b"a=b", now=1100)
+    assert not m.verify_slack("secret-123", "1000", sig, b"a=c", now=1100)
+    assert not m.verify_slack("secret-123", "1000", sig, b"a=b", now=5000)
+
+
+def test_messenger_status_without_deployment_is_not_an_error(
+    client: TestClient, team: Team
+) -> None:
+    app_id = _new_app(client, team)
+    res = client.get(f"/api/v1/apps/{app_id}/messenger", headers=team.h("builder"))
+    assert res.status_code == 200 and res.json() == {"deployed": False}
+    # 설정은 배포한 뒤에만 된다
+    put = client.put(
+        f"/api/v1/apps/{app_id}/messenger/slack",
+        json={"secret": "s3cret-signing"},
+        headers=team.h("builder"),
+    )
+    assert put.status_code == 409

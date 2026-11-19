@@ -8,7 +8,6 @@ from typing import Any
 from pgvector.sqlalchemy import Vector
 from sqlalchemy import (
     JSON,
-    DateTime,
     ForeignKey,
     Index,
     Integer,
@@ -23,7 +22,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import Mapped, mapped_column
 
-from api.db import Base, JsonType, TextArray
+from api.db import Base, JsonType, TextArray, UTCDateTime
 
 EMBEDDING_DIM = 1536
 
@@ -41,7 +40,7 @@ def _id() -> Mapped[str]:
 
 
 def _created() -> Mapped[datetime]:
-    return mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+    return mapped_column(UTCDateTime(timezone=True), default=utcnow, nullable=False)
 
 
 # ---------- 3-1 조직·권한 ----------
@@ -74,7 +73,7 @@ class User(Base):
     # v0.7 계정 스스로 관리: 이메일 인증 시각, 2단계 인증(TOTP 비밀값은 암호화), 복구 코드(해시),
     # 이 시각 이전에 발급한 토큰은 모두 무효(비밀번호 재설정·모든 기기에서 로그아웃)
     email_verified_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
+        UTCDateTime(timezone=True), nullable=True
     )
     totp_secret_encrypted: Mapped[str | None] = mapped_column(Text, nullable=True)
     totp_enabled: Mapped[bool] = mapped_column(default=False, server_default="false")
@@ -82,7 +81,7 @@ class User(Base):
     must_change_password: Mapped[bool] = mapped_column(default=False, server_default="false")
     recovery_codes: Mapped[list[str]] = mapped_column(JsonType, default=list, server_default="[]")
     tokens_valid_after: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
+        UTCDateTime(timezone=True), nullable=True
     )
 
 
@@ -94,8 +93,8 @@ class AuthToken(Base):
     user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
     kind: Mapped[str] = mapped_column(String(20))  # reset | verify
     token_hash: Mapped[str] = mapped_column(String(64), unique=True)
-    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
-    used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    expires_at: Mapped[datetime] = mapped_column(UTCDateTime(timezone=True))
+    used_at: Mapped[datetime | None] = mapped_column(UTCDateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = _created()
 
 
@@ -108,13 +107,13 @@ class UserSession(Base):
     user_agent: Mapped[str] = mapped_column(String(300), default="", server_default="")
     ip: Mapped[str] = mapped_column(String(64), default="", server_default="")
     created_at: Mapped[datetime] = _created()
-    last_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
-    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_seen_at: Mapped[datetime] = mapped_column(UTCDateTime(timezone=True), default=utcnow)
+    revoked_at: Mapped[datetime | None] = mapped_column(UTCDateTime(timezone=True), nullable=True)
     # 운영 준비 1차(B1·F18): 새로고침 토큰 회전. 지금 토큰 번호, 바로 앞 번호와 바꾼 시각(동시 새로고침 여유)
     refresh_jti: Mapped[str | None] = mapped_column(String(40), nullable=True)
     prev_refresh_jti: Mapped[str | None] = mapped_column(String(40), nullable=True)
     refresh_rotated_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
+        UTCDateTime(timezone=True), nullable=True
     )
 
 
@@ -136,8 +135,8 @@ class Invitation(Base):
     email: Mapped[str] = mapped_column(String(320))
     role: Mapped[str] = mapped_column(String(20))
     token: Mapped[str] = mapped_column(String(100), unique=True, index=True)
-    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
-    accepted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    expires_at: Mapped[datetime] = mapped_column(UTCDateTime(timezone=True))
+    accepted_at: Mapped[datetime | None] = mapped_column(UTCDateTime(timezone=True), nullable=True)
 
 
 # ---------- 3-2 앱·워크플로우 ----------
@@ -155,7 +154,7 @@ class App(Base):
     status: Mapped[str] = mapped_column(String(20), default="draft")
     created_by: Mapped[str | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=utcnow, onupdate=utcnow
+        UTCDateTime(timezone=True), default=utcnow, onupdate=utcnow
     )
     # ADR 0002
     draft_graph: Mapped[dict[str, Any] | None] = mapped_column(JsonType, nullable=True)
@@ -226,8 +225,8 @@ class Run(Base):
     input: Mapped[dict[str, Any]] = mapped_column(JsonType, default=dict)
     output: Mapped[dict[str, Any] | None] = mapped_column(JsonType, nullable=True)
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
-    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    started_at: Mapped[datetime | None] = mapped_column(UTCDateTime(timezone=True), nullable=True)
+    finished_at: Mapped[datetime | None] = mapped_column(UTCDateTime(timezone=True), nullable=True)
     token_usage: Mapped[dict[str, Any]] = mapped_column(JsonType, default=dict)
     cost: Mapped[Decimal] = mapped_column(Numeric(14, 6), default=Decimal("0"))
     # ADR 0002
@@ -247,8 +246,8 @@ class RunStep(Base):
     input: Mapped[dict[str, Any]] = mapped_column(JsonType, default=dict)
     output: Mapped[dict[str, Any] | None] = mapped_column(JsonType, nullable=True)
     logs: Mapped[str] = mapped_column(Text, default="")
-    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    started_at: Mapped[datetime | None] = mapped_column(UTCDateTime(timezone=True), nullable=True)
+    finished_at: Mapped[datetime | None] = mapped_column(UTCDateTime(timezone=True), nullable=True)
     # 실행 순서(같은 시각에 시작한 단계도 순서를 지키기 위해). 0003에서 추가
     seq: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
 
@@ -271,7 +270,7 @@ class Conversation(Base):
     )
     # v0.6: 기억 창보다 오래된 대화의 요약과, 요약에 들어간 마지막 메시지 시각
     summary: Mapped[str] = mapped_column(Text, default="", server_default="")
-    summary_upto: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    summary_upto: Mapped[datetime | None] = mapped_column(UTCDateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = _created()
 
 
@@ -550,7 +549,7 @@ class AppApiKey(Base):
     key_hash: Mapped[str] = mapped_column(String(64), unique=True, index=True)
     created_by: Mapped[str | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     created_at: Mapped[datetime] = _created()
-    last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_used_at: Mapped[datetime | None] = mapped_column(UTCDateTime(timezone=True), nullable=True)
     # v0.5: 권한 범위 chat(대화) · run(흐름 실행) · logs(기록 읽기)
     scopes: Mapped[list[str]] = mapped_column(
         TextArray, default=lambda: ["chat", "run"], server_default="{chat,run}"
@@ -609,9 +608,9 @@ class AppTrigger(Base):
     # webhook: {mode: async|sync, version?}; schedule: {cron, timezone, input, version?}
     config: Mapped[dict[str, Any]] = mapped_column(JsonType, default=dict, server_default="{}")
     next_run_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True, index=True
+        UTCDateTime(timezone=True), nullable=True, index=True
     )
-    last_run_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_run_at: Mapped[datetime | None] = mapped_column(UTCDateTime(timezone=True), nullable=True)
     last_run_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     last_status: Mapped[str | None] = mapped_column(String(30), nullable=True)
     # v0.5: 웹훅 서명 검증용 비밀값(암호화), 최근 받은 값 미리 보기(최대 5개, 비밀 헤더 제외)
@@ -644,7 +643,7 @@ class DataTable(Base):
     created_by: Mapped[str | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     created_at: Mapped[datetime] = _created()
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False
+        UTCDateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False
     )
 
 
@@ -660,7 +659,7 @@ class DataRow(Base):
     data: Mapped[dict[str, Any]] = mapped_column(JsonType, default=dict)
     created_at: Mapped[datetime] = _created()
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False
+        UTCDateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False
     )
 
 
@@ -695,14 +694,14 @@ class HumanTask(Base):
     response: Mapped[dict[str, Any]] = mapped_column(JsonType, default=dict)
     # 로그인 없이 여는 링크(이메일·슬랙으로 보냄)
     token: Mapped[str] = mapped_column(String(64), unique=True)
-    due_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    due_at: Mapped[datetime | None] = mapped_column(UTCDateTime(timezone=True), nullable=True)
     # v0.9: 시간 초과 처리 규칙과 전달·올리기 이력
     rules: Mapped[dict[str, Any]] = mapped_column(JsonType, default=dict, server_default="{}")
     history: Mapped[list[dict[str, Any]]] = mapped_column(
         JsonType, default=list, server_default="[]"
     )
     created_at: Mapped[datetime] = _created()
-    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(UTCDateTime(timezone=True), nullable=True)
     completed_by: Mapped[str | None] = mapped_column(
         ForeignKey("users.id", name="human_tasks_completed_by_fkey"), nullable=True
     )
@@ -745,7 +744,7 @@ class CanvasComment(Base):
         ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
     created_at: Mapped[datetime] = _created()
-    edited_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    edited_at: Mapped[datetime | None] = mapped_column(UTCDateTime(timezone=True), nullable=True)
 
 
 class Snippet(Base):
@@ -772,7 +771,7 @@ class ErrorEvent(Base):
     __tablename__ = "error_events"
     id: Mapped[str] = _id()
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=utcnow, nullable=False, index=True
+        UTCDateTime(timezone=True), default=utcnow, nullable=False, index=True
     )
     # api(처리되지 않은 API 오류) | engine(실행 엔진 내부 오류) | worker
     source: Mapped[str] = mapped_column(String(20), default="api")

@@ -53,6 +53,7 @@ import {
 import { useMembers } from "@/lib/api/workspace";
 import { canEdit, useSession } from "@/store/session";
 import { AppNav } from "@/pages/apps/AppNav";
+import { MessengerCard } from "@/pages/apps/MessengerCard";
 import { EmptyState } from "@/components/EmptyState";
 
 const CHANNEL_LABEL: Record<Channel, string> = {
@@ -775,6 +776,7 @@ export default function AppSettingsPage() {
       <div className="mx-auto grid max-w-6xl gap-6 px-4 py-6 sm:px-6 lg:grid-cols-[3fr_2fr] lg:px-8">
         <div className="min-w-0 space-y-6">
           <DeploymentsCard appId={appId} editable={editable} />
+          <MessengerCard appId={appId} editable={editable} />
           <VersionsCard appId={appId} editable={editable} />
         </div>
         <AppInfoCard appId={appId} editable={editable} />
