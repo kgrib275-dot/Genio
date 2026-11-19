@@ -103,6 +103,17 @@ KNOWN_WEAK_SECRETS = {
 PRODUCTION_ENVS = ("prod", "production")
 
 
+def is_production(st: "Settings") -> bool:
+    """운영으로 보는 경우: GENIO_ENV가 prod이거나, 공개 주소가 내 컴퓨터(localhost)가 아닐 때.
+    공개 주소가 인터넷에 열려 있는데 GENIO_ENV만 dev로 남은 실수를 막는다."""
+    from urllib.parse import urlparse
+
+    if st.genio_env.lower() in PRODUCTION_ENVS:
+        return True
+    host = (urlparse(st.genio_public_web_url).hostname or "").lower()
+    return host not in ("", "localhost", "127.0.0.1", "::1") and not host.endswith(".local")
+
+
 def secret_key_problem(st: "Settings") -> str | None:
     """비밀 키가 기본값이거나 짧으면 이유, 괜찮으면 None."""
     key = st.genio_secret_key
@@ -110,6 +121,13 @@ def secret_key_problem(st: "Settings") -> str | None:
         return "비밀 키(GENIO_SECRET_KEY)가 저장소에 적힌 기본값이에요"
     if len(key) < 32:
         return "비밀 키(GENIO_SECRET_KEY)가 32자보다 짧아요"
+    return None
+
+
+def fernet_key_problem(st: "Settings") -> str | None:
+    """운영에서는 비밀값 암호화 키(GENIO_FERNET_KEY)를 따로 둬야 한다(비밀 키에서 파생하면 키 하나가 새면 전부 뚫린다)."""
+    if not st.genio_fernet_key.strip():
+        return "비밀값 암호화 키(GENIO_FERNET_KEY)가 비어 있어요"
     return None
 
 

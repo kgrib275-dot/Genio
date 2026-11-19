@@ -81,6 +81,19 @@ def backend_state() -> dict[str, Any]:
     }
 
 
+_last_purge = 0.0
+
+
+def _purge(now: float, window: int) -> None:
+    """메모리 폴백에서 오래 안 쓴 키를 지운다(주소를 바꿔 가며 찌르면 키가 끝없이 늘어나므로). 1분에 한 번."""
+    global _last_purge
+    if now - _last_purge < 60:
+        return
+    _last_purge = now
+    for k in [k for k, q in _hits.items() if not q or q[-1] <= now - max(window, 60)]:
+        del _hits[k]
+
+
 def allow(key: str, limit: int | None = None, window: int = 60) -> bool:
     limit = limit or get_settings().genio_public_rate_limit_per_minute
     client = _client()
@@ -96,6 +109,7 @@ def allow(key: str, limit: int | None = None, window: int = 60) -> bool:
             _on_redis_error(e)
     now = time.time()
     with _lock:
+        _purge(now, window)
         q = _hits[key]
         while q and q[0] <= now - window:
             q.popleft()

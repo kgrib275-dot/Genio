@@ -231,6 +231,7 @@ def run_child_app(services: "RunServices", app_id: str, inputs: dict[str, Any]) 
         version_id=version.id,
         trigger="tool",
         input={**inputs, "__depth": services.depth + 1},
+        context={"dry_run": True} if services.dry_run else {},
     )
     services.db.add(run)
     services.db.commit()

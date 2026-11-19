@@ -98,7 +98,9 @@ def startup() -> None:
         try:
             count = sync_catalog(db)
             log.info("마켓 아이템 %d개 동기화", count)
-            if get_settings().genio_seed_demo:
+            from api.config import is_production
+
+            if get_settings().genio_seed_demo and not is_production(get_settings()):
                 seed_demo(db)
                 seed_demo_samples(db)
             ensure_market_nodes(db)
@@ -122,17 +124,19 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
 def check_secret_key() -> None:
     """운영 준비 1차(B1·F20): 운영 모드(GENIO_ENV=production)에서 기본·짧은 비밀 키면 기동을 멈춘다.
     개발 모드에서는 경고만 남기고, 관리 > 시스템 상태에 '주의'로 보인다."""
-    from api.config import PRODUCTION_ENVS, secret_key_problem
+    from api.config import fernet_key_problem, is_production, secret_key_problem
 
     st = get_settings()
-    problem = secret_key_problem(st)
-    if problem is None:
+    problems = [p for p in (secret_key_problem(st), fernet_key_problem(st)) if p]
+    if not problems:
         return
-    if st.genio_env.lower() in PRODUCTION_ENVS:
+    if is_production(st):
         raise RuntimeError(
-            f"{problem}. .env의 GENIO_SECRET_KEY를 긴 무작위 값으로 바꾼 뒤 다시 시작하세요."
+            "; ".join(problems)
+            + ". .env의 GENIO_SECRET_KEY·GENIO_FERNET_KEY를 긴 무작위 값으로 채운 뒤 다시 시작하세요."
         )
-    logging.getLogger("genio").warning("%s. 운영 전에 바꾸세요.", problem)
+    for problem in problems:
+        logging.getLogger("genio").warning("%s. 운영 전에 바꾸세요.", problem)
 
 
 app = FastAPI(

@@ -53,7 +53,11 @@ export function TestRunDialog({
   const [mode, setMode] = useState<"one" | "batch">("one");
   // 시험 모드: 메일·슬랙 같은 보내기 동작을 하지 않고 보낼 내용만 보여 준다(기본 켜짐, 선택을 기억한다)
   const sendsOut = useCanvas((s) =>
-    s.graph.nodes.some((n) => n.type === "connector" || n.type === "approval"),
+    s.graph.nodes.some((n) =>
+      ["connector", "approval", "http", "mcp_tool", "api_tool", "agent", "run_app"].includes(
+        n.type,
+      ),
+    ),
   );
   const [dryRun, setDryRun] = useState(() => {
     try {
@@ -249,7 +253,9 @@ export function TestRunDialog({
                 onChange={(e) => chooseDry(e.target.checked)}
               />
               <span>
-                <b>시험 모드</b> — 메일·슬랙 등은 실제로 보내지 않고, 보낼 내용만 결과에 보여 줘요.
+                <b>시험 모드</b> — 메일·슬랙 보내기, 데이터를 바꾸는 외부 요청(HTTP·MCP·API), 승인
+                알림은 실제로 하지 않고 보낼 내용만 결과에 보여 줘요. 읽기만 하는 요청은 그대로
+                실행해요.
                 <span className="block text-xs text-amber-800">
                   끄면 실제로 보내져요. 고객에게 나갈 수 있으니 주의하세요.
                 </span>

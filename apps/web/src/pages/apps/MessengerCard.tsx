@@ -189,8 +189,9 @@ export function MessengerCard({ appId, editable }: { appId: string; editable: bo
               editable={editable}
             />
             <p className="text-xs text-slate-500">
-              연결하면 그 슬랙·팀즈를 쓰는 누구나 이 앱에 물어볼 수 있어요. 중요한 문서가 있다면
-              공개해도 되는 앱인지 먼저 확인하세요. 답은 슬랙·팀즈를 쓰는 사람마다 따로 이어져요.
+              연결하면 그 슬랙·팀즈를 쓰는 누구나 이 앱에 물어볼 수 있어서, 공유 범위가 "누구나"인
+              앱만 연결할 수 있어요. 중요한 문서가 있다면 공개해도 되는 앱인지 먼저 확인하세요. 답은
+              슬랙·팀즈를 쓰는 사람마다 따로 이어져요.
             </p>
           </>
         )}

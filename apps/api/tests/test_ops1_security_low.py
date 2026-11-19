@@ -181,4 +181,9 @@ def test_production_refuses_default_key(monkeypatch: pytest.MonkeyPatch) -> None
     with pytest.raises(RuntimeError, match="GENIO_SECRET_KEY"):
         main.check_secret_key()
     monkeypatch.setattr(st, "genio_env", "dev")
+    monkeypatch.setattr(st, "genio_public_web_url", "http://localhost:5190")  # .env의 공개 주소와 무관하게
     main.check_secret_key()  # 개발 모드는 경고만
+    # 공개 주소를 쓰면 GENIO_ENV가 dev여도 운영으로 보고 멈춘다
+    monkeypatch.setattr(st, "genio_public_web_url", "https://genio.example.com")
+    with pytest.raises(RuntimeError, match="GENIO_SECRET_KEY"):
+        main.check_secret_key()

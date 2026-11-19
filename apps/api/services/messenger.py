@@ -75,6 +75,11 @@ def slack_signature(secret: str, timestamp: str, body: bytes) -> str:
     return "v0=" + hmac.new(secret.encode(), base, hashlib.sha256).hexdigest()
 
 
+def _same(a: str, b: str) -> bool:
+    """상수 시간 비교(비ASCII 글자가 섞여 있어도 오류 없이 다름으로 본다)"""
+    return hmac.compare_digest(a.encode("utf-8", "replace"), b.encode("utf-8", "replace"))
+
+
 def verify_slack(
     secret: str, timestamp: str, signature: str, body: bytes, now: float | None = None
 ) -> bool:
@@ -82,9 +87,9 @@ def verify_slack(
         age = abs((now if now is not None else time.time()) - float(timestamp))
     except ValueError:
         return False
-    if age > SLACK_MAX_AGE_SECONDS:
+    if not (age <= SLACK_MAX_AGE_SECONDS):  # NaN도 걸러진다
         return False
-    return hmac.compare_digest(slack_signature(secret, timestamp, body), signature)
+    return _same(slack_signature(secret, timestamp, body), signature)
 
 
 def valid_slack_response_url(url: str) -> bool:
@@ -105,7 +110,7 @@ def verify_teams(secret: str, authorization: str, body: bytes) -> bool:
         expected = teams_signature(secret, body)
     except (ValueError, TypeError):
         return False
-    return hmac.compare_digest(expected, authorization.strip())
+    return _same(expected, authorization.strip())
 
 
 def clean_question(text: str) -> str:
@@ -113,3 +118,9 @@ def clean_question(text: str) -> str:
     out = re.sub(r"<at>.*?</at>", "", text or "", flags=re.S)
     out = re.sub(r"<[^>]+>", "", out)  # 팀즈가 붙이는 HTML 조각
     return out.replace("&nbsp;", " ").strip()[:MAX_QUESTION]
+
+
+def session_key(provider: str, secret: str, who: str) -> str:
+    """메신저 사용자별 대화 이름. 서명 비밀값을 섞어 서버만 만들 수 있게 한다(남이 추측해 이어받지 못하게)."""
+    digest = hmac.new(secret.encode(), f"{provider}:{who}".encode(), hashlib.sha256).hexdigest()
+    return f"{provider}:{digest[:32]}"

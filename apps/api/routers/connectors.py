@@ -182,15 +182,55 @@ def _clean_hosts(hosts: list[str]) -> list[str]:
                 f"주소 형식이 올바르지 않아요: {h[:60]}",
                 "호스트 이름이나 IP만 적으세요(예: db.internal.example.com, 10.0.0.5).",
             )
-        if v in ("localhost", "127.0.0.1", "::1", "169.254.169.254") or v.startswith("127."):
+        if _always_blocked(v):
             raise AppError(
                 422,
                 f"'{v}'는 허용할 수 없어요.",
-                "자기 자신(localhost)과 클라우드 메타데이터 주소는 언제나 막혀 있어요.",
+                "자기 자신(localhost)·서비스 내부 이름·클라우드 메타데이터 주소는 언제나 막혀 있어요.",
             )
         if v not in out:
             out.append(v)
     return out
+
+
+# 제니오 자신의 내부 서비스 이름(docker compose)과 자기 자신을 가리키는 주소는 어떤 관리자도 열 수 없다
+_INTERNAL_NAMES = {
+    "localhost",
+    "ip6-localhost",
+    "0.0.0.0",  # noqa: S104
+    "::",
+    "::1",
+    "169.254.169.254",
+    "metadata.google.internal",
+    "postgres",
+    "redis",
+    "api",
+    "web",
+    "worker",
+    "scheduler",
+    "sandbox",
+    "host.docker.internal",
+    "gateway.docker.internal",
+}
+
+
+def _always_blocked(host: str) -> bool:
+    import ipaddress
+
+    h = host.strip().strip("[]").lower().rstrip(".")
+    if h in _INTERNAL_NAMES or h.startswith("127.") or h.endswith(".localhost"):
+        return True
+    try:
+        ip = ipaddress.ip_address(h)
+    except ValueError:
+        # 0x7f000001·2130706433 같은 다른 표기도 막는다
+        try:
+            ip = ipaddress.ip_address(int(h, 0))
+        except ValueError:
+            return False
+    if isinstance(ip, ipaddress.IPv6Address) and ip.ipv4_mapped is not None:
+        ip = ip.ipv4_mapped
+    return bool(ip.is_loopback or ip.is_link_local or ip.is_unspecified or ip.is_multicast)
 
 
 @router.get("/workspaces/{ws}/connectors/private-hosts")
@@ -201,6 +241,15 @@ def get_private_hosts(ws: str, ctx: SecretManagers) -> dict[str, Any]:
 
 @router.put("/workspaces/{ws}/connectors/private-hosts")
 def put_private_hosts(ws: str, body: PrivateHostsIn, ctx: SecretManagers) -> dict[str, Any]:
+    # 내부 주소를 여는 일은 서비스 전체에 영향을 주므로 인스턴스 관리자(가장 먼저 만든 워크스페이스 소유자)만 한다
+    from api.services.system import is_instance_admin
+
+    if not is_instance_admin(ctx.db, ctx.user.id):
+        raise AppError(
+            403,
+            "내부 주소 허용은 서비스 전체 관리자만 바꿀 수 있어요.",
+            "서비스 관리자(가장 먼저 만든 워크스페이스의 소유자)에게 요청하세요.",
+        )
     w = ctx.db.get(Workspace, ws)
     if w is None:
         raise not_found("워크스페이스")

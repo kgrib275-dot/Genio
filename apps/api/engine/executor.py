@@ -208,6 +208,21 @@ class RunServices:
         body: Any,
         auth: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
+        if self.dry_run and method.upper() not in ("GET", "HEAD", "OPTIONS"):
+            self.log_note(
+                "시험 모드라 데이터를 바꾸는 요청은 보내지 않았어요. 보낼 내용만 보여 드려요."
+            )
+            return {
+                "status": 200,
+                "headers": {},
+                "body": {
+                    "dry_run": True,
+                    "sent": False,
+                    "method": method,
+                    "url": url,
+                    "preview": body,
+                },
+            }
         if auth:
             headers = {**headers, **self._auth_headers(auth, url)}
         return safe_http.request(method, url, headers=headers, body=body)
@@ -346,6 +361,7 @@ class RunServices:
             version_id=version.id,
             trigger="subflow",
             input={**clean, "__depth": self.depth + 1},
+            context={"dry_run": True} if self.dry_run else {},
         )
         self.db.add(child)
         self.db.commit()
@@ -432,6 +448,9 @@ class RunServices:
     ) -> dict[str, Any]:
         from api.connectors import mcp_runtime
 
+        if self.dry_run and not is_read_action(tool):
+            self.log_note("시험 모드라 외부 도구는 부르지 않았어요. 보낼 내용만 보여 드려요.")
+            return {"dry_run": True, "sent": False, "tool": tool, "preview": arguments}
         return mcp_runtime.call_tool(self.db, self.workspace_id, credential_id, tool, arguments)
 
     def mcp_tools(self, *, credential_id: str) -> list[dict[str, Any]]:
@@ -445,6 +464,14 @@ class RunServices:
     ) -> dict[str, Any]:
         from api.connectors import api_tools
 
+        if self.dry_run and not is_read_action(operation):
+            self.log_note("시험 모드라 외부 API는 부르지 않았어요. 보낼 내용만 보여 드려요.")
+            return {
+                "dry_run": True,
+                "sent": False,
+                "operation": operation,
+                "preview": {"params": params, "body": body},
+            }
         return api_tools.call(
             self.db,
             self.workspace_id,
@@ -1065,6 +1092,8 @@ def _decide_person(
 
 
 PIN_TRIGGERS = {"test", "preview"}
+# 시험 모드가 따라가는 실행: 시험·미리 보기와, 그 안에서 부른 하위 앱(subflow·tool)
+DRY_TRIGGERS = {"test", "preview", "subflow", "tool"}
 
 # 읽기만 하는 동작의 이름 앞부분(시험 모드에서도 그대로 실행한다)
 READ_ACTION_PREFIXES = (
@@ -1082,8 +1111,41 @@ READ_ACTION_PREFIXES = (
 )
 
 
+WRITE_WORDS = (
+    "send",
+    "post",
+    "write",
+    "create",
+    "update",
+    "delete",
+    "remove",
+    "replace",
+    "set",
+    "add",
+    "insert",
+    "upsert",
+    "put",
+    "patch",
+    "push",
+    "publish",
+    "notify",
+    "reply",
+    "approve",
+    "cancel",
+    "execute",
+    "run",
+)
+
+
 def is_read_action(action: str) -> bool:
-    return action.strip().lower().startswith(READ_ACTION_PREFIXES)
+    """읽기 동작인지: 이름이 읽기 낱말로 시작하고 쓰기 낱말이 한 토막도 없을 때만 읽기로 본다."""
+    import re
+
+    # getUser → get_User, fetch-and-send → fetch_and_send
+    name = re.sub(r"(?<=[a-z0-9])(?=[A-Z])", "_", action.strip()).lower().replace("-", "_")
+    if not name.startswith(READ_ACTION_PREFIXES):
+        return False
+    return not set(name.split("_")) & set(WRITE_WORDS)
 
 
 PIN_BLOCKED_TYPES = {"input", "output", *PERSON_TYPES}
@@ -1243,7 +1305,7 @@ def _execute(db: Session, run_id: str) -> None:
     services = RunServices(db, app.workspace_id)
     services.app_id = app.id
     services.app_fallback = merged_features(app.features).get("llm_fallback")
-    services.dry_run = bool((run.context or {}).get("dry_run")) and run.trigger in PIN_TRIGGERS
+    services.dry_run = bool((run.context or {}).get("dry_run")) and run.trigger in DRY_TRIGGERS
     run_id_for_events = run.id
 
     def delta_sink(node_id: str, text: str) -> None:

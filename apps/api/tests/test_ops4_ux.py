@@ -587,3 +587,175 @@ def test_messenger_status_without_deployment_is_not_an_error(
         headers=team.h("builder"),
     )
     assert put.status_code == 409
+
+
+def test_production_detection_and_required_keys() -> None:
+    from api.config import Settings, fernet_key_problem, is_production
+
+    secret = "x" * 40
+    assert not is_production(
+        Settings(
+            genio_env="dev", genio_public_web_url="http://localhost:5190", genio_secret_key=secret
+        )
+    )
+    assert is_production(Settings(genio_env="prod", genio_secret_key=secret))
+    # GENIO_ENV를 dev로 둔 채 공개 주소를 쓰면 운영으로 본다
+    assert is_production(
+        Settings(
+            genio_env="dev",
+            genio_public_web_url="https://genio.example.com",
+            genio_secret_key=secret,
+        )
+    )
+    assert fernet_key_problem(Settings(genio_fernet_key="", genio_secret_key=secret))
+    assert fernet_key_problem(Settings(genio_fernet_key="k" * 44, genio_secret_key=secret)) is None
+
+
+def test_dry_run_blocks_http_writes_mcp_and_api_tools_but_not_reads(
+    client: TestClient, team: Team, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from api.db import SessionLocal
+    from api.engine.executor import RunServices, is_read_action
+
+    calls: list[str] = []
+
+    def fake_request(method: str, url: str, **kw: object) -> dict[str, object]:
+        calls.append(f"{method} {url}")
+        return {"status": 200, "headers": {}, "body": {"ok": True}}
+
+    monkeypatch.setattr("api.engine.safe_http.request", fake_request)
+    with SessionLocal() as db:
+        svc = RunServices(db, team.ws)
+        svc.dry_run = True
+        out = svc.http_request(
+            method="POST", url="https://hooks.example.com/x", headers={}, body={"text": "안녕"}
+        )
+        assert out["body"]["dry_run"] is True and out["body"]["preview"] == {"text": "안녕"}
+        assert calls == []
+        # 읽기(GET)는 그대로 나간다
+        svc.http_request(method="GET", url="https://api.example.com/v1", headers={}, body=None)
+        assert calls == ["GET https://api.example.com/v1"]
+        assert (
+            svc.mcp_call(credential_id="c", tool="send_message", arguments={"a": 1})["sent"]
+            is False
+        )
+        assert (
+            svc.api_tool_call(tool_set_id="t", operation="createOrder", params={}, body={})["sent"]
+            is False
+        )
+        svc.dry_run = False
+        svc.http_request(method="DELETE", url="https://api.example.com/v1/1", headers={}, body=None)
+        assert calls[-1] == "DELETE https://api.example.com/v1/1"
+    # 이름이 읽기로 시작해도 쓰기 낱말이 들어 있으면 읽기가 아니다
+    assert not is_read_action("find_and_replace") and not is_read_action("fetch_and_send")
+    assert is_read_action("get_row") and is_read_action("getUser")
+
+
+def test_dry_run_follows_into_child_app_runs(client: TestClient, team: Team) -> None:
+    from sqlalchemy import select
+
+    from api.db import SessionLocal
+    from api.engine.agent import run_child_app
+    from api.engine.executor import RunServices
+    from api.models import Run, WorkflowVersion
+
+    child = _new_app(client, team)
+    client.post(f"/api/v1/apps/{child}/versions", json={}, headers=team.h("builder"))
+    with SessionLocal() as db:
+        svc = RunServices(db, team.ws)
+        svc.dry_run = True
+        run_child_app(svc, child, {"message": "hi"})
+        run = db.scalars(select(Run).where(Run.app_id == child, Run.trigger == "tool")).one()
+        assert (run.context or {}).get("dry_run") is True
+        assert db.scalar(select(WorkflowVersion).where(WorkflowVersion.app_id == child)) is not None
+
+
+def test_messenger_hardening(
+    client: TestClient, team: Team, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from urllib.parse import urlencode
+
+    from api.core import ratelimit
+    from api.routers import messenger as router_mod
+    from api.services import messenger as m
+    from api.tests.test_v02_features import chat, deploy, faq_app
+
+    app_id = faq_app(client, team)
+    token = deploy(client, team, app_id)
+    put = f"/api/v1/apps/{app_id}/messenger/slack"
+    assert (
+        client.put(put, json={"secret": "s3cret-signing"}, headers=team.h("builder")).status_code
+        == 200
+    )
+    base = f"/api/v1/public/messenger/{token}/slack"
+    sent: list[str] = []
+    monkeypatch.setattr(router_mod, "_post_slack", lambda url, text: sent.append(text))
+    form = urlencode(
+        {
+            "text": "연차?",
+            "user_id": "U1",
+            "team_id": "T1",
+            "trigger_id": "t-1",
+            "response_url": "https://hooks.slack.com/commands/T1/1/abc",
+        }
+    )
+    hdr = _signed_slack("s3cret-signing", form)
+    assert client.post(base, content=form, headers=hdr).status_code == 200
+    # 같은 요청이 다시 오면(슬랙 재시도·재전송) 다시 답하지 않는다
+    again = client.post(base, content=form, headers=hdr)
+    assert "이미" in again.json()["text"] and len(sent) == 1
+    # 비ASCII 서명 헤더는 500이 아니라 401
+    bad = {
+        **_signed_slack("s3cret-signing", form + "x"),
+        "x-slack-signature": b"v0=" + bytes([0xE9]),
+    }
+    assert client.post(base, content=form + "x", headers=bad).status_code == 401
+    # 서명이 틀린 요청이 많아도 앱 단위 제한을 쓰지 않아 정상 요청은 막히지 않는다
+    for i in range(10):
+        client.post(base, content=f"a={i}", headers=_signed_slack("wrong-secret", f"a={i}"))
+    form2 = urlencode(
+        {
+            "text": "재택?",
+            "user_id": "U2",
+            "team_id": "T1",
+            "trigger_id": "t-2",
+            "response_url": "https://hooks.slack.com/commands/T1/2/abc",
+        }
+    )
+    assert (
+        client.post(base, content=form2, headers=_signed_slack("s3cret-signing", form2)).status_code
+        == 200
+    )
+    # 슬랙 대화 이름은 서버만 만든다: 공개 챗에서 slack: 세션 이름은 거절
+    res = client.post(
+        f"/api/v1/public/apps/{token}/chat", json={"message": "안녕", "session_id": "slack:T1:U1"}
+    )
+    assert res.status_code == 422
+    assert m.session_key("slack", "a" * 12, "T:U") != m.session_key("slack", "b" * 12, "T:U")
+    assert chat(client, token, "안녕")
+    # 배포 모양을 저장해도 연결이 끊기지 않는다
+    dep_id = client.get(f"/api/v1/apps/{app_id}/deployments", headers=team.h("builder")).json()[0][
+        "id"
+    ]
+    r = client.patch(
+        f"/api/v1/deployments/{dep_id}",
+        json={"appearance": {"title": "새 제목"}},
+        headers=team.h("builder"),
+    )
+    assert r.status_code == 200, r.text
+    assert client.get(f"/api/v1/apps/{app_id}/messenger", headers=team.h("builder")).json()[
+        "slack"
+    ]["configured"]
+    # 공개 범위가 제한된 배포는 연결·사용 모두 거절
+    client.patch(
+        f"/api/v1/deployments/{dep_id}", json={"access": "workspace"}, headers=team.h("builder")
+    )
+    closed = client.post(
+        base, content=form2 + "&z=1", headers=_signed_slack("s3cret-signing", form2 + "&z=1")
+    )
+    assert "공개 범위가 제한" in closed.json()["text"]
+    assert (
+        client.put(put, json={"secret": "another-secret"}, headers=team.h("builder")).status_code
+        == 422
+    )
+    ratelimit.reset()

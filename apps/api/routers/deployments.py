@@ -8,7 +8,7 @@ from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Depends, File, Request, Response, UploadFile
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -272,7 +272,9 @@ def update_deployment(
                     "썸네일로 쓸 수 없는 그림이에요.",
                     f"PNG·JPG·WEBP·GIF 그림을 {MAX_IMAGE_BYTES // (1024 * 1024)}MB 이하로 올려 주세요.",
                 )
-        dep.appearance = body.appearance.model_dump()
+        # 메신저 연결 비밀값(_messenger)처럼 모양이 아닌 값은 지우지 않고 그대로 둔다
+        kept = {k: v for k, v in (dep.appearance or {}).items() if str(k).startswith("_")}
+        dep.appearance = {**body.appearance.model_dump(), **kept}
     access_changed = any(
         v is not None for v in (body.access, body.allowed_roles, body.allowed_users)
     )
@@ -432,22 +434,49 @@ def public_app(token: str, db: DbDep, user: OptionalUser) -> dict[str, Any]:
     }
 
 
+RESERVED_SESSION_PREFIXES = ("slack:", "teams:")
+MAX_INPUT_CHARS = 20_000
+
+
 class ChatIn(BaseModel):
     message: str = Field(default="", max_length=4000)
     session_id: str | None = Field(default=None, max_length=100)
     input: dict[str, Any] | None = None
     files: list[str] = Field(default_factory=list, max_length=10)
 
+    @field_validator("session_id")
+    @classmethod
+    def _session_not_reserved(cls, v: str | None) -> str | None:
+        # 슬랙·팀즈 대화 이름은 서버만 만든다(공개 챗에서 남의 메신저 대화를 이어받지 못하게)
+        if v and v.lower().startswith(RESERVED_SESSION_PREFIXES):
+            raise ValueError("사용할 수 없는 대화 번호예요.")
+        return v
+
+    @field_validator("input")
+    @classmethod
+    def _input_small(cls, v: dict[str, Any] | None) -> dict[str, Any] | None:
+        if v is not None and len(json.dumps(v, ensure_ascii=False, default=str)) > MAX_INPUT_CHARS:
+            raise ValueError("입력이 너무 길어요.")
+        return v
+
 
 def _rate_limited(app: App, key: str) -> bool:
-    ws = app.workspace_id
-    limit = None
+    from sqlalchemy.orm import object_session
+
     from api.models import Workspace
 
-    with SessionLocal() as s:
-        w = s.get(Workspace, ws)
-        if w is not None:
-            limit = (w.settings or {}).get("public_rate_limit_per_minute")
+    limit = None
+    # 요청이 이미 쥐고 있는 DB 연결을 그대로 쓴다(연결을 하나 더 잡으면 동시 요청이 많을 때 서로 기다리다 막힌다)
+    sess = object_session(app)
+    if sess is not None:
+        w = sess.get(Workspace, app.workspace_id)
+    else:
+        with SessionLocal() as s:
+            w = s.get(Workspace, app.workspace_id)
+            limit = (w.settings or {}).get("public_rate_limit_per_minute") if w else None
+            return not ratelimit.allow(key, int(limit) if limit else None)
+    if w is not None:
+        limit = (w.settings or {}).get("public_rate_limit_per_minute")
     return not ratelimit.allow(key, int(limit) if limit else None)
 
 

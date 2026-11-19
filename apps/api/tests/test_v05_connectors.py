@@ -107,10 +107,19 @@ def test_database_connector_and_credential_test(
     hosts_url = f"/api/v1/workspaces/{team.ws}/connectors/private-hosts"
     for role in ROLES:
         code = client.put(hosts_url, json={"hosts": ["10.1.2.3"]}, headers=team.h(role)).status_code
-        assert code == (200 if role in ("owner", "admin") else 403), role
+        assert code == (200 if role == "owner" else 403), role  # 서비스 관리자(소유자)만
     assert client.get(hosts_url, headers=team.h("admin")).json() == {"hosts": ["10.1.2.3"]}
-    bad = client.put(hosts_url, json={"hosts": ["localhost"]}, headers=team.h("owner"))
-    assert bad.status_code == 422
+    for blocked_host in (
+        "localhost",
+        "postgres",
+        "redis",
+        "0.0.0.0",  # noqa: S104
+        "2130706433",
+        "0x7f000001",
+        "::ffff:127.0.0.1",
+    ):
+        bad = client.put(hosts_url, json={"hosts": [blocked_host]}, headers=team.h("owner"))
+        assert bad.status_code == 422, blocked_host
     ok = client.post(purl, headers=team.h("builder")).json()
     assert ok["ok"] is True and pg_calls
 
