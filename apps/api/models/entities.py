@@ -254,6 +254,16 @@ class RunStep(Base):
 
 class Conversation(Base):
     __tablename__ = "conversations"
+    # 같은 앱·배포·대화 이름이 두 번 만들어지지 않게(동시에 질문이 겹칠 때). 0021
+    __table_args__ = (
+        Index(
+            "uq_conversations_session",
+            "app_id",
+            "deployment_id",
+            "external_session_id",
+            unique=True,
+        ),
+    )
     id: Mapped[str] = _id()
     app_id: Mapped[str] = mapped_column(ForeignKey("apps.id", ondelete="CASCADE"), index=True)
     deployment_id: Mapped[str | None] = mapped_column(
@@ -345,6 +355,7 @@ class Chunk(Base):
     __tablename__ = "chunks"
     # 설계서 §3-3: 코사인 거리 ivfflat 인덱스(PostgreSQL에서만)
     __table_args__ = (
+        Index("uq_chunks_doc_position", "document_id", "position", unique=True),
         Index(
             "ix_chunks_embedding_ivfflat",
             "embedding",

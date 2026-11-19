@@ -244,3 +244,14 @@ COMPOSE_PROFILES=sandbox docker compose up -d --build
   - 바로 해 보기: `docker compose exec backup bash /scripts/verify_backup.sh`
   - backup 서비스를 이 버전 전에 만들었다면 스크립트가 아직 안 붙어 있다: `docker compose up -d backup` 한 번.
 - 시점 복구(PITR, WAL 보관)는 아직 없다. 하루 한 번 백업이라 최악의 경우 하루치가 사라질 수 있다(ADR 0014 후보).
+
+## api·worker 컨테이너 비루트 실행(ADR 0017)
+api·worker·scheduler 이미지는 일반 사용자(uid 10001)로 실행된다. 이미 `GENIO_STORAGE=disk`로 쓰고 있어 `filestore` 볼륨이 root 소유로 만들어져 있다면, 이미지를 다시 빌드한 뒤 한 번만 소유자를 바꿔 준다.
+
+```
+docker compose run --rm --user root api chown -R 10001:10001 /data/files
+```
+기본 저장소(`db`)를 쓰면 필요 없다. 새 이미지로 `alembic upgrade head`(0021: 대화·조각 유일 색인)가 비루트로도 도는 것은 확인했다.
+
+## PostgreSQL 동시 호출 시험
+`apps/api/tests/test_pg_concurrency.py`는 평소 시험에서는 건너뛴다. 시험용 PostgreSQL을 따로 띄워(실제 DB 주소를 쓰지 말 것 — 안의 표를 모두 지운다) 실행한다. 파일 맨 위 설명 참고.

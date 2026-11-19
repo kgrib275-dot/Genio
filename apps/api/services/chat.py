@@ -10,6 +10,7 @@ from dataclasses import dataclass, field
 from typing import Any, Protocol
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from api.core.security import random_token
@@ -223,8 +224,22 @@ def start_chat(db: Session, req: ChatRequest) -> tuple[Conversation, Message]:
             external_session_id=sid,
             variables={},
         )
-        db.add(conv)
-        db.flush()
+        try:
+            with (
+                db.begin_nested()
+            ):  # 같은 대화가 동시에 만들어지면 한쪽만 남고, 나머지는 그 대화를 이어 쓴다
+                db.add(conv)
+                db.flush()
+        except IntegrityError:
+            q2 = select(Conversation).where(
+                Conversation.app_id == req.app.id, Conversation.external_session_id == sid
+            )
+            if req.deployment is not None:
+                q2 = q2.where(Conversation.deployment_id == req.deployment.id)
+            existing = db.scalar(q2)
+            if existing is None:
+                raise
+            conv = existing
     text = req.message or json.dumps(req.inputs, ensure_ascii=False)
     msg = Message(conversation_id=conv.id, role="user", content=text)
     db.add(msg)
