@@ -155,6 +155,8 @@ def save_version(
             "빨간 테두리 단계를 눌러 오류를 고친 뒤 다시 저장하세요.",
             errors=[e.model_dump() for e in result.errors],
         )
+    # 같은 앱의 저장·배포가 동시에 오면 줄 세운다(버전 번호가 겹치지 않게, 작업본을 덮어쓰지 않게)
+    db.refresh(app, with_for_update=True)
     last = latest_version(db, app.id)
     version = WorkflowVersion(
         app_id=app.id,

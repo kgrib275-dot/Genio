@@ -16,7 +16,7 @@ from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text, update
 from sqlalchemy.orm import Session
 
 from api.config import get_settings
@@ -1294,10 +1294,28 @@ def _parallel_limit() -> int:
     return max(1, min(int(get_settings().genio_run_parallelism), 16))
 
 
+def _claim(db: Session, run: Run, expected: str, *, started: bool = False) -> bool:
+    """실행을 한 워커만 잡게 한다: 상태가 expected일 때만 running으로 바꾼다(원자적 UPDATE).
+    같은 실행이 두 번 전달돼도(중복 전송·워커 재전달) 부작용이 두 번 나가지 않는다."""
+    values: dict[str, Any] = {"status": "running"}
+    if started:
+        values["started_at"] = now()
+    result = db.execute(
+        update(Run).where(Run.id == run.id, Run.status == expected).values(**values)
+    )
+    db.commit()
+    if not getattr(result, "rowcount", 0):
+        return False
+    db.refresh(run)
+    return True
+
+
 def _execute(db: Session, run_id: str) -> None:
     run = db.get(Run, run_id)
     if run is None or run.status in TERMINAL:
         return
+    if run.status == "running":
+        return  # 다른 워커가 실행 중이거나 멈춘 실행이다. 처음부터 다시 돌리면 부작용이 두 번 나간다
     app = db.get(App, run.app_id)
     if app is None:
         return
@@ -1342,6 +1360,15 @@ def _execute(db: Session, run_id: str) -> None:
             sched.load(context["sched"])
         else:  # v0.6 이전에 멈춘 실행: 기다리던 단계 아래만 이어서 실행
             sched.start_from(str((run.approval or {}).get("node_id")), as_waiting=True)
+        ap = run.approval or {}
+        if str(ap.get("kind") or "approval") == "approval":
+            already = "approved" in ap
+        else:
+            already = bool(ap.get("completed"))
+        if not already:
+            return  # 아직 결정되지 않았다(깨울 이유가 없다)
+        if not _claim(db, run, "waiting_approval"):
+            return  # 다른 워커가 이미 이어서 실행 중이다
         decided = _decide_person(db, run, graph, services, outputs)
         if decided is None:
             return
@@ -1372,6 +1399,17 @@ def _execute(db: Session, run_id: str) -> None:
             )
             return
     else:
+        if run.status != "queued":
+            return  # 이미 다른 워커가 시작했거나(running) 멈춘 실행이다. 처음부터 다시 돌리지 않는다
+        if db.get_bind().dialect.name == "postgresql":
+            # 한도 확인과 시작 사이에 다른 워커가 끼어들지 못하게 워크스페이스별로 줄 세운다(커밋하면 풀린다)
+            db.execute(
+                text("select pg_advisory_xact_lock(hashtext(:k))"), {"k": f"cap:{app.workspace_id}"}
+            )
+            db.refresh(run)
+            if run.status != "queued":
+                db.rollback()
+                return
         blocked = _limits_message(db, app)
         if blocked:
             _finish(db, run, services, "failed", blocked)
@@ -1386,9 +1424,8 @@ def _execute(db: Session, run_id: str) -> None:
         if start is None:
             _finish(db, run, services, "failed", "입력 단계가 없어 실행할 수 없어요.")
             return
-        run.status = "running"
-        run.started_at = now()
-        db.commit()
+        if not _claim(db, run, "queued", started=True):
+            return
         _publish(run)
         # 특정 단계부터 다시 실행: 앞 단계 결과는 지난 실행 것을 그대로 쓴다
         start_node = str(context.get("start_node") or "")

@@ -37,6 +37,8 @@ celery.conf.update(
         "apply-retention": {"task": "genio.apply_retention", "schedule": 24 * 3600.0},
         # v0.9: 기한이 지난 사람 단계 처리(자동 반려·승인·올리기·시간 초과 길)와 기한 전 다시 알림
         "sweep-human-tasks": {"task": "genio.sweep_human_tasks", "schedule": 300.0},
+        # 큐가 끊겨 대기로 남은 실행 다시 넣기, 워커가 죽어 실행 중으로 남은 실행 정리
+        "sweep-stuck-runs": {"task": "genio.sweep_stuck_runs", "schedule": 300.0},
         # v0.8: '매일 동기화'로 정해 둔 지식 가져오기 소스(웹사이트·노션·Google 문서)
         "sync-due-kb-sources": {"task": "genio.sync_due_sources", "schedule": 3600.0},
         # 운영 준비 1차(A3): 백업을 바깥 S3 호환 저장소에 올리기(GENIO_BACKUP_S3_BUCKET이 있을 때만)

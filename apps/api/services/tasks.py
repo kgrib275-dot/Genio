@@ -12,7 +12,7 @@ v0.9(ADR 0013): 담당자를 다른 사람·역할에게 **전달**할 수 있�
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
 from api.core.audit import audit
@@ -166,6 +166,16 @@ def complete(
         raise AppError(422, "승인할지 반려할지 골라 주세요.", "승인 또는 반려 버튼을 누르세요.")
     response = _clean_response(task, values) if task.kind == "question" else {}
     name = user.name if user else "링크로 처리한 사람"
+    # 같은 요청을 두 번 누르거나 두 사람이 동시에 처리해도 한 번만 반영한다(먼저 온 쪽이 이긴다)
+    claim = db.execute(
+        update(HumanTask)
+        .where(HumanTask.id == task.id, HumanTask.status == "open")
+        .values(status="done")
+    )
+    if not getattr(claim, "rowcount", 0):
+        db.rollback()
+        raise AppError(409, "이미 처리된 요청이에요.", "작업함을 새로고침해 확인하세요.")
+    db.refresh(task)
     task.status = "done"
     task.response = {
         **response,
@@ -574,6 +584,9 @@ def sweep(db: Session, current: datetime | None = None) -> dict[str, list[str]]:
             run = db.get(Run, t.run_id) if t.run_id else None
             if run is None or run.status != "waiting_approval":
                 continue  # 실행이 이미 끝났거나 멈춘 일은 건드리지 않는다
+            db.refresh(t)
+            if t.status != "open":
+                continue  # 사람이 방금 처리했다(시간 초과로 덮어쓰지 않는다)
             resumed = apply_timeout(db, t, cur)
             out["timed_out"].append(t.id)
             if resumed is not None:

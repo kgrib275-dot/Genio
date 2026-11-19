@@ -686,7 +686,12 @@ async def preview_pipeline(
 def reprocess_kb(kb_id: str, ctx: KbBuilders) -> dict[str, Any]:
     """모든 문서를 지금 처리 순서로 다시 나눈다(워커에서)."""
     _internal_only(ctx, kb_id)
-    docs = list(ctx.db.scalars(select(Document).where(Document.kb_id == kb_id)))
+    # 지금 처리 중인 문서는 건드리지 않는다(같은 문서를 두 번 처리하면 조각이 두 배가 된다)
+    docs = list(
+        ctx.db.scalars(
+            select(Document).where(Document.kb_id == kb_id, Document.status != "processing")
+        )
+    )
     for d in docs:
         d.status = "uploaded"
     audit(

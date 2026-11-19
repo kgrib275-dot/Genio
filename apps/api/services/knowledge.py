@@ -10,7 +10,7 @@ from typing import Any
 
 from pypdf import PdfReader
 from pypdf.errors import PdfReadError
-from sqlalchemy import delete, select, text
+from sqlalchemy import delete, select, text, update
 from sqlalchemy.orm import Session
 
 from api.config import get_settings
@@ -331,9 +331,16 @@ def process_document(db: Session, document_id: str) -> None:
     kb = db.get(KnowledgeBase, doc.kb_id)
     if kb is None:
         return
-    doc.status = "processing"
-    doc.error = None
+    # 같은 문서를 두 워커가 동시에 처리하면 조각이 두 배가 된다. 먼저 잡은 쪽만 처리한다.
+    claim = db.execute(
+        update(Document)
+        .where(Document.id == doc.id, Document.status != "processing")
+        .values(status="processing", error=None)
+    )
     db.commit()
+    if not getattr(claim, "rowcount", 0):
+        return
+    db.refresh(doc)
     try:
         result = run_pipeline(
             db,

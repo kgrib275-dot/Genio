@@ -182,6 +182,7 @@ def approve(run_id: str, body: ApproveIn, ctx: RunViewers) -> dict[str, Any]:
     run = ctx.db.get(Run, run_id)
     if run is None:
         raise not_found("실행 기록")
+    ctx.db.refresh(run, with_for_update=True)  # 동시에 두 번 눌러도 한 번만 결정되게
     if run.status != "waiting_approval" or not run.approval:
         raise AppError(
             409, "승인을 기다리는 실행이 아니에요.", "실행 상태를 새로고침해 확인하세요."

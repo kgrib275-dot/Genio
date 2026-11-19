@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -705,7 +707,7 @@ def test_messenger_hardening(
     again = client.post(base, content=form, headers=hdr)
     assert "이미" in again.json()["text"] and len(sent) == 1
     # 비ASCII 서명 헤더는 500이 아니라 401
-    bad = {
+    bad: dict[str, Any] = {
         **_signed_slack("s3cret-signing", form + "x"),
         "x-slack-signature": b"v0=" + bytes([0xE9]),
     }
@@ -759,3 +761,235 @@ def test_messenger_hardening(
         == 422
     )
     ratelimit.reset()
+
+
+# ---------------- 동시성 안전장치 ----------------
+def test_run_claim_is_atomic_and_stale_runs_do_not_restart(client: TestClient, team: Team) -> None:
+    from sqlalchemy import select
+
+    from api.db import SessionLocal
+    from api.engine.executor import _claim, _execute
+    from api.models import Run, RunStep
+
+    app_id = _new_app(client, team)
+    with SessionLocal() as db:
+        run = Run(app_id=app_id, trigger="api", status="queued", input={"message": "hi"})
+        db.add(run)
+        db.commit()
+        run_id = run.id
+    with SessionLocal() as a, SessionLocal() as b:
+        ra, rb = a.get(Run, run_id), b.get(Run, run_id)
+        assert ra is not None and rb is not None
+        assert _claim(a, ra, "queued", started=True) is True
+        # 두 번째 워커는 이미 잡힌 실행을 잡지 못한다
+        assert _claim(b, rb, "queued", started=True) is False
+    with SessionLocal() as db:
+        # 이미 running인 실행이 다시 전달돼도 처음부터 다시 돌지 않는다
+        _execute(db, run_id)
+        assert db.scalars(select(RunStep).where(RunStep.run_id == run_id)).all() == []
+        assert db.get(Run, run_id).status == "running"  # type: ignore[union-attr]
+
+
+def test_task_decision_is_claimed_once(client: TestClient, team: Team) -> None:
+    from api.core.errors import AppError
+    from api.db import SessionLocal
+    from api.models import HumanTask, User
+    from api.services import tasks as tasks_svc
+
+    app_id = _new_app(client, team)
+    with SessionLocal() as db:
+        t = HumanTask(
+            workspace_id=team.ws,
+            app_id=app_id,
+            kind="approval",
+            title="승인",
+            detail="",
+            fields=[],
+            status="open",
+            token="tok-claim-1",  # noqa: S106
+        )
+        db.add(t)
+        db.commit()
+        tid = t.id
+    with SessionLocal() as a, SessionLocal() as b:
+        ta, tb = a.get(HumanTask, tid), b.get(HumanTask, tid)  # 둘 다 열린 상태로 읽음
+        assert ta is not None and tb is not None and ta.status == tb.status == "open"
+        user = a.get(User, team.users["admin"])
+        tasks_svc.complete(a, ta, approved=True, values={}, comment="", user=user, via="app")
+        with pytest.raises(AppError) as exc:
+            tasks_svc.complete(b, tb, approved=False, values={}, comment="", user=user, via="app")
+        assert exc.value.status == 409
+    with SessionLocal() as db:
+        assert (db.get(HumanTask, tid).response or {}).get("approved") is True  # type: ignore[union-attr]
+
+
+def test_integrity_conflict_becomes_korean_409() -> None:
+    from fastapi import FastAPI
+    from sqlalchemy.exc import IntegrityError
+
+    from api.core.errors import install_error_handlers
+
+    app = FastAPI()
+    install_error_handlers(app)
+
+    @app.get("/boom")
+    def boom() -> None:
+        raise IntegrityError("insert", {}, Exception("duplicate key"))
+
+    res = TestClient(app).get("/boom")
+    assert res.status_code == 409
+    body = res.json()["detail"]
+    assert "겹쳐" in body["message"] and "새로고침" in body["hint"]
+
+
+def test_stuck_run_sweeper_requeues_and_fails(client: TestClient, team: Team) -> None:
+    from datetime import UTC, datetime, timedelta
+
+    from api.db import SessionLocal
+    from api.models import Run
+    from api.services import run_sweeper
+
+    app_id = _new_app(client, team)
+    now = datetime.now(UTC)
+    old = now - timedelta(minutes=30)
+    with SessionLocal() as db:
+        queued = Run(app_id=app_id, trigger="api", status="queued", input={}, created_at=old)
+        fresh = Run(app_id=app_id, trigger="api", status="queued", input={}, created_at=now)
+        waiting = Run(
+            app_id=app_id,
+            trigger="api",
+            status="queued",
+            input={},
+            created_at=old,
+            context={"capacity_wait": {"since": now.isoformat()}},
+        )
+        stuck = Run(
+            app_id=app_id, trigger="api", status="running", input={}, started_at=old, created_at=old
+        )
+        ok = Run(
+            app_id=app_id, trigger="api", status="running", input={}, started_at=now, created_at=now
+        )
+        db.add_all([queued, fresh, waiting, stuck, ok])
+        db.commit()
+        ids = {
+            "queued": queued.id,
+            "fresh": fresh.id,
+            "waiting": waiting.id,
+            "stuck": stuck.id,
+            "ok": ok.id,
+        }
+    with SessionLocal() as db:
+        res = run_sweeper.sweep(db, now)
+    assert res["requeued"] == [ids["queued"]] and res["failed"] == [ids["stuck"]]
+    with SessionLocal() as db:
+        assert db.get(Run, ids["stuck"]).status == "failed"  # type: ignore[union-attr]
+        assert "서버가 멈춰서" in (db.get(Run, ids["stuck"]).error or "")  # type: ignore[union-attr]
+        assert db.get(Run, ids["ok"]).status == "running"  # type: ignore[union-attr]
+        # 같은 실행을 5분 안에 또 넣지 않고, 세 번을 넘기면 실패로 끝낸다
+        assert run_sweeper.sweep(db, now + timedelta(minutes=1))["requeued"] == []
+        later = now
+        for _ in range(run_sweeper.MAX_REQUEUES - 1):
+            later += timedelta(minutes=6)
+            run_sweeper.sweep(db, later)
+        later += timedelta(minutes=6)
+        assert ids["queued"] in run_sweeper.sweep(db, later)["failed"]
+
+
+def test_enqueue_failure_does_not_break_the_request(monkeypatch: pytest.MonkeyPatch) -> None:
+    from api.config import get_settings
+    from api.services import queue
+
+    class Broken:
+        def send_task(self, *a: object, **k: object) -> None:
+            raise ConnectionError("redis down")
+
+    monkeypatch.setattr(get_settings(), "genio_run_inline", False)
+    monkeypatch.setattr(queue, "_client", lambda: Broken())
+    queue.enqueue_run("r1")  # 예외 없이 지나간다(대기 상태로 남아 점검이 다시 넣는다)
+    queue.enqueue_run("r1", countdown=5)
+
+
+def test_document_processing_is_claimed_once(client: TestClient, team: Team) -> None:
+    from api.db import SessionLocal
+    from api.models import Document, KnowledgeBase
+    from api.services import knowledge
+
+    with SessionLocal() as db:
+        kb = KnowledgeBase(workspace_id=team.ws, name="동시", embedding_model="m")
+        db.add(kb)
+        db.flush()
+        doc = Document(
+            kb_id=kb.id,
+            filename="a.txt",
+            mime="text/plain",
+            size=3,
+            status="processing",
+            content=b"abc",
+        )
+        db.add(doc)
+        db.commit()
+        doc_id = doc.id
+        knowledge.process_document(db, doc_id)  # 다른 워커가 처리 중이면 건드리지 않는다
+        assert db.get(Document, doc_id).status == "processing"  # type: ignore[union-attr]
+
+
+def test_alert_failure_in_one_workspace_does_not_stop_others(
+    client: TestClient, team: Team, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from api.db import SessionLocal
+    from api.services import limits
+
+    seen: list[str] = []
+
+    def fake(ws_id: str, n: object) -> int:
+        seen.append(ws_id)
+        if len(seen) == 1:
+            raise RuntimeError("메일 서버 오류")
+        return 1
+
+    monkeypatch.setattr(limits, "_check_workspace", fake)
+    with SessionLocal() as db:
+        from api.models import Organization, Workspace
+
+        org = Organization(name="o2", slug="o2-slug")
+        db.add(org)
+        db.flush()
+        db.add(Workspace(org_id=org.id, name="둘째", slug="second"))
+        db.commit()
+        assert limits.check_alerts(db) == 1
+    assert len(seen) >= 2
+
+
+def test_builder_blocks_second_message_while_first_is_pending(
+    client: TestClient, team: Team
+) -> None:
+    from api.db import SessionLocal
+    from api.models import BuilderMessage
+    from api.tests.test_builder import new_session
+
+    _, sid = new_session(client, team, "동시 대화")
+    with SessionLocal() as db:
+        db.add(BuilderMessage(session_id=sid, role="user", content="앞 요청"))
+        db.commit()
+    res = client.post(
+        f"/api/v1/builder/sessions/{sid}/messages",
+        json={"content": "또 요청"},
+        headers=team.h("builder"),
+    )
+    assert res.status_code == 409
+    assert "답하는 중" in res.json()["detail"]["message"]
+
+
+def test_improvement_answer_is_idempotent(client: TestClient, team: Team) -> None:
+    from api.tests.test_v02_features import chat, deploy, faq_app
+
+    app_id = faq_app(client, team)
+    token = deploy(client, team, app_id)
+    mid = next(d for n, d in chat(client, token, "재택은?") if n == "answer")["message_id"]
+    client.post(f"/api/v1/public/apps/{token}/messages/{mid}/feedback", json={"rating": "dislike"})
+    url = f"/api/v1/apps/{app_id}/improvements/{mid}/answer"
+    first = client.post(url, json={"answer": "주 2일"}, headers=team.h("builder")).json()
+    second = client.post(url, json={"answer": "주 2일"}, headers=team.h("builder")).json()
+    assert first["annotation_id"] == second["annotation_id"]
+    anns = client.get(f"/api/v1/apps/{app_id}/annotations", headers=team.h("builder")).json()
+    assert len(anns) == 1

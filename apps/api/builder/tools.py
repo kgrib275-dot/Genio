@@ -187,6 +187,8 @@ class BuilderToolbox:
 
     # ----- 그래프 저장 -----
     def graph(self) -> Graph:
+        # AI가 답하는 동안 사람이 캔버스를 고쳤을 수 있어서, 툴을 쓸 때마다 최신 작업본을 다시 읽는다
+        self.db.refresh(self.app)
         return Graph.model_validate(self.app.draft_graph or empty_graph())
 
     def save(self, graph: Graph) -> None:

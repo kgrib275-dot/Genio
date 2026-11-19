@@ -91,10 +91,13 @@ def startup() -> None:
     if engine.dialect.name == "sqlite":
         # 로컬·테스트용. PostgreSQL은 Alembic 마이그레이션으로만 바꾼다.
         Base.metadata.create_all(engine)
+    lock_conn = None
+    if engine.dialect.name == "postgresql":
+        # API 프로세스가 여러 개면 동시에 시작한다. 마켓 동기화·데모 준비는 한 번에 하나씩.
+        # 잠금은 전용 연결 하나에서 잡고 같은 연결에서 풀어야 한다(풀 연결이 바뀌면 안 풀린다).
+        lock_conn = engine.connect()
+        lock_conn.execute(text("select pg_advisory_lock(7412001)"))
     with SessionLocal() as db:
-        if engine.dialect.name == "postgresql":
-            # API 프로세스가 여러 개면 동시에 시작한다. 마켓 동기화·데모 준비는 한 번에 하나씩.
-            db.execute(text("select pg_advisory_lock(7412001)"))
         try:
             count = sync_catalog(db)
             log.info("마켓 아이템 %d개 동기화", count)
@@ -105,10 +108,11 @@ def startup() -> None:
                 seed_demo_samples(db)
             ensure_market_nodes(db)
         finally:
-            if engine.dialect.name == "postgresql":
-                db.rollback()
-                db.execute(text("select pg_advisory_unlock(7412001)"))
-                db.commit()
+            if lock_conn is not None:
+                try:
+                    lock_conn.execute(text("select pg_advisory_unlock(7412001)"))
+                finally:
+                    lock_conn.close()
 
 
 @asynccontextmanager

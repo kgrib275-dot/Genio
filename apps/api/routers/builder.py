@@ -1,6 +1,7 @@
 """빌더 챗: 세션과 메시지(SSE)."""
 
 from collections.abc import Iterator
+from datetime import UTC, datetime
 from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Depends
@@ -12,6 +13,7 @@ from api.builder import checkpoint
 from api.builder.agent import message_dict, run_turn
 from api.builder.metrics import workspace_metrics
 from api.core.audit import audit
+from api.core.errors import AppError
 from api.deps import EDIT_APPS, MANAGE_MEMBERS, Ctx, require_role
 from api.models import BuilderMessage, BuilderSession
 from api.routers.common import sse_frame, sse_response
@@ -74,6 +76,22 @@ class MessageIn(BaseModel):
 @router.post("/builder/sessions/{session_id}/messages")
 def post_message(session_id: str, body: MessageIn, ctx: SessionBuilders) -> StreamingResponse:
     user_id = ctx.user.id
+    # 같은 대화에서 앞 요청에 아직 답하는 중이면 막는다(두 요청이 같은 흐름을 동시에 고치지 않게).
+    # 서버가 멈춰 답 없이 끝난 요청은 3분이 지나면 새로 보낼 수 있다.
+    last = ctx.db.scalar(
+        select(BuilderMessage)
+        .where(BuilderMessage.session_id == session_id)
+        .order_by(BuilderMessage.created_at.desc())
+        .limit(1)
+    )
+    if last is not None and last.role == "user":
+        made = last.created_at if last.created_at.tzinfo else last.created_at.replace(tzinfo=UTC)
+        if (datetime.now(UTC) - made).total_seconds() < 180:
+            raise AppError(
+                409,
+                "앞 요청에 아직 답하는 중이에요.",
+                "답이 끝난 뒤에 다음 말을 보내 주세요.",
+            )
 
     def frames() -> Iterator[str]:
         event = body.event.model_dump() if body.event else None

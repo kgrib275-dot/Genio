@@ -279,69 +279,148 @@ def _send_alert(db: Session, ws: Workspace, subject: str, body: str) -> bool:
         return False
 
 
-def check_alerts(db: Session, now: datetime | None = None) -> int:
-    """실패·비용 알림을 보낸다. 보낸 메일 수를 돌려준다."""
-    n = now or now_utc()
+def _claim_state(ws_id: str, key: str, value: str) -> str | None:
+    """알림 상태(limits_state[key])를 value로 바꿔 '내가 보낼 차례'를 잡는다. 이미 value면 None(다른 곳이 보냈다).
+    워크스페이스 행을 잠그고 읽어서, 워커가 겹쳐 돌거나 관리자가 설정을 저장하는 순간과 부딪혀도 값이 덮이지 않는다.
+    돌려주는 값은 바꾸기 전 값(보내지 못하면 되돌릴 때 쓴다)."""
+    from api.db import SessionLocal
+
+    with SessionLocal() as s:
+        w = s.scalar(select(Workspace).where(Workspace.id == ws_id).with_for_update())
+        if w is None:
+            return None
+        state = dict((w.settings or {}).get("limits_state") or {})
+        before = str(state.get(key) or "")
+        if before == value:
+            return None
+        state[key] = value
+        w.settings = {**(w.settings or {}), "limits_state": state}
+        s.commit()
+        return before or ""
+
+
+def _release_state(ws_id: str, key: str, expected: str, before: str) -> None:
+    """보내지 못했을 때 상태를 되돌려 다음 확인 때 다시 시도하게 한다."""
+    from api.db import SessionLocal
+
+    with SessionLocal() as s:
+        w = s.scalar(select(Workspace).where(Workspace.id == ws_id).with_for_update())
+        if w is None:
+            return
+        state = dict((w.settings or {}).get("limits_state") or {})
+        if str(state.get(key) or "") == expected:
+            state[key] = before
+            w.settings = {**(w.settings or {}), "limits_state": state}
+            s.commit()
+
+
+def _check_workspace(ws_id: str, n: datetime) -> int:
+    """워크스페이스 하나의 알림을 확인한다(자기 세션·자기 트랜잭션. 한 곳이 실패해도 다른 곳에 영향이 없다)."""
+    from api.db import SessionLocal
+
     sent = 0
-    for ws in db.scalars(select(Workspace)):
+    with SessionLocal() as db:
+        ws = db.get(Workspace, ws_id)
+        if ws is None:
+            return 0
         lim = get_limits(ws)
         if not (lim["alert_emails"] and lim["alert_credential_id"]):
-            continue
+            return 0
         state = dict((ws.settings or {}).get("limits_state") or {})
-        since_raw = state.get("failures_checked_at")
-        since = datetime.fromisoformat(since_raw) if since_raw else n - timedelta(minutes=5)
-        if lim["alert_on_failure"]:
-            rows = db.execute(
+    month_key = n.strftime("%Y-%m")
+
+    # 실패 알림: 확인한 시각을 먼저 앞으로 옮겨 같은 구간을 두 번 알리지 않는다
+    since_raw = state.get("failures_checked_at")
+    since = datetime.fromisoformat(since_raw) if since_raw else n - timedelta(minutes=5)
+    if (
+        _claim_state(ws_id, "failures_checked_at", n.isoformat()) is not None
+        and lim["alert_on_failure"]
+    ):
+        with SessionLocal() as db:
+            ws = db.get(Workspace, ws_id)
+            q = (
                 select(Run, App.name)
                 .join(App, App.id == Run.app_id)
                 .where(
-                    App.workspace_id == ws.id,
+                    App.workspace_id == ws_id,
                     Run.status == "failed",
                     Run.finished_at >= since,
                     Run.finished_at < n,
                     Run.trigger.not_in(("test", "preview")),
                 )
-                .limit(50)
-            ).all()
-            if rows:
+            )
+            rows = db.execute(q.order_by(Run.finished_at.desc()).limit(50)).all()
+            total = db.scalar(select(func.count()).select_from(q.subquery())) or 0
+            if rows and ws is not None:
                 lines = [f"- {name}: {(r.error or '')[:160]}" for r, name in rows]
-                if _send_alert(db, ws, f"[Genio] 실행 실패 {len(rows)}건", "\n".join(lines)):
+                if total > len(rows):
+                    lines.append(f"…외 {total - len(rows)}건")
+                if _send_alert(db, ws, f"[Genio] 실행 실패 {total}건", "\n".join(lines)):
                     sent += 1
-        state["failures_checked_at"] = n.isoformat()
-        threshold = lim["cost_alert_usd"]
-        month_key = n.strftime("%Y-%m")
-        if threshold is not None and state.get("cost_alerted_month") != month_key:
-            used = month_cost(db, ws.id, n)
-            if used >= Decimal(str(threshold)):
+
+    threshold = lim["cost_alert_usd"]
+    if threshold is not None and state.get("cost_alerted_month") != month_key:
+        with SessionLocal() as db:
+            ws = db.get(Workspace, ws_id)
+            used = month_cost(db, ws_id, n)
+            # 비용 알림은 보내지 못해도 이번 달에는 다시 시도하지 않는다(원래 동작)
+            if (
+                ws is not None
+                and used >= Decimal(str(threshold))
+                and _claim_state(ws_id, "cost_alerted_month", month_key) is not None
+            ):
                 body = (
                     f"이번 달 AI 비용이 ${float(used):,.2f}로 알림 기준 ${float(threshold):,.2f}를 넘었어요.\n"
                     "관리 > 사용량에서 앱별·사람별 비용을 확인하세요."
                 )
                 if _send_alert(db, ws, "[Genio] 비용 알림", body):
                     sent += 1
-                state["cost_alerted_month"] = month_key
-        budget = lim["monthly_budget_usd"]
-        if budget and state.get("budget_warned_month") != month_key:
-            used_now = month_cost(db, ws.id, n)
-            if used_now >= Decimal(str(budget)) * Decimal("0.8"):
-                pct = int(used_now / Decimal(str(budget)) * 100)
-                body = (
-                    f"이번 달 AI 비용이 ${float(used_now):,.2f}로 월 한도 ${float(budget):,.2f}의 {pct}%예요.\n"
-                    "한도를 넘으면 새 실행이 멈춰요. 관리 > 사용량에서 앱별 비용을 확인하거나 한도를 조정하세요."
-                )
-                if _send_alert(db, ws, "[Genio] 월 한도 80% 도달", body):
-                    sent += 1
-                state["budget_warned_month"] = month_key
-        if lim["monthly_report"]:
-            prev_start = (month_start(n) - timedelta(days=1)).replace(day=1)
-            prev_key = prev_start.strftime("%Y-%m")
-            if state.get("report_sent_month") != prev_key:
-                subject, body = monthly_report_mail(db, ws, prev_start, month_start(n))
-                if _send_alert(db, ws, subject, body):
-                    sent += 1
-                    state["report_sent_month"] = prev_key
-        ws.settings = {**(ws.settings or {}), "limits_state": state}
-    db.commit()
+
+    budget = lim["monthly_budget_usd"]
+    if budget and state.get("budget_warned_month") != month_key:
+        with SessionLocal() as db:
+            ws = db.get(Workspace, ws_id)
+            used_now = month_cost(db, ws_id, n)
+            if ws is not None and used_now >= Decimal(str(budget)) * Decimal("0.8"):
+                before = _claim_state(ws_id, "budget_warned_month", month_key)
+                if before is not None:
+                    pct = int(used_now / Decimal(str(budget)) * 100)
+                    body = (
+                        f"이번 달 AI 비용이 ${float(used_now):,.2f}로 월 한도 ${float(budget):,.2f}의 {pct}%예요.\n"
+                        "한도를 넘으면 새 실행이 멈춰요. 관리 > 사용량에서 앱별 비용을 확인하거나 한도를 조정하세요."
+                    )
+                    if _send_alert(db, ws, "[Genio] 월 한도 80% 도달", body):
+                        sent += 1
+                    else:
+                        _release_state(ws_id, "budget_warned_month", month_key, before)
+
+    if lim["monthly_report"]:
+        prev_start = (month_start(n) - timedelta(days=1)).replace(day=1)
+        prev_key = prev_start.strftime("%Y-%m")
+        if state.get("report_sent_month") != prev_key:
+            before = _claim_state(ws_id, "report_sent_month", prev_key)
+            if before is not None:
+                with SessionLocal() as db:
+                    ws = db.get(Workspace, ws_id)
+                    if ws is not None:
+                        subject, body = monthly_report_mail(db, ws, prev_start, month_start(n))
+                        if _send_alert(db, ws, subject, body):
+                            sent += 1
+                        else:
+                            _release_state(ws_id, "report_sent_month", prev_key, before)
+    return sent
+
+
+def check_alerts(db: Session, now: datetime | None = None) -> int:
+    """실패·비용·한도·월간 리포트 알림을 보낸다. 보낸 메일 수를 돌려준다.
+    워크스페이스마다 따로 처리해서 한 곳이 실패해도(메일 서버 오류 등) 다른 곳의 상태가 되돌아가지 않는다."""
+    n = now or now_utc()
+    sent = 0
+    for ws_id in list(db.scalars(select(Workspace.id))):
+        try:
+            sent += _check_workspace(ws_id, n)
+        except Exception:
+            log.exception("알림 확인 실패(ws=%s)", ws_id)
     return sent
 
 

@@ -51,8 +51,14 @@ def key_and_app(request: Request, db: DbDep) -> tuple[AppApiKey, App]:
     app = db.get(App, key.app_id)
     if app is None:
         raise AppError(404, "앱을 찾을 수 없어요.", "앱이 지워졌는지 확인하세요.")
-    key.last_used_at = datetime.now(UTC)
-    db.commit()
+    # 같은 키로 요청이 몰리면 이 한 줄 갱신이 서로를 기다리게 하므로 1분에 한 번만 적는다
+    stamp = datetime.now(UTC)
+    last = key.last_used_at
+    if last is not None and last.tzinfo is None:
+        last = last.replace(tzinfo=UTC)
+    if last is None or (stamp - last).total_seconds() >= 60:
+        key.last_used_at = stamp
+        db.commit()
     return key, app
 
 

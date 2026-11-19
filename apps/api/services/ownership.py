@@ -66,7 +66,9 @@ def transfer(db: Session, ws: str, from_id: str, to_id: str) -> dict[str, int]:
     """앱과 그 앱의 키·예약, 데이터 표, 연결 정보의 만든 사람을 바꾼다."""
     if from_id == to_id:
         raise AppError(422, "같은 사람에게는 넘길 수 없어요.", "다른 멤버를 골라 주세요.")
-    _member(db, ws, from_id)
+    from_row = _member(db, ws, from_id)
+    # 같은 사람의 것을 동시에 두 곳으로 넘기는 요청이 겹치지 않게 이 멤버 행을 잠근다
+    db.refresh(from_row, with_for_update=True)
     target = _member(db, ws, to_id)
     if target.role not in EDIT_APPS:
         raise AppError(
@@ -80,7 +82,11 @@ def transfer(db: Session, ws: str, from_id: str, to_id: str) -> dict[str, int]:
     n_apps = len(app_ids)
     n_keys = n_trig = 0
     if app_ids:
-        db.execute(update(App).where(App.id.in_(app_ids)).values(created_by=to_id))
+        db.execute(
+            update(App)
+            .where(App.id.in_(app_ids), App.created_by == from_id)
+            .values(created_by=to_id)
+        )
         n_keys = _moved(
             db.execute(
                 update(AppApiKey)

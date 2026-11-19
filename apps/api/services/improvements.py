@@ -129,7 +129,7 @@ def _message_for(db: Session, app_id: str, message_id: str) -> tuple[Message, Me
 
 def _related_ids(db: Session, app_id: str, question: str) -> list[str]:
     """같은 질문으로 모인 답변 전부(한 번에 처리하려고)"""
-    items = list_items(db, app_id, days=365, limit=500)["items"]
+    items = list_items(db, app_id, days=90, limit=500)["items"]
     key = _norm(question)
     for it in items:
         if _norm(it["question"]) == key:
@@ -140,6 +140,13 @@ def _related_ids(db: Session, app_id: str, question: str) -> list[str]:
 def answer_with(db: Session, app_id: str, message_id: str, answer: str, user_id: str) -> Annotation:
     """고친 답을 '모범 답변'으로 등록하고 같은 질문의 모음을 처리 완료로 표시한다."""
     m, q = _message_for(db, app_id, message_id)
+    db.refresh(m, with_for_update=True)
+    if m.annotation_id not in (None, DISMISSED):
+        existing = db.get(
+            Annotation, m.annotation_id
+        )  # 더블클릭·동시 저장: 이미 저장된 답을 돌려준다
+        if existing is not None:
+            return existing
     ann = Annotation(
         app_id=app_id, question=q.content.strip()[:2000], answer=answer.strip(), created_by=user_id
     )

@@ -57,10 +57,19 @@ def enqueue_run(run_id: str, countdown: float | None = None) -> None:
 
         execute_run(run_id)
         return
-    if countdown:
-        _client().send_task(EXECUTE_RUN, args=[run_id], countdown=countdown)
-    else:
-        _client().send_task(EXECUTE_RUN, args=[run_id])
+    try:
+        if countdown:
+            _client().send_task(EXECUTE_RUN, args=[run_id], countdown=countdown)
+        else:
+            _client().send_task(EXECUTE_RUN, args=[run_id])
+    except Exception:
+        # 큐(Redis)가 잠깐 안 돼도 실행 기록은 대기 상태로 남는다. 5분마다 도는 점검(sweep_stuck_runs)이
+        # 오래 대기한 실행을 다시 큐에 넣는다.
+        import logging
+
+        logging.getLogger("genio.queue").warning(
+            "실행을 큐에 넣지 못함(run=%s). 곧 다시 시도해요.", run_id
+        )
 
 
 def enqueue_document(document_id: str) -> None:

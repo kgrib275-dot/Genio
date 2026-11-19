@@ -63,6 +63,23 @@ def _sweep_human_tasks() -> dict[str, int]:
     return {k: len(v) for k, v in res.items()}
 
 
+@celery.task(name="genio.sweep_stuck_runs")  # type: ignore[untyped-decorator]
+def sweep_stuck_runs_task() -> dict[str, int]:
+    """큐가 끊겨 대기로 남은 실행은 다시 큐에 넣고, 워커가 죽어 실행 중으로 남은 실행은 실패로 표시한다."""
+    return run_once("sweep_stuck_runs", 300, _sweep_stuck_runs) or {}
+
+
+def _sweep_stuck_runs() -> dict[str, int]:
+    from api.services.queue import enqueue_run
+    from api.services.run_sweeper import sweep
+
+    with SessionLocal() as db:
+        res = sweep(db)
+    for run_id in res["requeued"]:
+        enqueue_run(run_id)
+    return {k: len(v) for k, v in res.items()}
+
+
 @celery.task(name="genio.summarize_conversation")  # type: ignore[untyped-decorator]
 def summarize_conversation_task(conversation_id: str) -> bool:
     """v0.6: 기억 창보다 오래된 대화를 요약해 둔다(요약을 켠 앱만)."""

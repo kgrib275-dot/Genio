@@ -5,6 +5,7 @@ from typing import Any
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from sqlalchemy.exc import IntegrityError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 
@@ -101,6 +102,22 @@ def install_error_handlers(app: FastAPI) -> None:
         else:
             msg, hint = "요청을 처리하지 못했어요.", "잠시 후 다시 시도하세요."
         return JSONResponse(status_code=exc.status_code, content=_body(msg, hint))
+
+    @app.exception_handler(IntegrityError)
+    async def _conflict(request: Request, exc: IntegrityError) -> JSONResponse:
+        import logging
+
+        # 같은 순간에 두 사람이 같은 것을 만들거나 저장했을 때(유일 제약). 영어 500 대신 안내한다.
+        logging.getLogger("genio.errors").warning(
+            "DB 제약 충돌: %s %s", request.method, request.url.path, exc_info=exc
+        )
+        return JSONResponse(
+            status_code=409,
+            content=_body(
+                "같은 순간에 다른 요청과 겹쳐 저장하지 못했어요.",
+                "화면을 새로고침한 뒤 한 번 더 시도하세요.",
+            ),
+        )
 
     @app.exception_handler(Exception)
     async def _unknown(request: Request, exc: Exception) -> JSONResponse:
