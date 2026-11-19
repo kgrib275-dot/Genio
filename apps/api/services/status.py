@@ -198,6 +198,40 @@ def _queue() -> dict[str, Any]:
     return _item(status, "대기 중인 작업", f"{n}개", count=n)
 
 
+def _stuck_runs(db: Session, now: datetime) -> dict[str, Any]:
+    """시작을 못 한 채 오래 대기한 실행과, 오래 '실행 중'으로 남은 실행(워커가 죽었거나 큐가 끊긴 징후)."""
+    from api.services import run_sweeper
+
+    waiting = (
+        db.scalar(
+            select(func.count())
+            .select_from(Run)
+            .where(Run.status == "queued", Run.created_at < now - run_sweeper.REQUEUE_AFTER)
+        )
+        or 0
+    )
+    running = (
+        db.scalar(
+            select(func.count())
+            .select_from(Run)
+            .where(
+                Run.status == "running",
+                Run.started_at.is_not(None),
+                Run.started_at < now - run_sweeper.STUCK_RUNNING_AFTER,
+            )
+        )
+        or 0
+    )
+    total = int(waiting) + int(running)
+    detail = (
+        "멈춘 실행이 없어요."
+        if total == 0
+        else f"5분 넘게 대기 {waiting}건 · 15분 넘게 실행 중 {running}건(5분마다 자동으로 다시 넣거나 실패로 정리해요)"
+    )
+    status = "ok" if total == 0 else "warn" if total < 10 else "error"
+    return _item(status, "멈춘 실행", detail, waiting=int(waiting), running=int(running))
+
+
 def _backup(now: datetime) -> dict[str, Any]:
     path = Path(get_settings().genio_backup_dir) / "status.json"
     try:
@@ -321,6 +355,7 @@ def system_status(db: Session) -> dict[str, Any]:
         _worker(),
         _scheduler(r),
         _queue(),
+        _stuck_runs(db, now),
         _sandbox(),
         _backup(now),
         _offsite(),

@@ -1177,3 +1177,31 @@ def test_failed_send_is_not_retried_automatically(
                 connector="slack", credential_id="c", action="list_channels", params={}
             )
         assert read.value.retryable is True  # 읽기는 그대로 다시 시도한다
+
+
+def test_status_reports_stuck_runs(client: TestClient, team: Team) -> None:
+    from datetime import UTC, datetime, timedelta
+
+    from api.db import SessionLocal
+    from api.models import Run
+    from api.services import status
+
+    app_id = _new_app(client, team)
+    now = datetime.now(UTC)
+    with SessionLocal() as db:
+        assert status._stuck_runs(db, now)["status"] == "ok"
+        old = now - timedelta(minutes=30)
+        db.add(Run(app_id=app_id, trigger="api", status="queued", input={}, created_at=old))
+        db.add(
+            Run(
+                app_id=app_id,
+                trigger="api",
+                status="running",
+                input={},
+                started_at=old,
+                created_at=old,
+            )
+        )
+        db.commit()
+        item = status._stuck_runs(db, now)
+        assert item["status"] == "warn" and item["waiting"] == 1 and item["running"] == 1
