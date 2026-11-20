@@ -21,12 +21,15 @@ type Tab = "members" | "llm" | "usage" | "toolbox";
 export default function WorkspacePage() {
   const { workspaceId: ws, role } = useSession();
   const manage = canManage(role);
-  const tabs: { value: Tab; label: string }[] = [
-    { value: "members", label: "멤버" },
-    ...(canEdit(role) ? [{ value: "llm" as Tab, label: "AI 모델" }] : []),
-    ...(canViewRuns(role) ? [{ value: "usage" as Tab, label: "사용량" }] : []),
-    ...(canEdit(role) ? [{ value: "toolbox" as Tab, label: "업무 요령·관계도" }] : []),
-  ];
+  // 소유자·관리자는 같은 탭이 '관리'에 있어서(바꿀 수 있는 곳) 여기서는 멤버만 보여 헷갈리지 않게 한다
+  const tabs: { value: Tab; label: string }[] = manage
+    ? [{ value: "members", label: "멤버" }]
+    : [
+        { value: "members", label: "멤버" },
+        ...(canEdit(role) ? [{ value: "llm" as Tab, label: "AI 모델" }] : []),
+        ...(canViewRuns(role) ? [{ value: "usage" as Tab, label: "사용량" }] : []),
+        ...(canEdit(role) ? [{ value: "toolbox" as Tab, label: "업무 요령·관계도" }] : []),
+      ];
   const [tab, setTab] = useState<Tab>("members");
 
   return (
@@ -44,7 +47,7 @@ export default function WorkspacePage() {
             to="/admin"
             className="ml-auto inline-flex items-center gap-1 font-medium text-indigo-600 hover:underline"
           >
-            <Shield className="h-4 w-4" /> 관리 콘솔에서 바꾸기
+            <Shield className="h-4 w-4" /> AI 모델·사용량·업무 요령은 관리에서
           </Link>
         )}
       </Card>

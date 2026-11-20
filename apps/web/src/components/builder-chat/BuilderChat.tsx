@@ -83,6 +83,7 @@ function TurnBody({
   onRevert,
   onNoAiRetry,
   wsId,
+  appId,
 }: {
   content: string;
   record: TurnRecord | DraftTurn | null;
@@ -94,6 +95,7 @@ function TurnBody({
   onRevert?: () => void;
   onNoAiRetry?: () => void;
   wsId?: string;
+  appId?: string;
 }) {
   const role = useSession((s) => s.role);
   const patch = record as TurnRecord | null;
@@ -109,6 +111,31 @@ function TurnBody({
         <ToolCallGroup calls={record?.tool_calls ?? []} busy={active && busy} />
       )}
       {record?.test_result && <TestResultCard result={record.test_result} />}
+      {active &&
+        !busy &&
+        appId &&
+        (record?.tool_calls ?? []).some((c) => c.name === "validate" && c.ok) && (
+          <div
+            className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2.5 text-[13px] text-emerald-900"
+            data-testid="next-steps"
+          >
+            <p className="font-semibold">흐름이 다 만들어졌어요. 이렇게 써 보세요</p>
+            <ol className="mt-1 list-decimal space-y-0.5 pl-5">
+              <li>
+                위쪽 <b>대화로 시험</b>을 눌러 질문을 한두 개 해 보세요.
+              </li>
+              <li>
+                마음에 들면{" "}
+                <Link to={`/apps/${appId}/settings`} className="font-medium underline">
+                  공유·설정
+                </Link>
+                에서
+                <b> 배포하기</b>를 눌러 링크를 만드세요.
+              </li>
+              <li>고치고 싶으면 아래 입력칸에 &quot;답을 더 짧게&quot;처럼 말해 주세요.</li>
+            </ol>
+          </div>
+        )}
       {record?.market_suggestion && (
         <MarketSuggestionCard
           suggestion={record.market_suggestion}
@@ -359,6 +386,7 @@ ${err.hint}`)
                   onRevert={() => void revert(m.id)}
                   onNoAiRetry={i === lastAssistantIdx ? retryLast : undefined}
                   wsId={wsId}
+                  appId={appId}
                 />
               </div>
             </div>

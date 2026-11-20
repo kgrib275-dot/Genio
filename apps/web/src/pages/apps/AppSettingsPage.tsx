@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import { VersionDiffView } from "@/components/VersionDiffView";
 import { IpEditor } from "@/components/deploy/IpEditor";
+import type { AppDetailV2 } from "@/lib/api/types";
 import type { DeploymentWithIps } from "@/lib/api/ipAccess";
 import { useEffect, useState, type FormEvent } from "react";
 import { useNavigate, useParams } from "react-router-dom";
@@ -53,6 +54,7 @@ import {
 import { useMembers } from "@/lib/api/workspace";
 import { canEdit, useSession } from "@/store/session";
 import { AppNav } from "@/pages/apps/AppNav";
+import { PreShareChecklist } from "@/components/share/PreShareChecklist";
 import { MessengerCard } from "@/pages/apps/MessengerCard";
 import { EmptyState } from "@/components/EmptyState";
 
@@ -229,6 +231,12 @@ function AccessEditor({
   );
 }
 
+const ACCESS_SENTENCE: Record<Access, string> = {
+  public: "링크를 받은 사람은 누구나 로그인 없이 쓸 수 있어요. 사내 문서가 들어 있다면 주의하세요.",
+  workspace: "이 워크스페이스에 로그인한 멤버만 쓸 수 있어요. 링크를 전달받아도 로그인이 필요해요.",
+  roles: "아래에서 고른 역할·사람만 쓸 수 있어요.",
+};
+
 function DeploymentsCard({ appId, editable }: { appId: string; editable: boolean }) {
   const deployments = useDeployments(appId);
   const appInfo = useApp(appId);
@@ -296,6 +304,12 @@ function DeploymentsCard({ appId, editable }: { appId: string; editable: boolean
       <CardHeader title="배포" description="저장한 버전을 링크·위젯·API로 내보내요." />
       <CardBody className="space-y-4">
         {editable && (
+          <PreShareChecklist
+            appId={appId}
+            features={(appInfo.data as AppDetailV2 | undefined)?.features}
+          />
+        )}
+        {editable && (
           <form onSubmit={submit} className="grid gap-3 rounded-md bg-slate-50 p-3 md:grid-cols-2">
             <Field label="배포 방식" htmlFor="dep-channel">
               <Select
@@ -333,6 +347,9 @@ function DeploymentsCard({ appId, editable }: { appId: string; editable: boolean
                 ))}
               </Select>
             </Field>
+            <p className="text-xs text-slate-500 md:col-span-2" data-testid="access-sentence">
+              {ACCESS_SENTENCE[access]}
+            </p>
             {access === "roles" && (
               <div className="md:col-span-2">
                 <AudiencePicker roles={roles} onRoles={setRoles} users={users} onUsers={setUsers} />
