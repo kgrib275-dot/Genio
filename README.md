@@ -22,18 +22,20 @@
 | 계정 | 관리자가 계정을 만들고 **임시 비밀번호 발급**(첫 로그인 때 새 비밀번호 강제), 회원가입 끄기, 비밀번호 찾기(메일), 이메일 인증(선택), 2단계 인증(인증 앱·복구 코드), 로그인 기기 관리·모든 기기 로그아웃, 내 데이터 내려받기, 탈퇴, 이용약관·개인정보처리방침 동의 |
 | 운영·관리 | 로그·모니터링·사용량·활동 기록(CSV 내보내기), 모든 목록 검색·필터·개수(계정별 유지, 기본 10개), 프로젝트 현황판, 소유자·관리자 콘솔(계정 만들기·비밀번호·2단계 인증 초기화, 시스템 메일), **시스템 상태**(DB·Redis·워커·백업·디스크)·**서버 오류 기록**(요청 번호), **매일 자동 백업**(7일 보관), 역할 5개·배포 대상 사용자·API 키 권한 범위, 보관 기간, 개인 설정(다크 모드) |
 | 마켓 | 69개: 커넥터 33(Twilio·SendGrid·Zendesk·Salesforce·솔라피 등)·템플릿 24·프롬프트 팩 9·단계, 분류·정렬, 설치·업데이트 |
-| 외부 연동 | **MCP로 게시**(흐름 앱을 Claude 등 AI 도구에서 호출), **MCP 클라이언트**(외부 MCP 도구를 단계·에이전트에서 사용), **OpenAPI 가져오기→API 도구**, **외부 추적**(Langfuse·LangSmith), **공개 API 문서(/api-docs)·명령줄 도구**, **Dify 앱 가져오기**, **서비스 이벤트로 시작**(Slack·GitHub·Shopify·Telegram·Jira·Typeform), **외부 추적 7종**(Langfuse·LangSmith·OpenTelemetry·Phoenix·Arize·Opik·Weave) |
+| 외부 연동 | **MCP로 게시**(흐름 앱을 Claude 등 AI 도구에서 호출), **MCP 클라이언트**(외부 MCP 도구를 단계·에이전트에서 사용), **OpenAPI 가져오기→API 도구**, **외부 추적**(Langfuse·LangSmith), **공개 API 문서(/api-docs)·명령줄 도구**(`Idempotency-Key` 지원), **슬랙·팀즈에서 앱 부르기**, **Dify 앱 가져오기**, **서비스 이벤트로 시작**(Slack·GitHub·Shopify·Telegram·Jira·Typeform), **외부 추적 7종**(Langfuse·LangSmith·OpenTelemetry·Phoenix·Arize·Opik·Weave) |
+| 비개발자 도우미 | **문서로 챗봇 만들기**(문서만 올리면 완성), 데모 AI(키 없이 체험), 홈 '지금 할 일'(승인·실패·싫어요), **고칠 질문**(싫어요·답 못 찾음 → 바른 답을 모범 답변으로), **품질 점검**(AI 심판 채점·배포 전 통과 조건), 시험 모드(보내기 동작은 미리보기만), 공유 전 점검표, 부서별 시작, 엑셀 붙여넣기로 표 만들기, 점검 중 표시, 하루 사용 상한, 월간 이용 요약 메일, 앱 소유자 인수인계 |
 | 배우기·도움 | 화면 투어(역할별), 시작 체크리스트, 빈 화면 안내, 샘플 11가지(8개는 AI 키 없이 동작), 따라 하기 강좌 9개, Dify·n8n 이름 대응표, 사용설명서, 도움·문의 창 |
 
 기능 정의서와 반영 현황: [docs/feature-spec.md](docs/feature-spec.md) · [docs/feature-coverage.md](docs/feature-coverage.md)
 다른 서비스와 비교(Dify·n8n·Zapier·Make·Flowise): [docs/dify-gap.md](docs/dify-gap.md)
 
-## 현재 상태 (2026-11-18)
-- 버전: v0.9 + 운영 준비 1차([ADR 0014](docs/decisions/0014-운영-준비-1차.md)). 결정 기록 ADR 0001~0014.
-- 운영 준비 1차: 예약 실행 분리(`scheduler` 서비스)·속도 제한 보강, 워크스페이스 한도(동시·앱당·분당 실행, 파일 용량), 보안 남은 항목 F3~F21, 개인정보 가리기, AI 기본법 대응(AI 안내 문구·AI 생성 표시), 구조화 로그·`/metrics`, 외부 백업·매주 복구 연습.
-- **운영 반영 방법이 바뀌었다**: `docker compose up -d`(새 `scheduler` 서비스가 만들어져야 예약 실행이 돈다. `restart api worker`만 하면 예약이 멈춘다). api가 뜰 때 마이그레이션 0019. 화면 수정은 `start_genio.bat -Rebuild`.
-- 2026-11-18 확인 때 Docker가 꺼져 있었고 마지막 자동 백업은 11-16이었다. 공유 주소가 내려가 있을 수 있다.
-- 기능 후보 목록(골라 쓰기용): [docs/feature-candidates-2026-11-18.html](docs/feature-candidates-2026-11-18.html)
+## 현재 상태 (2026-11-20)
+- 버전: v0.9 + 운영 준비 1차 + 사용성·안정성·보안 반영. 결정 기록 ADR 0001~0017.
+- **사용성 점검 반영**([ADR 0016](docs/decisions/0016-사용성-점검-반영-1차.md)): 처음 쓰는 비개발자가 가입~공유까지 눌러 본 결과로 25개 항목 반영, 메뉴·탭 이름을 쉬운 말로 정리(챗봇 모음·품질 점검·대화 기록·공유·설정 등), 모바일 점검(도움 버튼 가림·캔버스 맞춤 수정), 로고를 누르면 홈으로 이동.
+- **안정성·보안 점검 반영**([ADR 0017](docs/decisions/0017-안정성-보안-점검-반영.md)): 공개 주소 서버는 운영으로 판정(키 필수·데모 계정 시드 금지), 내부 주소 허용 제한, 실행 선점·승인 결정 중복 방지·버전 저장 잠금, 멈춘 실행 자동 정리, 비밀번호·2단계 시도 제한, 코드 단계 자원 한도, api·worker 비루트 실행. **진짜 PostgreSQL 동시 호출 시험 8개**와 마이그레이션 0001~0021 위·아래 확인.
+- 자동 검사(GitHub Actions `ci.yml`): ruff·mypy·pytest 1,180여 개·eslint·tsc·vitest 266개·빌드·`pip-audit`·`npm audit`, PostgreSQL 동시 호출 시험.
+- **반영 방법**: `docker compose up -d --build`(마이그레이션 0019~0021 자동 적용, 새 `scheduler`). **`.env`에 `POSTGRES_PASSWORD`가 꼭 있어야 한다**(기본값 `genio`는 더 이상 쓰지 않는다). 공개 주소를 쓰면 `GENIO_FERNET_KEY`도 필수다. `GENIO_STORAGE=disk`면 이미지를 다시 빌드한 뒤 [runbook](docs/runbook.md)의 '비루트 실행' 명령을 한 번 실행한다.
+- 결과 요약과 위치: [docs/feature-coverage.md](docs/feature-coverage.md) 맨 아래 표들, 남은 후보: [docs/field-needs-2026-11-19.html](docs/field-needs-2026-11-19.html).
 
 ## 최근 점검 (2026-11-06) — 안정성·보안·전체 화면
 - 자동 검사 전부 통과(pytest 982, 화면 테스트 209). 200명 동시 20 시험: 요청 15,986개 **실패 0**, 사용자 간 접근 600/600 차단.
@@ -50,16 +52,17 @@
 - 자세히: [docs/loadtest-2026-11-03.md](docs/loadtest-2026-11-03.md)
 
 ## 오픈 전 남은 일
-- **꼭**: 데모 계정 비밀번호 바꾸기(공개 주소), 필요 없으면 회원가입 끄기(관리 > 시스템 설정), 실제 AI 키로 빌더·샘플 ⑧~⑩ 확인, 시스템 메일(SMTP) 설정, 약관·개인정보처리방침 법률 검토.
+- **꼭**: 데모 계정 비밀번호 바꾸기(공개 주소; 시스템 상태 '공개 서버 보안'에 경고가 뜬다), 필요 없으면 회원가입 끄기, **실제 AI 키로 빌더·샘플 ⑧~⑩·품질 점검 AI 심판 확인**, **실제 슬랙·팀즈·메일 연결 확인**, 시스템 메일(SMTP) 설정 후 이메일 인증 켜기, 전체 컨테이너 재빌드 리허설, 약관·개인정보처리방침 법률 검토.
+- 결정이 필요해서 남김: 로그인 잠금 정책, 신뢰 프록시 범위, Redis 비밀번호, AI 호출 DNS 재바인딩 방지([ADR 0017](docs/decisions/0017-안정성-보안-점검-반영.md) '하지 않은 것').
 - **판매형 전환 때 결정 필요**(작업 규칙상 범위 밖, [ADR 0011](docs/decisions/0011-오픈-준비.md)): 결제·요금제, 사용량 과금, 기본 제공 AI·체험 크레딧, SSO, 고객사별 데이터 격리, 클라우드 서버 이전.
 - v0.8 선택 설정: 파일을 S3·디스크에 두기(`GENIO_STORAGE`), 코드 실행 샌드박스(`GENIO_SANDBOX_URL`, 컴포즈 프로필 `sandbox`), Sentry(`SENTRY_DSN`). 자세히는 [runbook](docs/runbook.md)의 'v0.8 운영 안전'.
 - 운영 준비 1차 선택 설정: 바깥 백업(`GENIO_BACKUP_S3_BUCKET`), JSON 로그(`GENIO_LOG_FORMAT=json`), 지표(`GENIO_METRICS_TOKEN`, 프로필 `monitoring`). 자세히는 [runbook](docs/runbook.md) '관측'·'외부 백업·복구 연습'.
 - 이 PC는 메모리가 빠듯하다: 운영 중에 이미지를 빌드하면 Docker가 멈출 수 있으니 다른 컨테이너를 줄인 뒤 빌드할 것.
-- 실제 계정으로 확인하지 못한 것: 새 커넥터 13개, AI 공급자 18곳, MCP 클라이언트, Langfuse·LangSmith, 메일 발송.
+- 실제 계정으로 확인하지 못한 것: 슬랙·팀즈 연결, 새 커넥터 13개, AI 공급자 18곳, MCP 클라이언트, Langfuse·LangSmith, 메일 발송.
 
 ## 빠른 시작
 ```bash
-cp .env.example .env          # 키 채우기(GENIO_SECRET_KEY, GENIO_FERNET_KEY 등)
+cp .env.example .env          # 키 채우기(GENIO_SECRET_KEY, GENIO_FERNET_KEY, POSTGRES_PASSWORD 등)
 docker compose up --build -d  # postgres, redis, api(프로세스 4), worker, scheduler(예약), web(nginx), backup(매일 3시·매주 복구 연습), tailscale
 open http://127.0.0.1:5190
 ```
@@ -67,7 +70,7 @@ open http://127.0.0.1:5190
 - 개발 중 자동 재시작: `docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d api`
 - requirements를 바꾼 뒤: `docker compose up -d --build api worker`
 - 백업 복구: `scripts/restore_backup.sh <파일>`(지금 DB를 먼저 백업한 뒤 복구, [runbook](docs/runbook.md))
-- 검사: `make check` (Windows는 `PYTHONUTF8=1 bash scripts/check.sh`) — ruff·mypy·pytest·eslint·tsc·vitest
+- 검사: `make check` (Windows는 `PYTHONUTF8=1 bash scripts/check.sh`) — ruff·mypy·pytest·eslint·tsc·vitest. 진짜 PostgreSQL 동시 호출 시험은 `apps/api/tests/test_pg_concurrency.py` 맨 위 설명대로 시험용 DB에서 따로 돌린다(CI에서는 자동).
 
 ## 구성
 ```
@@ -76,7 +79,7 @@ apps/worker     Celery(흐름 실행, 문서 임베딩, 1분마다 예약 실행
 apps/web        React · Vite · React Flow · TanStack Query · Zustand · Tailwind
 packages/nodes  NodeSpec 단계 레지스트리(26종)
 market-items    기본 제공 마켓 아이템
-docs            설계서, 기능 정의서·반영 현황, 기능 후보 목록, API 계약, 운영 안내, 결정 기록(ADR 0001~0014), 점검 보고서
+docs            설계서, 기능 정의서·반영 현황, 기능 후보 목록, API 계약, 운영 안내, 결정 기록(ADR 0001~0017), 점검 보고서
 ```
 
 ## 문서
