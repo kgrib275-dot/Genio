@@ -90,9 +90,22 @@ const BOTTOM_NAV: NavItem[] = [
   { to: "/help", label: "사용설명서", icon: BookMarked, tour: "nav-help" },
 ];
 
-export function Logo({ compact = false }: { compact?: boolean }) {
+/** 로고를 누르면 어느 화면에서든 홈(대시보드)으로 간다. */
+export function Logo({
+  compact = false,
+  onNavigate,
+}: {
+  compact?: boolean;
+  onNavigate?: () => void;
+}) {
   return (
-    <div className="flex items-center gap-2.5">
+    <Link
+      to="/"
+      aria-label="제니오 홈으로"
+      title="홈으로"
+      onClick={onNavigate}
+      className="flex items-center gap-2.5 rounded-lg focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-500"
+    >
       <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-indigo-500 to-violet-600 text-sm font-bold text-white shadow-sm">
         G
       </span>
@@ -102,7 +115,7 @@ export function Logo({ compact = false }: { compact?: boolean }) {
           <p className="text-[11px] text-slate-500">{ko.tagline}</p>
         </div>
       )}
-    </div>
+    </Link>
   );
 }
 
@@ -579,7 +592,7 @@ export function Layout() {
           />
           <aside className="absolute inset-y-0 left-0 flex w-72 max-w-[85vw] flex-col bg-white shadow-xl">
             <div className="flex items-center justify-between px-4 py-4">
-              <Logo />
+              <Logo onNavigate={() => setDrawerOpen(false)} />
               <button
                 type="button"
                 aria-label="메뉴 닫기"
