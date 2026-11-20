@@ -161,3 +161,19 @@ def test_html_is_escaped(client: TestClient, team: Team) -> None:
     )
     page = client.get(f"/api/v1/public/share/{token}").text
     assert "<script>alert(1)</script>" not in page and "&lt;script&gt;" in page
+
+
+def test_preview_html_lets_people_through_to_the_real_page() -> None:
+    """미리보기 화면에 사람이 들어와도 '열기'는 ?open=1로 진짜 화면에 가고, 로봇이 아니면 자동으로 넘어간다."""
+    from api.services import share_meta
+
+    out = share_meta.render_html(
+        {
+            "title": "챗봇",
+            "description": "소개",
+            "image": "https://x/i.png",
+            "url": "https://x/share/tok",
+        }
+    )
+    assert 'href="https://x/share/tok?open=1"' in out
+    assert 'location.replace("https://x/share/tok?open=1")' in out

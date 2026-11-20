@@ -123,6 +123,7 @@ def render_html(meta: dict[str, Any]) -> str:
 <meta name="twitter:description" content="{d}">
 <meta name="twitter:image" content="{img}">
 </head>
-<body><h1>{t}</h1><p>{d}</p><p><a href="{url}">열기</a></p></body>
+<body><h1>{t}</h1><p>{d}</p><p><a href="{url}?open=1">열기</a></p>
+<script>if(!/bot|crawl|spider|scrap|preview|facebookexternalhit/i.test(navigator.userAgent)){{location.replace("{url}?open=1")}}</script></body>
 </html>
 """
