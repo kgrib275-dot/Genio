@@ -32,3 +32,10 @@ createRoot(root).render(
     </QueryClientProvider>
   </StrictMode>,
 );
+
+// 홈 화면에 추가할 수 있게 서비스 워커를 등록한다(운영 빌드에서만, 아무것도 저장하지 않는다)
+if (import.meta.env.PROD && "serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    void navigator.serviceWorker.register("/sw.js").catch(() => undefined);
+  });
+}

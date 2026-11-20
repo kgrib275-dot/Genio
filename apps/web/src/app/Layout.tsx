@@ -58,6 +58,21 @@ interface NavItem {
   tour?: string;
 }
 
+/** 메뉴에 마우스를 올리면 보이는 한 줄 설명(처음 보는 말을 풀어 준다) */
+const NAV_HINT: Record<string, string> = {
+  "/": "내가 만든 앱과 지금 할 일",
+  "/hub": "우리 팀이 공유한 챗봇을 바로 써 보는 곳",
+  "/tasks": "내가 승인하거나 확인해야 할 일",
+  "/knowledge": "챗봇이 참고할 문서(규정·매뉴얼)를 모아 두는 곳",
+  "/data": "흐름이 기록하고 꺼내 쓰는 엑셀 같은 표",
+  "/connectors": "슬랙·메일 같은 외부 서비스에 로그인해 두는 곳",
+  "/market": "템플릿과 연결 서비스를 설치하는 곳",
+  "/workspace": "우리 팀 멤버와 내 역할",
+  "/admin": "팀 설정·안전 규칙·AI 모델(관리자 전용)",
+  "/learn": "샘플로 따라 하며 배우기",
+  "/help": "주제별 사용설명서",
+};
+
 const NAV: NavItem[] = [
   { to: "/", label: ko.nav.dashboard, icon: LayoutGrid, end: true },
   { to: "/hub", label: "챗봇 모음", icon: MessagesSquare },
@@ -115,7 +130,7 @@ function NavItems({
             to={n.to}
             end={n.end}
             data-tour={n.tour}
-            title={compact ? n.label : undefined}
+            title={compact ? `${n.label} — ${NAV_HINT[n.to] ?? ""}` : NAV_HINT[n.to]}
             onClick={onNavigate}
             className={({ isActive }) =>
               cn(

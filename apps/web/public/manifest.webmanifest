@@ -1,0 +1,12 @@
+{
+  "name": "제니오",
+  "short_name": "제니오",
+  "description": "말로 만드는 나만의 앱",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#f8fafc",
+  "theme_color": "#4f46e5",
+  "lang": "ko",
+  "icons": [{ "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }]
+}

@@ -12,6 +12,7 @@ import { IpEditor } from "@/components/deploy/IpEditor";
 import type { AppDetailV2 } from "@/lib/api/types";
 import type { DeploymentWithIps } from "@/lib/api/ipAccess";
 import { useEffect, useState, type FormEvent } from "react";
+import { api } from "@/lib/api/client";
 import { useNavigate, useParams } from "react-router-dom";
 import { JsonView } from "@/components/canvas/RunPanel";
 import { AppearanceEditor } from "@/components/chat/AppearanceEditor";
@@ -624,6 +625,33 @@ function AppInfoCard({ appId, editable }: { appId: string; editable: boolean }) 
   const app = useApp(appId);
   const update = useUpdateApp(appId);
   const del = useDeleteApp();
+  const wsId = useSession((st) => st.workspaceId);
+  /** 지우기 전에 영향 범위(함께 사라지는 공유 링크, 이 앱을 쓰는 다른 앱)를 알려 준다 */
+  const confirmDelete = async () => {
+    let extra = "";
+    try {
+      const [deps, rel] = await Promise.all([
+        api.get<unknown[]>(`/apps/${appId}/deployments`),
+        api.get<{
+          resources: { kind: string; id: string; used_by: { app_name: string }[] }[];
+        }>(`/workspaces/${wsId}/dependencies`),
+      ]);
+      const users = rel.resources.find((r) => r.kind === "app" && r.id === appId)?.used_by ?? [];
+      if (deps.length > 0)
+        extra += `
+- 공유 링크·위젯·API 배포 ${deps.length}개가 멈춰요.`;
+      if (users.length > 0)
+        extra += `
+- 이 앱을 부르는 다른 앱이 있어요: ${users.map((u) => u.app_name).join(", ")}(그 앱들이 실패해요).`;
+    } catch {
+      /* 영향 범위를 못 불러와도 지우기 확인은 보여 준다 */
+    }
+    if (
+      window.confirm(`앱을 지울까요? 버전·실행 기록·배포도 함께 지워지고 되돌릴 수 없어요.${extra}`)
+    ) {
+      del.mutate(appId, { onSuccess: () => navigate("/") });
+    }
+  };
   const duplicate = useDuplicateApp();
   const navigate = useNavigate();
   const ws = useSession((s) => s.workspaceId);
@@ -757,14 +785,7 @@ function AppInfoCard({ appId, editable }: { appId: string; editable: boolean }) 
               <Button type="submit" disabled={update.isPending}>
                 {ko.common.save}
               </Button>
-              <Button
-                variant="danger"
-                onClick={() => {
-                  if (window.confirm("앱을 지울까요? 버전·실행 기록·배포도 함께 지워져요.")) {
-                    del.mutate(appId, { onSuccess: () => navigate("/") });
-                  }
-                }}
-              >
+              <Button variant="danger" onClick={() => void confirmDelete()}>
                 앱 삭제
               </Button>
             </div>
