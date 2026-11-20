@@ -33,6 +33,7 @@
 - 버전: v0.9 + 운영 준비 1차 + 사용성·안정성·보안 반영. 결정 기록 ADR 0001~0017.
 - **사용성 점검 반영**([ADR 0016](docs/decisions/0016-사용성-점검-반영-1차.md)): 처음 쓰는 비개발자가 가입~공유까지 눌러 본 결과로 25개 항목 반영, 메뉴·탭 이름을 쉬운 말로 정리(챗봇 모음·품질 점검·대화 기록·공유·설정 등), 모바일 점검(도움 버튼 가림·캔버스 맞춤 수정), 로고를 누르면 홈으로 이동.
 - **안정성·보안 점검 반영**([ADR 0017](docs/decisions/0017-안정성-보안-점검-반영.md)): 공개 주소 서버는 운영으로 판정(키 필수·데모 계정 시드 금지), 내부 주소 허용 제한, 실행 선점·승인 결정 중복 방지·버전 저장 잠금, 멈춘 실행 자동 정리, 비밀번호·2단계 시도 제한, 코드 단계 자원 한도, api·worker 비루트 실행. **진짜 PostgreSQL 동시 호출 시험 8개**와 마이그레이션 0001~0021 위·아래 확인.
+- **공유 링크 미리보기 수정**: 카카오톡 안에서 링크를 열면 미리보기 페이지만 보이던 문제를 고쳤다(로봇만 `kakaotalk-scrap`으로 구분, `?open=1` 우회). **웹 이미지(nginx)를 다시 빌드해야 반영된다**: `docker compose up -d --build web`.
 - 자동 검사(GitHub Actions `ci.yml`): ruff·mypy·pytest 1,180여 개·eslint·tsc·vitest 266개·빌드·`pip-audit`·`npm audit`, PostgreSQL 동시 호출 시험.
 - **반영 방법**: `docker compose up -d --build`(마이그레이션 0019~0021 자동 적용, 새 `scheduler`). **`.env`에 `POSTGRES_PASSWORD`가 꼭 있어야 한다**(기본값 `genio`는 더 이상 쓰지 않는다). 공개 주소를 쓰면 `GENIO_FERNET_KEY`도 필수다. `GENIO_STORAGE=disk`면 이미지를 다시 빌드한 뒤 [runbook](docs/runbook.md)의 '비루트 실행' 명령을 한 번 실행한다.
 - 결과 요약과 위치: [docs/feature-coverage.md](docs/feature-coverage.md) 맨 아래 표들, 남은 후보: [docs/field-needs-2026-11-19.html](docs/field-needs-2026-11-19.html).
