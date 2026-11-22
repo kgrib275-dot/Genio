@@ -1289,3 +1289,23 @@ def test_announcement_and_public_status(client: TestClient, team: Team) -> None:
     assert st["status"] in ("ok", "degraded", "down") and st["components"][0]["name"] == "서비스"
     assert {"detail", "items"}.isdisjoint(st)
     assert all(set(c) == {"name", "status"} for c in st["components"])
+
+
+def test_activation_funnel(client: TestClient, team: Team) -> None:
+    from api.tests.test_v02_features import chat, deploy, faq_app
+
+    base = f"/api/v1/workspaces/{team.ws}/activation"
+    empty = client.get(base, headers=team.h("admin")).json()
+    assert [s["count"] for s in empty["steps"]][1:] == [0, 0, 0, 0]
+    app_id = faq_app(client, team)  # 제작자가 앱을 만들고 배포
+    token = deploy(client, team, app_id)
+    chat(client, token, "안녕")
+    client.post(
+        f"/api/v1/apps/{app_id}/runs", json={"input": {"message": "a"}}, headers=team.h("builder")
+    )
+    got = client.get(base, headers=team.h("admin")).json()
+    by = {s["label"]: s for s in got["steps"]}
+    assert by["앱을 만든 멤버"]["count"] == 1 and by["직접 써 본 멤버"]["count"] == 1
+    assert by["공유까지 한 멤버"]["count"] == 1 and by["다른 사람이 쓴 앱"]["count"] == 1
+    assert 0 < by["앱을 만든 멤버"]["rate"] <= 1
+    assert client.get(base, headers=team.h("builder")).status_code == 403

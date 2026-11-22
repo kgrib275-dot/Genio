@@ -21,6 +21,7 @@ import {
 import { useEffect, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { Avatar } from "@/components/AppIcon";
+import { ActivationFunnel } from "@/components/onboarding/ActivationFunnel";
 import { DataView } from "@/components/DataView";
 import { keyLabel, valueLabel } from "@/lib/dataLabels";
 import { ListPager, ListToolbar, NoMatch } from "@/components/ListControls";
@@ -1093,6 +1094,7 @@ export function UsageSection({ ws }: { ws: string }) {
   if (!u) return null;
   return (
     <div className="space-y-6">
+      {role === "admin" && <ActivationFunnel ws={ws} />}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <StatTile label="실행 수" value={u.total_runs.toLocaleString()} />
         <StatTile label="입력 토큰" value={u.total_input_tokens.toLocaleString()} />
