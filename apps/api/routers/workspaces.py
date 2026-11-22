@@ -961,3 +961,51 @@ def put_builder_rules(ws: str, body: BuilderRulesIn, ctx: Managers) -> dict[str,
     )
     ctx.db.commit()
     return {"rules": saved, "max_chars": builder_rules.MAX_RULES}
+
+
+# ---------------- 관리자 2단계 인증 필수 옵션 ----------------
+class SecurityPatch(BaseModel):
+    require_admin_2fa: bool
+
+
+def _security_view(db: Any, ws: str) -> dict[str, Any]:
+    from api.models import Membership, User
+
+    w = db.get(Workspace, ws)
+    on = bool(((w.settings if w else None) or {}).get("security", {}).get("require_admin_2fa"))
+    rows = db.execute(
+        select(User.name, User.totp_enabled)
+        .join(Membership, Membership.user_id == User.id)
+        .where(Membership.workspace_id == ws, Membership.role.in_(("owner", "admin")))
+    ).all()
+    return {"require_admin_2fa": on, "without_2fa": [n for n, t in rows if not t]}
+
+
+@router.get("/workspaces/{ws}/security")
+def get_security(ws: str, ctx: Managers) -> dict[str, Any]:
+    return _security_view(ctx.db, ws)
+
+
+@router.put("/workspaces/{ws}/security")
+def put_security(ws: str, body: SecurityPatch, ctx: Managers) -> dict[str, Any]:
+    w = ctx.db.get(Workspace, ws)
+    if w is None:
+        raise not_found("워크스페이스")
+    if body.require_admin_2fa and not ctx.user.totp_enabled:
+        raise AppError(
+            400,
+            "먼저 내 계정에 2단계 인증을 켜야 이 옵션을 켤 수 있어요.",
+            "내 계정 화면에서 2단계 인증을 켠 뒤 다시 시도하세요. 안 그러면 본인이 막혀요.",
+        )
+    w.settings = {**(w.settings or {}), "security": {"require_admin_2fa": body.require_admin_2fa}}
+    audit(
+        ctx.db,
+        workspace_id=ws,
+        user_id=ctx.user.id,
+        action="workspace.security",
+        target_type="workspace",
+        target_id=ws,
+        meta={"require_admin_2fa": body.require_admin_2fa},
+    )
+    ctx.db.commit()
+    return _security_view(ctx.db, ws)

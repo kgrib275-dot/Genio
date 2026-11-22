@@ -1309,3 +1309,38 @@ def test_activation_funnel(client: TestClient, team: Team) -> None:
     assert by["공유까지 한 멤버"]["count"] == 1 and by["다른 사람이 쓴 앱"]["count"] == 1
     assert 0 < by["앱을 만든 멤버"]["rate"] <= 1
     assert client.get(base, headers=team.h("builder")).status_code == 403
+
+
+def test_admin_2fa_required_blocks_only_secret_changes(client: TestClient, team: Team) -> None:
+    from api.db import SessionLocal
+    from api.models import User
+
+    base = f"/api/v1/workspaces/{team.ws}"
+    h = team.h("admin")
+    got = client.get(f"{base}/security", headers=h).json()
+    assert got["require_admin_2fa"] is False and got["without_2fa"]
+    # 본인이 2단계 인증을 쓰기 전에는 켤 수 없다(스스로 잠기는 사고 방지)
+    assert (
+        client.put(f"{base}/security", json={"require_admin_2fa": True}, headers=h).status_code
+        == 400
+    )
+    with SessionLocal() as db:
+        db.get(User, team.users["admin"]).totp_enabled = True  # type: ignore[union-attr]
+        db.commit()
+    assert (
+        client.put(f"{base}/security", json={"require_admin_2fa": True}, headers=h).status_code
+        == 200
+    )
+    # 2단계 인증을 안 쓰는 소유자: 보기는 되고, 연결 정보 바꾸기만 막힌다
+    ho = team.h("owner")
+    assert client.get(f"{base}/connectors/credentials", headers=ho).status_code == 200
+    r = client.delete(f"{base}/connectors/credentials/none", headers=ho)
+    assert r.status_code == 403 and "2단계 인증" in r.json()["detail"]["message"]
+    # 2단계 인증을 쓰는 관리자는 그대로 가능
+    assert client.delete(f"{base}/connectors/credentials/none", headers=h).status_code == 404
+    assert (
+        client.put(
+            f"{base}/security", json={"require_admin_2fa": True}, headers=team.h("builder")
+        ).status_code
+        == 403
+    )

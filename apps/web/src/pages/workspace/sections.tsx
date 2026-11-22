@@ -83,6 +83,7 @@ import { BuilderRulesCard } from "@/pages/workspace/BuilderRulesCard";
 import { DependenciesCard } from "@/pages/workspace/DependenciesCard";
 import { ImpactCard } from "@/pages/workspace/ImpactCard";
 import { NodePolicyCard } from "@/pages/workspace/NodePolicyCard";
+import { AdminTwoFactorCard } from "@/pages/workspace/AdminTwoFactorCard";
 import { PrivacyCard } from "@/pages/workspace/PrivacyCard";
 import { SkillsCard } from "@/pages/workspace/SkillsCard";
 import { useResetMember2fa } from "@/lib/api/account";
@@ -1199,6 +1200,7 @@ export function SafetySection({ ws }: { ws: string }) {
       {admin ? (
         <div className="grid gap-6 lg:grid-cols-2">
           <PrivacyCard ws={ws} />
+          <AdminTwoFactorCard ws={ws} />
           <NodePolicyCard ws={ws} />
           <BuilderRulesCard ws={ws} />
         </div>

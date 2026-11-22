@@ -306,6 +306,20 @@ def membership_role(db: Session, user_id: str, workspace_id: str) -> Role | None
     return m.role if m else None  # type: ignore[return-value]
 
 
+def _check_admin_2fa(db: Session, workspace_id: str, user: Any) -> None:
+    """'관리자는 2단계 인증 필수'를 켠 워크스페이스에서는 연결 정보·AI 키를 바꾸는 일만 막는다(로그인·보기는 그대로)."""
+    from api.models import Workspace
+
+    ws = db.get(Workspace, workspace_id)
+    on = ((ws.settings if ws else None) or {}).get("security", {}).get("require_admin_2fa")
+    if on and not user.totp_enabled:
+        raise AppError(
+            403,
+            "이 워크스페이스는 관리자가 2단계 인증을 켜야 연결 정보와 AI 키를 바꿀 수 있어요.",
+            "내 계정 화면에서 2단계 인증을 켠 뒤 다시 시도하세요. 켜는 데 1분이면 돼요.",
+        )
+
+
 def require_role(roles: tuple[Role, ...], via: Via = "ws") -> Callable[..., Ctx]:
     """경로 파라미터로 워크스페이스를 찾고, 현재 사용자의 역할이 roles에 있는지 확인한다."""
 
@@ -320,6 +334,8 @@ def require_role(roles: tuple[Role, ...], via: Via = "ws") -> Callable[..., Ctx]
             raise not_found("대상")
         if role not in roles:
             raise forbidden()
+        if roles is MANAGE_SECRETS and request.method not in ("GET", "HEAD", "OPTIONS"):
+            _check_admin_2fa(db, workspace_id, user)
         if via != "ws":
             # 비공개 프로젝트에 속한 대상은 만든 사람·프로젝트 멤버·소유자·관리자만(존재도 숨김)
             from api.services.projects import can_access
