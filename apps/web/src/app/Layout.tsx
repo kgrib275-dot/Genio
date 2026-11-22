@@ -25,6 +25,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { useEffect, useState } from "react";
+import { AnnouncementBanner } from "@/components/announcement/AnnouncementBanner";
 import { Link, NavLink, Outlet, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { Avatar } from "@/components/AppIcon";
 import { ErrorBox, Loading } from "@/components/ErrorBox";
@@ -636,6 +637,7 @@ export function Layout() {
       </aside>
 
       <main className="min-h-0 min-w-0 flex-1 overflow-y-auto">
+        <AnnouncementBanner />
         {workspaceId ? (
           <ErrorBoundary resetKey={pathname}>
             <Outlet />

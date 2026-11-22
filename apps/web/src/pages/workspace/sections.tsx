@@ -35,6 +35,7 @@ import { Field, Input, Select } from "@/components/ui/input";
 import { toast } from "@/components/ui/toast-store";
 import { ko } from "@/i18n/ko";
 import { TransferAssetsDialog } from "@/pages/workspace/TransferAssetsDialog";
+import { useAnnouncement, useSaveAnnouncement } from "@/lib/api/announcement";
 import { ROLES, type Member, type Role } from "@/lib/api/types";
 import {
   baseUrlToSend,
@@ -1646,6 +1647,7 @@ export function SystemSection({ ws }: { ws: string }) {
 
   return (
     <div className="grid gap-6 lg:grid-cols-2">
+      {canSys && <AnnouncementCard />}
       <Card>
         <CardHeader title="워크스페이스" description="이름과 공개 챗 속도 제한을 정해요." />
         <CardBody className="space-y-3">
@@ -1735,5 +1737,80 @@ export function SystemSection({ ws }: { ws: string }) {
       </Card>
       <SystemMailCard canEdit={canSys} />
     </div>
+  );
+}
+
+/** 서비스 전체 공지 올리기(서비스 관리자만). 비우고 저장하면 내려가요. */
+function AnnouncementCard() {
+  const q = useAnnouncement();
+  const save = useSaveAnnouncement();
+  const [message, setMessage] = useState("");
+  const [level, setLevel] = useState<"info" | "warn" | "maintenance">("info");
+  const [until, setUntil] = useState("");
+  useEffect(() => {
+    if (q.data?.active) {
+      setMessage(q.data.message);
+      setLevel(q.data.level);
+      setUntil(q.data.until ? q.data.until.slice(0, 16) : "");
+    }
+  }, [q.data]);
+  return (
+    <Card className="lg:col-span-2">
+      <CardHeader
+        title="서비스 공지"
+        description="모든 사용자 화면 위쪽과 상태 페이지(/status)에 보여요. 점검·장애를 알릴 때 써요."
+      />
+      <CardBody className="space-y-3">
+        <ErrorBox error={save.error} />
+        <Field label="공지 내용(비우고 저장하면 내려가요)" htmlFor="ann-msg">
+          <Input
+            id="ann-msg"
+            maxLength={300}
+            placeholder="예: 오늘 밤 2시~3시에 점검이 있어요. 이 시간에는 쓸 수 없어요."
+            value={message}
+            onChange={(e) => setMessage(e.target.value)}
+          />
+        </Field>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Field label="종류" htmlFor="ann-level">
+            <Select
+              id="ann-level"
+              value={level}
+              onChange={(e) => setLevel(e.target.value as typeof level)}
+            >
+              <option value="info">안내</option>
+              <option value="warn">주의</option>
+              <option value="maintenance">점검·장애</option>
+            </Select>
+          </Field>
+          <Field
+            label="이 시각까지 보여요(선택)"
+            htmlFor="ann-until"
+            hint="비우면 내릴 때까지 보여요."
+          >
+            <Input
+              id="ann-until"
+              type="datetime-local"
+              value={until}
+              onChange={(e) => setUntil(e.target.value)}
+            />
+          </Field>
+        </div>
+        <Button
+          disabled={save.isPending}
+          onClick={() =>
+            save.mutate(
+              { message, level, until: until ? new Date(until).toISOString() : null },
+              {
+                onSuccess: () =>
+                  toast.success(message.trim() ? "공지를 올렸어요." : "공지를 내렸어요."),
+              },
+            )
+          }
+        >
+          {save.isPending ? "저장 중…" : "저장"}
+        </Button>
+      </CardBody>
+    </Card>
   );
 }

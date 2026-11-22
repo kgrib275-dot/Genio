@@ -1237,3 +1237,55 @@ def test_attention_lists_failed_runs_and_disliked_answers(client: TestClient, te
         ).status_code
         == 403
     )
+
+
+def test_announcement_and_public_status(client: TestClient, team: Team) -> None:
+    from datetime import UTC, datetime, timedelta
+
+    from api.routers import announcements as ann_router
+
+    assert client.get("/api/v1/announcement").json()["active"] is False
+    # 서비스 전체 관리자(시험 팀의 소유자)만 올릴 수 있다
+    assert (
+        client.put(
+            "/api/v1/admin/announcement", json={"message": "x"}, headers=team.h("admin")
+        ).status_code
+        == 403
+    )
+    soon = (datetime.now(UTC) + timedelta(hours=1)).isoformat()
+    put = client.put(
+        "/api/v1/admin/announcement",
+        json={"message": "오늘 밤 2시 점검이 있어요.", "level": "maintenance", "until": soon},
+        headers=team.h("owner"),
+    )
+    assert put.status_code == 200 and put.json()["active"] is True
+    got = client.get("/api/v1/announcement").json()  # 로그인 없이 보인다
+    assert got["message"].startswith("오늘 밤") and got["level"] == "maintenance"
+    # 끝나는 시각이 지나면 자동으로 사라진다
+    past = (datetime.now(UTC) - timedelta(minutes=1)).isoformat()
+    client.put(
+        "/api/v1/admin/announcement",
+        json={"message": "지난 공지", "until": past},
+        headers=team.h("owner"),
+    )
+    assert client.get("/api/v1/announcement").json()["active"] is False
+    bad = client.put(
+        "/api/v1/admin/announcement",
+        json={"message": "a", "until": "어제"},
+        headers=team.h("owner"),
+    )
+    assert bad.status_code == 422
+    # 비우면 내린다
+    client.put("/api/v1/admin/announcement", json={"message": "다시"}, headers=team.h("owner"))
+    assert (
+        client.put(
+            "/api/v1/admin/announcement", json={"message": ""}, headers=team.h("owner")
+        ).json()["active"]
+        is False
+    )
+    # 공개 상태: 구성 요소의 정상·지연·장애만 보이고 내부 내용은 없다
+    ann_router._CACHE["data"] = None
+    st = client.get("/api/v1/public-status").json()
+    assert st["status"] in ("ok", "degraded", "down") and st["components"][0]["name"] == "서비스"
+    assert {"detail", "items"}.isdisjoint(st)
+    assert all(set(c) == {"name", "status"} for c in st["components"])

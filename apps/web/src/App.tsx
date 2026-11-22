@@ -21,6 +21,7 @@ const MarketPage = lazy(() => import("@/pages/market/MarketPage"));
 const MarketDetailPage = lazy(() => import("@/pages/market/MarketDetailPage"));
 const WorkspacePage = lazy(() => import("@/pages/workspace/WorkspacePage"));
 const SharePage = lazy(() => import("@/pages/share/SharePage"));
+const StatusPage = lazy(() => import("@/pages/status/StatusPage"));
 const TaskLinkPage = lazy(() => import("@/pages/share/TaskLinkPage"));
 const TasksPage = lazy(() => import("@/pages/tasks/TasksPage"));
 const LearnPage = lazy(() => import("@/pages/learn/LearnPage"));
@@ -60,6 +61,7 @@ export default function App() {
             <Route path="/share/:token" element={<SharePage />} />
             <Route path="/t/:token" element={<TaskLinkPage />} />
             <Route path="/api-docs" element={<ApiDocsPage />} />
+            <Route path="/status" element={<StatusPage />} />
             <Route path="/terms" element={<TermsPage />} />
             <Route path="/privacy" element={<PrivacyPage />} />
             <Route

@@ -25,6 +25,7 @@ from api.market.service import ensure_market_nodes, sync_catalog
 from api.routers import (
     account,
     admin,
+    announcements,
     apidocs,
     apps,
     apps_v02,
@@ -256,6 +257,7 @@ for r in (
     snippets,
     evals,
     hub,
+    announcements,
     attention,
     improvements,
     skills,
