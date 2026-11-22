@@ -16,7 +16,7 @@ export default function StatusPage() {
   const d = q.data;
   return (
     <div className="min-h-[100dvh] bg-slate-50">
-      <AnnouncementBanner />
+      <AnnouncementBanner value={d?.announcement} />
       <main className="mx-auto max-w-xl px-4 py-12">
         <h1 className="text-2xl font-bold text-slate-900">제니오 서비스 상태</h1>
         {q.isLoading && <p className="mt-6 text-slate-500">확인하는 중이에요…</p>}

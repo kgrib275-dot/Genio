@@ -1,5 +1,5 @@
 import { AlertTriangle, Info, Wrench } from "lucide-react";
-import { useAnnouncement } from "@/lib/api/announcement";
+import { useAnnouncement, type Announcement } from "@/lib/api/announcement";
 import { cn } from "@/lib/cn";
 
 const STYLE = {
@@ -9,9 +9,9 @@ const STYLE = {
 } as const;
 
 /** 서비스 전체 공지(점검·장애 안내). 없으면 아무것도 그리지 않는다. */
-export function AnnouncementBanner() {
-  const q = useAnnouncement();
-  const a = q.data;
+export function AnnouncementBanner({ value }: { value?: Announcement }) {
+  const q = useAnnouncement(!value);
+  const a = value ?? q.data;
   if (!a?.active) return null;
   const Icon = a.level === "maintenance" ? Wrench : a.level === "warn" ? AlertTriangle : Info;
   return (

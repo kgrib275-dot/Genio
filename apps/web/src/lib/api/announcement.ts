@@ -9,8 +9,9 @@ export interface Announcement {
   until: string | null;
 }
 
-export function useAnnouncement() {
+export function useAnnouncement(enabled = true) {
   return useQuery({
+    enabled,
     queryKey: ["announcement"],
     queryFn: () => api.get<Announcement>("/announcement"),
     refetchInterval: 60_000,
