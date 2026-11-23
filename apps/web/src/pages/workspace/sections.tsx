@@ -25,6 +25,7 @@ import { Link } from "react-router-dom";
 import { Avatar } from "@/components/AppIcon";
 import { ActivationFunnel } from "@/components/onboarding/ActivationFunnel";
 import { DataView } from "@/components/DataView";
+import { summarizeAudit } from "@/lib/auditSummary";
 import { keyLabel, valueLabel } from "@/lib/dataLabels";
 import { ListPager, ListToolbar, NoMatch } from "@/components/ListControls";
 import { StatTile } from "@/components/charts";
@@ -1311,6 +1312,11 @@ const ACTION_LABELS: Record<string, string> = {
   "run.approve": "실행 승인 처리",
   "system.update": "시스템 설정 변경",
   "workspace.transfer_ownership": "소유권 넘기기",
+  "workspace.security": "보안 설정 변경",
+  "workspace.export": "데이터 내려받기",
+  "workspace.privacy": "개인정보 설정 변경",
+  "template.save": "팀 템플릿 저장",
+  "template.delete": "팀 템플릿 삭제",
   "workspace.update": "워크스페이스 설정 변경",
 };
 
@@ -1477,8 +1483,30 @@ export function AuditSection({ ws }: { ws: string }) {
         description="멤버 초대, 앱 배포, 설정 변경, 의견·문의처럼 누가 무엇을 했는지 여기에 쌓여요."
       />
     );
+  const digest = summarizeAudit(logs.data, 7, (l) =>
+    l.user_id ? (people.get(l.user_id)?.split(" (")[0] ?? l.user_email ?? "알 수 없음") : "시스템",
+  );
   return (
     <div className="space-y-3">
+      {digest.total > 0 && (
+        <section
+          aria-label="지난 7일 요약"
+          className="rounded-xl border border-indigo-100 bg-indigo-50/50 px-4 py-3 text-sm text-slate-700"
+        >
+          <p className="font-semibold text-slate-900">지난 7일 요약 · 기록 {digest.total}건</p>
+          <p className="mt-1">
+            가장 많이 한 일:{" "}
+            {digest.top.map((t) => `${actionLabel(t.action)} ${t.count}번`).join(", ")}
+          </p>
+          <p>활발한 사람: {digest.people.map((p) => `${p.name}(${p.count}건)`).join(", ")}</p>
+          {digest.notable.length > 0 && (
+            <p className="text-amber-800">
+              눈여겨볼 변경:{" "}
+              {digest.notable.map((t) => `${actionLabel(t.action)} ${t.count}번`).join(", ")}
+            </p>
+          )}
+        </section>
+      )}
       <div className="flex flex-col gap-2 sm:flex-row sm:items-start">
         <ListToolbar c={lc} placeholder="한 일·사람·내용 검색" className="flex-1" />
         <Button
