@@ -26,7 +26,7 @@ if (!root) throw new Error("root 요소가 없습니다.");
 createRoot(root).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
-      <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+      <BrowserRouter>
         <App />
       </BrowserRouter>
     </QueryClientProvider>
