@@ -1,6 +1,7 @@
 """외부 카탈로그 조회(ADR 0020): 공식 MCP 레지스트리에서 서버를 찾는다. 읽기 전용, 5분 캐시."""
 
 import json
+import re
 import time
 from typing import Any
 from urllib.parse import urlencode
@@ -122,3 +123,86 @@ def find_mcp(name: str) -> dict[str, Any] | None:
             found: dict[str, Any] = item
             return found
     return None
+
+
+# ---------------- n8n 공개 템플릿 ----------------
+N8N_URL = "https://api.n8n.io/templates"
+N8N_ROWS = 10
+_n8n_cache: dict[tuple[str, int], tuple[float, dict[str, Any]]] = {}
+_TAG_RE = re.compile(r"<[^>]+>|[#*`>_]|!?\[([^\]]*)\]\([^)]*\)")
+
+
+def _dict(v: Any) -> dict[str, Any]:
+    return v if isinstance(v, dict) else {}
+
+
+def _plain(text: Any, limit: int) -> str:
+    return _text(_TAG_RE.sub(lambda m: m.group(1) or "", str(text or "")), limit)
+
+
+def _n8n_get(url: str) -> dict[str, Any]:
+    try:
+        res = safe_http.request("GET", url)
+    except NodeError:
+        raise
+    except Exception:
+        raise NodeError("n8n 템플릿 목록을 불러오지 못했어요. 잠시 후 다시 시도하세요.") from None
+    if int(res.get("status") or 0) >= 400:
+        raise NodeError("n8n 템플릿을 찾지 못했어요. 다른 템플릿을 골라 주세요.")
+    return _body(res)
+
+
+def search_n8n(q: str, page: int = 1) -> dict[str, Any]:
+    q, page = q.strip()[:100], max(1, min(page, 50))
+    key = (q, page)
+    hit = _n8n_cache.get(key)
+    if hit and time.monotonic() - hit[0] < CACHE_SECONDS:
+        return hit[1]
+    params = {"rows": str(N8N_ROWS), "page": str(page)}
+    if q:
+        params["search"] = q
+    data = _n8n_get(f"{N8N_URL}/search?{urlencode(params)}")
+    items = []
+    for w in data.get("workflows") or []:
+        if not isinstance(w, dict) or not isinstance(w.get("id"), int) or w.get("price"):
+            continue  # 유료 템플릿은 보여 주지 않는다
+        user = _dict(w.get("user"))
+        nodes = [
+            _text(n.get("displayName") or n.get("name"), 40)
+            for n in (w.get("nodes") or [])
+            if isinstance(n, dict)
+        ]
+        items.append(
+            {
+                "id": w["id"],
+                "name": _text(w.get("name"), 150),
+                "description": _plain(w.get("description"), 300),
+                "views": int(w.get("totalViews") or 0),
+                "author": _text(user.get("username") or user.get("name"), 60),
+                "services": list(dict.fromkeys(nodes))[:8],
+                "created_at": _text(w.get("createdAt"), 40),
+                "url": f"https://n8n.io/workflows/{w['id']}",
+            }
+        )
+    total = int(data.get("totalWorkflows") or 0)
+    result = {"items": items, "total": total, "page": page, "has_more": page * N8N_ROWS < total}
+    if len(_n8n_cache) > 200:
+        _n8n_cache.clear()
+    _n8n_cache[key] = (time.monotonic(), result)
+    return result
+
+
+def get_n8n(template_id: int) -> dict[str, Any]:
+    """템플릿 한 개: {id, name, description, author, url, workflow(n8n JSON), paid}."""
+    data = _n8n_get(f"{N8N_URL}/workflows/{int(template_id)}")
+    w = _dict(data.get("workflow"))
+    user = _dict(w.get("user"))
+    return {
+        "id": int(template_id),
+        "name": _text(w.get("name"), 150),
+        "description": _plain(w.get("description"), 1000),
+        "author": _text(user.get("username") or user.get("name"), 60),
+        "url": f"https://n8n.io/workflows/{int(template_id)}",
+        "workflow": w,
+        "paid": bool(w.get("price")),
+    }

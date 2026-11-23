@@ -15,7 +15,7 @@ from api.routers.projects import check_project_target
 from api.schemas.graph import Graph
 from api.services import apps as svc
 from api.services.app_config import patch_features, store_env_vars
-from api.services.dify_import import MAX_BYTES, convert
+from api.services.dify_import import MAX_BYTES, Converted, convert
 
 router = APIRouter(tags=["dify-import"])
 WsBuilders = Annotated[Ctx, Depends(require_role(EDIT_APPS))]
@@ -23,7 +23,21 @@ WsBuilders = Annotated[Ctx, Depends(require_role(EDIT_APPS))]
 
 def _import(ctx: Ctx, ws: str, raw: bytes, project_id: str | None) -> dict[str, Any]:
     check_project_target(ctx, ws, project_id)
-    conv = convert(raw)
+    return create_from_converted(
+        ctx, ws, convert(raw), project_id, action="app.import_dify", meta={}
+    )
+
+
+def create_from_converted(
+    ctx: Ctx,
+    ws: str,
+    conv: Converted,
+    project_id: str | None,
+    *,
+    action: str,
+    meta: dict[str, Any],
+) -> dict[str, Any]:
+    """변환 결과로 초안 앱을 만든다(Dify·n8n 가져오기가 함께 쓴다)."""
     try:
         graph = Graph.model_validate(conv.graph).dump()
     except ValueError:
@@ -57,10 +71,10 @@ def _import(ctx: Ctx, ws: str, raw: bytes, project_id: str | None) -> dict[str, 
         ctx.db,
         workspace_id=ws,
         user_id=ctx.user.id,
-        action="app.import_dify",
+        action=action,
         target_type="app",
         target_id=app.id,
-        meta={"name": app.name, "mode": conv.report.mode},
+        meta={"name": app.name, "mode": conv.report.mode, **meta},
     )
     ctx.db.commit()
     return {"app": svc.app_detail(ctx.db, app), "report": conv.report.dump()}

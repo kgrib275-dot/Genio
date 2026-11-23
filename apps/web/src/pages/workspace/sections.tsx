@@ -1320,6 +1320,7 @@ const ACTION_LABELS: Record<string, string> = {
   "support.access": "서비스 지원 접속",
   "catalog.search": "외부 서비스 찾기",
   "catalog.install": "외부 서비스 연결",
+  "catalog.import_n8n": "n8n 템플릿 가져오기",
   "admin.workspaces_view": "전체 회사 현황 열람",
   "workspace.export": "데이터 내려받기",
   "workspace.privacy": "개인정보 설정 변경",

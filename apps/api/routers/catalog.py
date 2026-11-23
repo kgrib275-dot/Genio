@@ -11,8 +11,10 @@ from api.core.audit import audit
 from api.core.errors import AppError
 from api.deps import EDIT_APPS, MANAGE_SECRETS, Ctx, require_role
 from api.models import Workspace
+from api.routers.dify_import import create_from_converted
 from api.routers.external_tools import McpServerIn, create_mcp_server
-from api.services import catalog
+from api.routers.projects import check_project_target
+from api.services import catalog, n8n_import
 from nodes import NodeError
 
 router = APIRouter(tags=["catalog"])
@@ -110,3 +112,66 @@ def install_mcp(ws: str, body: InstallIn, ctx: SecretManagers) -> dict[str, Any]
     )
     ctx.db.commit()
     return {**made, "source": item["name"], "repository": item["repository"]}
+
+
+# ---------------- n8n 공개 템플릿 ----------------
+@router.get("/workspaces/{ws}/catalog/n8n")
+def search_n8n(
+    ws: str,
+    ctx: Builders,
+    q: Annotated[str, Query(max_length=100)] = "",
+    page: Annotated[int, Query(ge=1, le=50)] = 1,
+) -> dict[str, Any]:
+    _require_enabled(ctx)
+    if not ratelimit.allow(f"catalog:{ctx.user.id}", 20, window=60):
+        raise AppError(429, "너무 자주 찾고 있어요.", "잠시(1분 정도) 쉬었다가 다시 검색해 주세요.")
+    try:
+        result = catalog.search_n8n(q, page)
+    except NodeError as exc:
+        raise AppError(502, exc.message, "잠시 후 다시 시도하세요.") from None
+    if ratelimit.allow(f"catalog_log:{ctx.user.id}:{ws}", 1, window=600):
+        audit(
+            ctx.db,
+            workspace_id=ws,
+            user_id=ctx.user.id,
+            action="catalog.search",
+            target_type="workspace",
+            target_id=ws,
+            meta={"source": "n8n-templates", "q": q[:60]},
+        )
+        ctx.db.commit()
+    return result
+
+
+class N8nImportIn(BaseModel):
+    id: int = Field(ge=1, le=10_000_000)
+    project_id: str | None = Field(default=None, max_length=64)
+
+
+@router.post("/workspaces/{ws}/catalog/n8n/import", status_code=201)
+def import_n8n(ws: str, body: N8nImportIn, ctx: Builders) -> dict[str, Any]:
+    """n8n 템플릿을 제니오 초안 앱으로 가져온다. 옮기지 못한 단계는 꺼 둔 자리 표시로 남고 보고서에 적힌다."""
+    _require_enabled(ctx)
+    check_project_target(ctx, ws, body.project_id)
+    try:
+        tpl = catalog.get_n8n(body.id)
+    except NodeError as exc:
+        raise AppError(
+            502, exc.message, "다른 템플릿을 고르거나 잠시 후 다시 시도하세요."
+        ) from None
+    if tpl["paid"]:
+        raise AppError(403, "유료 템플릿은 가져올 수 없어요.", "무료 템플릿을 골라 주세요.")
+    conv = n8n_import.convert(
+        tpl["workflow"],
+        name=tpl["name"],
+        description=tpl["description"],
+        source=f"n8n 템플릿 #{tpl['id']}({tpl['author'] or '작성자 미상'}, {tpl['url']})",
+    )
+    return create_from_converted(
+        ctx,
+        ws,
+        conv,
+        body.project_id,
+        action="catalog.import_n8n",
+        meta={"source": "n8n-templates", "template_id": tpl["id"], "author": tpl["author"]},
+    )

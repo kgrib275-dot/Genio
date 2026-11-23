@@ -1,6 +1,7 @@
 // 외부 서비스 찾기(공식 MCP 레지스트리, ADR 0020)
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api/client";
+import type { DifyImportResult } from "@/lib/api/difyImport";
 
 export interface CatalogRemote {
   url: string;
@@ -52,5 +53,41 @@ export function useCatalogEnabled(ws: string) {
     queryKey: ["security", ws],
     queryFn: () => api.get<{ external_catalog: boolean }>(`/workspaces/${ws}/security`),
     enabled: Boolean(ws),
+  });
+}
+
+// ---------------- n8n 공개 템플릿 ----------------
+export interface N8nTemplate {
+  id: number;
+  name: string;
+  description: string;
+  views: number;
+  author: string;
+  services: string[];
+  created_at: string;
+  url: string;
+}
+
+export interface N8nPage {
+  items: N8nTemplate[];
+  total: number;
+  page: number;
+  has_more: boolean;
+}
+
+export function fetchN8n(ws: string, q: string, page = 1): Promise<N8nPage> {
+  const p = new URLSearchParams({ page: String(page) });
+  if (q) p.set("q", q);
+  return api.get<N8nPage>(`/workspaces/${ws}/catalog/n8n?${p.toString()}`);
+}
+
+export function useImportN8n(ws: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) =>
+      api.post<DifyImportResult>(`/workspaces/${ws}/catalog/n8n/import`, { id }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["apps", ws] });
+    },
   });
 }
