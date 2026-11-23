@@ -50,6 +50,8 @@ class Settings(BaseSettings):
     # 운영 준비 1차(A3): 백업을 바깥 S3 호환 저장소에도 올린다(버킷을 비우면 끔).
     # 주소·접근 키는 GENIO_S3_*(파일 저장소)와 같은 것을 쓴다. 같은 PC가 망가져도 백업이 남게 다른 곳을 권한다.
     genio_backup_s3_bucket: str = ""
+    # 서비스 이상 알림을 보낼 웹훅(슬랙·팀즈 등, {"text": ...} JSON을 받는 공개 주소). 비우면 메일만 보낸다
+    genio_alert_webhook_url: str = ""
     genio_backup_s3_prefix: str = "genio-backups/"
     genio_backup_s3_keep_days: int = 30
     # v0.6: 한 실행 안에서 동시에 도는 갈래 수(1~16)

@@ -138,6 +138,18 @@ def send_trace_task(run_id: str) -> dict[str, str | None]:
         return send_run(db, run_id)
 
 
+@celery.task(name="genio.health_alert")  # type: ignore[untyped-decorator]
+def health_alert_task() -> dict[str, object]:
+    """서비스 이상 알림: 오류가 난 항목을 서비스 관리자에게 메일·웹훅으로 알린다(중복은 막는다)."""
+    from api.services import health_alert
+
+    def go() -> dict[str, object]:
+        with SessionLocal() as db:
+            return dict(health_alert.check(db))
+
+    return run_once("health_alert", 300, go) or {}
+
+
 @celery.task(name="genio.offsite_backup")  # type: ignore[untyped-decorator]
 def offsite_backup_task() -> dict[str, object]:
     """운영 준비 1차(A3): 최근 DB 백업을 바깥 저장소에 올리고 오래된 것은 지운다(한 시간마다)."""

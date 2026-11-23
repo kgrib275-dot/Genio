@@ -245,6 +245,19 @@ COMPOSE_PROFILES=sandbox docker compose up -d --build
   - backup 서비스를 이 버전 전에 만들었다면 스크립트가 아직 안 붙어 있다: `docker compose up -d backup` 한 번.
 - 시점 복구(PITR, WAL 보관)는 아직 없다. 하루 한 번 백업이라 최악의 경우 하루치가 사라질 수 있다(ADR 0014 후보).
 
+## 서비스 이상 알림
+- scheduler가 5분마다 시스템 상태(관리 > 시스템 상태와 같은 점검)를 보고, **오류가 난 항목과 백업·복구 연습 주의**를 서비스 관리자(첫 워크스페이스 소유자)에게 메일로 알린다.
+  새로 나빠지면 바로, 계속 나쁘면 6시간마다 다시, 좋아지면 '복구됨'을 한 번 알린다.
+- 메일은 **관리 > 시스템 설정의 메일**을 쓴다(없으면 메일은 건너뛰고 로그만 남는다). 슬랙·팀즈 등으로도 받으려면 `.env`에 `GENIO_ALERT_WEBHOOK_URL`(`{"text": ...}` JSON을 받는 공개 주소)을 넣고 api·worker·scheduler를 다시 시작한다.
+- **한계**: 점검을 보내는 것이 scheduler라서 scheduler가 멈추면 알림도 멈춘다. `https://<공개 주소>/api/v1/public-status`를 바깥 업타임 감시(UptimeRobot 등)에 걸어 두면 서버 전체가 죽었을 때도 알 수 있다.
+
+## 복구에 꼭 필요한 것 3가지
+DB 백업(`backups/`)만으로는 **완전히 복구되지 않는다.** 아래 3가지를 같은 시점으로 따로 보관해 두자.
+1. **DB 백업**(`backups/*.dump`) — 자동. 외부 S3에도 올리려면 위 '외부 백업'을 설정한다.
+2. **`.env`의 `GENIO_FERNET_KEY`** — AI 키·연결 정보를 암호화한 열쇠다. 백업에는 들어 있지 않다. **이 값을 잃으면 저장된 AI 키·연결 정보를 읽을 수 없어 모두 다시 등록해야 한다.** 비밀번호 관리자 등 PC 밖에 보관한다.
+3. **파일 저장소**(`GENIO_STORAGE=disk`면 `filestore` 볼륨, S3면 버킷) — 올린 문서 원본·이미지. DB 백업과 같은 시점에 맞춘다.
+- 복구 연습은 매주 자동(`backups/verify.json`)이고, 지금 해 보려면 `docker compose exec backup bash /scripts/verify_backup.sh`(Windows Git Bash는 앞에 `MSYS_NO_PATHCONV=1`).
+
 ## api·worker 컨테이너 비루트 실행(ADR 0017)
 api·worker·scheduler 이미지는 일반 사용자(uid 10001)로 실행된다. 이미 `GENIO_STORAGE=disk`로 쓰고 있어 `filestore` 볼륨이 root 소유로 만들어져 있다면, 이미지를 다시 빌드한 뒤 한 번만 소유자를 바꿔 준다.
 

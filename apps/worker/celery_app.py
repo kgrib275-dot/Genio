@@ -43,6 +43,8 @@ celery.conf.update(
         "sync-due-kb-sources": {"task": "genio.sync_due_sources", "schedule": 3600.0},
         # 운영 준비 1차(A3): 백업을 바깥 S3 호환 저장소에 올리기(GENIO_BACKUP_S3_BUCKET이 있을 때만)
         "offsite-backup": {"task": "genio.offsite_backup", "schedule": 3600.0},
+        # 서비스 이상(서버·작업 처리·백업 등)을 서비스 관리자에게 5분마다 알린다
+        "health-alert": {"task": "genio.health_alert", "schedule": 300.0},
     },
 )
 
