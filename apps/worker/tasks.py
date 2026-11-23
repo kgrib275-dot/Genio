@@ -138,6 +138,23 @@ def send_trace_task(run_id: str) -> dict[str, str | None]:
         return send_run(db, run_id)
 
 
+@celery.task(name="genio.refresh_trends")  # type: ignore[untyped-decorator]
+def refresh_trends_task() -> dict[str, object]:
+    """'이번 주 새로 나온 것' 목록을 공개 목록(MCP 레지스트리·n8n 템플릿)에서 모아 저장한다(하루 한 번)."""
+    from api.services import trends
+
+    def go() -> dict[str, object]:
+        data = trends.refresh()
+        return {
+            "mcp_new": len(data.get("mcp_new", [])),
+            "n8n_new": len(data.get("n8n_new", [])),
+            "n8n_popular": len(data.get("n8n_popular", [])),
+            "errors": len(data.get("errors", [])),
+        }
+
+    return run_once("refresh_trends", 24 * 3600, go, lock_seconds=600) or {}
+
+
 @celery.task(name="genio.health_alert")  # type: ignore[untyped-decorator]
 def health_alert_task() -> dict[str, object]:
     """서비스 이상 알림: 오류가 난 항목을 서비스 관리자에게 메일·웹훅으로 알린다(중복은 막는다)."""

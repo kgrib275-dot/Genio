@@ -14,7 +14,7 @@ from api.models import Workspace
 from api.routers.dify_import import create_from_converted
 from api.routers.external_tools import McpServerIn, create_mcp_server
 from api.routers.projects import check_project_target
-from api.services import catalog, n8n_import
+from api.services import catalog, n8n_import, trends
 from nodes import NodeError
 
 router = APIRouter(tags=["catalog"])
@@ -175,3 +175,24 @@ def import_n8n(ws: str, body: N8nImportIn, ctx: Builders) -> dict[str, Any]:
         action="catalog.import_n8n",
         meta={"source": "n8n-templates", "template_id": tpl["id"], "author": tpl["author"]},
     )
+
+
+@router.get("/workspaces/{ws}/catalog/trends")
+def catalog_trends(ws: str, ctx: Builders) -> dict[str, Any]:
+    """이번 주 새로 나온 MCP 서비스와 n8n 최신·인기 템플릿(하루 한 번 모아 둔 목록)."""
+    _require_enabled(ctx)
+    if not ratelimit.allow(f"catalog:{ctx.user.id}", 20, window=60):
+        raise AppError(429, "너무 자주 찾고 있어요.", "잠시(1분 정도) 쉬었다가 다시 열어 주세요.")
+    data = trends.get()
+    if ratelimit.allow(f"catalog_log:{ctx.user.id}:{ws}", 1, window=600):
+        audit(
+            ctx.db,
+            workspace_id=ws,
+            user_id=ctx.user.id,
+            action="catalog.search",
+            target_type="workspace",
+            target_id=ws,
+            meta={"source": "trends"},
+        )
+        ctx.db.commit()
+    return data

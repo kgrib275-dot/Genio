@@ -91,3 +91,24 @@ export function useImportN8n(ws: string) {
     },
   });
 }
+
+// ---------------- 이번 주 새로 나온 것(트렌드) ----------------
+export interface TrendsData {
+  /** 하루 한 번 모아 둔 시각(ISO). 비어 있으면 아직 모으지 못함 */
+  updated_at: string;
+  mcp_new: CatalogItem[];
+  mcp_new_total: number;
+  mcp_new_today: number;
+  n8n_new: N8nTemplate[];
+  n8n_popular: N8nTemplate[];
+  errors: string[];
+}
+
+export function useTrends(ws: string, enabled: boolean) {
+  return useQuery({
+    queryKey: ["catalog-trends", ws],
+    queryFn: () => api.get<TrendsData>(`/workspaces/${ws}/catalog/trends`),
+    enabled: Boolean(ws) && enabled,
+    staleTime: 10 * 60_000,
+  });
+}

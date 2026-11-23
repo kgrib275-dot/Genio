@@ -22,7 +22,7 @@ function hostOf(url: string): string {
   }
 }
 
-function Row({ ws, item }: { ws: string; item: CatalogItem }) {
+export function CatalogRow({ ws, item }: { ws: string; item: CatalogItem }) {
   const install = useInstallCatalogItem(ws);
   const [open, setOpen] = useState(false);
   const [token, setToken] = useState("");
@@ -162,7 +162,7 @@ export function CatalogCard({ ws, bare = false }: { ws: string; bare?: boolean }
           {page && page.items.length > 0 && (
             <ul className="max-h-[28rem] space-y-2 overflow-y-auto">
               {page.items.map((it) => (
-                <Row key={it.name} ws={ws} item={it} />
+                <CatalogRow key={it.name} ws={ws} item={it} />
               ))}
             </ul>
           )}

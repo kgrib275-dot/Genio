@@ -45,6 +45,8 @@ celery.conf.update(
         "offsite-backup": {"task": "genio.offsite_backup", "schedule": 3600.0},
         # 서비스 이상(서버·작업 처리·백업 등)을 서비스 관리자에게 5분마다 알린다
         "health-alert": {"task": "genio.health_alert", "schedule": 300.0},
+        # 새 서비스·템플릿 목록을 하루 한 번 모아 둔다
+        "refresh-trends": {"task": "genio.refresh_trends", "schedule": 24 * 3600.0},
     },
 )
 
