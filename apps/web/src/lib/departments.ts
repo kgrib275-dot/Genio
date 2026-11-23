@@ -89,7 +89,11 @@ export function filterTemplatesByDepartment<T extends { key: string }>(
   const dept = departmentById(departmentId);
   if (!dept) return list;
   const order = new Map(dept.templates.map((k, i) => [k, i]));
-  return list
-    .filter((t) => order.has(t.key))
-    .sort((a, b) => (order.get(a.key) ?? 0) - (order.get(b.key) ?? 0));
+  const team = list.filter((t) => t.key.startsWith("team:")); // 우리 팀 템플릿은 부서와 상관없이 보여 준다
+  return [
+    ...list
+      .filter((t) => order.has(t.key))
+      .sort((a, b) => (order.get(a.key) ?? 0) - (order.get(b.key) ?? 0)),
+    ...team,
+  ];
 }

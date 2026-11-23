@@ -1359,3 +1359,37 @@ def test_workspace_export_zip(client: TestClient, team: Team) -> None:
     names = zipfile.ZipFile(io.BytesIO(res.content)).namelist()
     assert "README.txt" in names and any(n.startswith("apps/") for n in names)
     assert client.get(url, headers=team.h("builder")).status_code == 403
+
+
+def test_team_template_save_and_use(client: TestClient, team: Team) -> None:
+    from api.tests.test_v02_features import faq_app
+
+    app_id = faq_app(client, team)
+    r = client.post(
+        f"/api/v1/apps/{app_id}/save-as-template",
+        json={"name": "우리 FAQ", "summary": "자주 묻는 질문"},
+        headers=team.h("builder"),
+    )
+    assert r.status_code == 201
+    key = r.json()["key"]
+    base = f"/api/v1/workspaces/{team.ws}"
+    got = client.get(f"{base}/templates", headers=team.h("member")).json()
+    mine = next(t for t in got if t["key"] == key)
+    assert mine["team"] is True and mine["name"] == "우리 FAQ"
+    made = client.post(
+        f"{base}/apps",
+        json={"name": "새 FAQ", "type": "chat", "description": "", "icon": "", "template_key": key},
+        headers=team.h("builder"),
+    )
+    assert made.status_code == 201
+    assert (
+        client.delete(f"{base}/team-templates/{key[5:]}", headers=team.h("builder")).status_code
+        == 403
+    )
+    assert (
+        client.delete(f"{base}/team-templates/{key[5:]}", headers=team.h("admin")).status_code
+        == 204
+    )
+    assert all(
+        t["key"] != key for t in client.get(f"{base}/templates", headers=team.h("member")).json()
+    )

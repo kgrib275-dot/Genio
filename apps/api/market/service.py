@@ -11,7 +11,7 @@ from api.config import get_settings
 from api.core.audit import audit
 from api.core.errors import AppError, not_found
 from api.market.bundle import BundleError, load_module, read_json, read_manifest, validate_bundle
-from api.models import ConnectorDefinition, Installation, MarketItem, Purchase
+from api.models import ConnectorDefinition, Installation, MarketItem, Purchase, Workspace
 from nodes import NodeSpec, registry
 
 log = logging.getLogger("genio.market")
@@ -212,6 +212,19 @@ def templates(db: Session, workspace_id: str) -> list[dict[str, Any]]:
     for item in installed_items(db, workspace_id, "template"):
         graph = read_json(bundle_path(item) / "template.json")
         out.append({"key": item.key, "name": item.name, "summary": item.summary, "graph": graph})
+    # 우리 팀이 앱에서 저장해 둔 템플릿(워크스페이스 설정에 보관)
+    ws = db.get(Workspace, workspace_id)
+    for t in ((ws.settings if ws else None) or {}).get("team_templates") or []:
+        out.append(
+            {
+                "key": f"team:{t['id']}",
+                "name": t["name"],
+                "summary": t.get("summary", ""),
+                "graph": t["graph"],
+                "team": True,
+                "app_type": t.get("app_type", "chat"),
+            }
+        )
     return out
 
 

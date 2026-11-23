@@ -207,7 +207,7 @@ function TemplateRow({ projectId, dept }: { projectId?: string; dept: string }) 
               create.mutate(
                 {
                   name: t.name,
-                  type: "chat",
+                  type: t.app_type ?? "chat",
                   description: t.summary,
                   icon: "",
                   template_key: t.key,
@@ -219,7 +219,10 @@ function TemplateRow({ projectId, dept }: { projectId?: string; dept: string }) 
             className="group flex flex-col items-start gap-2 rounded-xl border border-slate-200 bg-white p-4 text-left shadow-card transition-all hover:-translate-y-0.5 hover:border-indigo-200 hover:shadow-lift"
           >
             <AppIcon name={t.name} size="sm" />
-            <p className="text-sm font-semibold text-slate-800">{t.name}</p>
+            <p className="text-sm font-semibold text-slate-800">
+              {t.team && <span className="mr-1 text-xs text-indigo-600">우리 팀</span>}
+              {t.name}
+            </p>
             <p className="line-clamp-2 text-xs leading-relaxed text-slate-500">{t.summary}</p>
           </button>
         ))}

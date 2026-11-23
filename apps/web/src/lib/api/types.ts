@@ -524,6 +524,8 @@ export interface Template {
   name: string;
   summary: string;
   graph: GeneratedGraph;
+  team?: boolean;
+  app_type?: "chat" | "workflow";
 }
 
 export interface PromptPack {

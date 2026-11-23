@@ -72,6 +72,18 @@ export function useDuplicateApp() {
   });
 }
 
+export function useSaveAsTemplate(ws: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (v: { appId: string; name: string; summary?: string }) =>
+      api.post<{ key: string; name: string }>(`/apps/${v.appId}/save-as-template`, {
+        name: v.name,
+        summary: v.summary ?? "",
+      }),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ["templates", ws] }),
+  });
+}
+
 export function useRestoreVersion(appId: string) {
   return useAppUpdater(appId, (version: number) =>
     api.post<AppDetailV2>(`/apps/${appId}/versions/${version}/restore`),

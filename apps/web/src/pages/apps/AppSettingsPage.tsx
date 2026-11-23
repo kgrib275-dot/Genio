@@ -6,6 +6,7 @@ import {
   RotateCcw,
   ShieldCheck,
   UserCheck,
+  LayoutTemplate,
 } from "lucide-react";
 import { VersionDiffView } from "@/components/VersionDiffView";
 import { IpEditor } from "@/components/deploy/IpEditor";
@@ -41,7 +42,7 @@ import {
   type Role,
   type VersionDetail,
 } from "@/lib/api/types";
-import { exportApp, useDuplicateApp, useRestoreVersion } from "@/lib/api/v2";
+import { exportApp, useDuplicateApp, useRestoreVersion, useSaveAsTemplate } from "@/lib/api/v2";
 import { copyText, downloadJson, formatDate } from "@/lib/cn";
 import { buildShareText } from "@/lib/shareText";
 import { useListControls } from "@/lib/useListControls";
@@ -653,6 +654,7 @@ function AppInfoCard({ appId, editable }: { appId: string; editable: boolean }) 
     }
   };
   const duplicate = useDuplicateApp();
+  const saveTpl = useSaveAsTemplate(wsId);
   const navigate = useNavigate();
   const ws = useSession((s) => s.workspaceId);
   const projects = useProjects(ws);
@@ -777,6 +779,27 @@ function AppInfoCard({ appId, editable }: { appId: string; editable: boolean }) 
                 }
               >
                 <Copy className="h-3.5 w-3.5" /> 복제
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={saveTpl.isPending}
+                onClick={() => {
+                  const name = window.prompt(
+                    "팀 템플릿 이름을 정해 주세요. 앱 만들기 화면에 '우리 팀'으로 보여요.",
+                    app.data?.name ?? "",
+                  );
+                  if (!name?.trim()) return;
+                  saveTpl.mutate(
+                    { appId, name: name.trim(), summary: app.data?.description ?? "" },
+                    {
+                      onSuccess: () => toast.success("팀 템플릿으로 저장했어요."),
+                      onError: (err) => toast.error(err),
+                    },
+                  );
+                }}
+              >
+                <LayoutTemplate className="h-3.5 w-3.5" /> 팀 템플릿으로 저장
               </Button>
             </div>
           )}
