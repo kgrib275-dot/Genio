@@ -342,6 +342,41 @@ export const HELP_SECTIONS: HelpSection[] = [
     ],
   },
   {
+    id: "tasks",
+    title: "작업함(승인·확인)",
+    summary: "흐름이 나에게 맡긴 승인·질문·할 일을 모아 처리하는 곳이에요.",
+    blocks: [
+      {
+        type: "list",
+        items: [
+          "**내가 할 일**에는 나(또는 내 역할)에게 온 요청이 모여요. 승인 요청은 목록에서 바로 **승인**·**반려**를 누를 수 있어요(한 번 더 물어봐요).",
+          "질문이나 할 일은 눌러서 열고 답을 적거나 **완료**를 누르면 흐름이 이어져요.",
+          "메일·슬랙으로 받은 링크는 로그인 없이 휴대폰에서도 처리돼요.",
+          "기한이 지나면 정해 둔 대로 자동 처리되거나 윗사람에게 올라가요.",
+        ],
+      },
+      {
+        type: "tip",
+        text: "하루 넘게 쌓인 요청을 메일로 받고 싶다면 관리 > 사용량의 **한도·알림**에서 켜세요.",
+      },
+    ],
+  },
+  {
+    id: "schedules",
+    title: "예약 실행(달력)",
+    summary: "정해 둔 시간에 저절로 도는 흐름을 한눈에 봐요.",
+    blocks: [
+      {
+        type: "list",
+        items: [
+          "**앞으로 7일**에서 언제 어떤 앱이 도는지 날짜별로 봐요.",
+          "**예약 목록**에서 다음 실행 시각, 지난번 결과(성공·실패)를 확인해요.",
+          "예약을 만들거나 고치려면 앱 이름을 눌러 **자동 실행** 탭으로 가세요.",
+        ],
+      },
+    ],
+  },
+  {
     id: "datatables",
     title: "데이터 표",
     summary: "흐름이 값을 적어 두고 다시 꺼내 쓰는 작은 표예요.",
@@ -548,6 +583,8 @@ export type HelpPageKey =
   | "projects"
   | "triggers"
   | "datatables"
+  | "tasks"
+  | "schedules"
   | "learn"
   | "ai-models";
 
@@ -571,6 +608,8 @@ export const PAGE_HELP: Record<HelpPageKey, string> = {
   projects: "projects",
   triggers: "triggers",
   datatables: "datatables",
+  tasks: "tasks",
+  schedules: "schedules",
   learn: "learn",
   "ai-models": "ai-models",
 };

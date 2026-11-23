@@ -2,6 +2,7 @@ import { CalendarClock } from "lucide-react";
 import { Link } from "react-router-dom";
 import { EmptyState } from "@/components/EmptyState";
 import { ErrorBox, Loading } from "@/components/ErrorBox";
+import { HelpButton } from "@/help/HelpButton";
 import { Badge } from "@/components/ui/badge";
 import { useSchedules } from "@/lib/api/schedules";
 import { formatDate } from "@/lib/cn";
@@ -30,7 +31,9 @@ export default function SchedulesPage() {
   return (
     <div className="mx-auto max-w-4xl space-y-6 p-4 sm:p-6">
       <div>
-        <h1 className="text-xl font-bold text-slate-900">예약 실행</h1>
+        <h1 className="flex items-center gap-1 text-xl font-bold text-slate-900">
+          예약 실행 <HelpButton page="schedules" />
+        </h1>
         <p className="mt-1 text-sm text-slate-500">
           정해 둔 시간에 저절로 도는 흐름이에요. 앞으로 7일 일정과 지난 결과를 한눈에 봐요.
         </p>

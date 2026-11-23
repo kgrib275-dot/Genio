@@ -9,6 +9,7 @@ import { ListPager, ListToolbar, NoMatch } from "@/components/ListControls";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, PageHeader } from "@/components/ui/card";
+import { HelpButton } from "@/help/HelpButton";
 import { Dialog } from "@/components/ui/dialog";
 import { Tabs } from "@/components/ui/tabs";
 import { toast } from "@/components/ui/toast-store";
@@ -130,6 +131,7 @@ export default function TasksPage() {
           </span>
         }
         description="흐름이 사람에게 맡긴 승인·질문·할 일이 모여요. 처리하면 흐름이 바로 이어져요."
+        help={<HelpButton page="tasks" />}
       />
       <div className="-mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0">
         <Tabs value={view} onChange={setView} items={VIEWS} />
