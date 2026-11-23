@@ -512,6 +512,24 @@ function VersionsCard({ appId, editable }: { appId: string; editable: boolean })
   const restore = useRestoreVersion(appId);
   const [shown, setShown] = useState<VersionDetail | null>(null);
   const [cmp, setCmp] = useState<{ from: string; to: string } | null>(null);
+  const [when, setWhen] = useState("");
+  // 고른 날짜·시각 이전에 저장한 버전 중 가장 최근 것
+  const atWhen = when
+    ? (versions.data ?? [])
+        .filter((v) => new Date(v.created_at).getTime() <= new Date(when).getTime())
+        .sort((a, b) => b.version - a.version)[0]
+    : undefined;
+  const restoreTo = (n: number) => {
+    if (
+      window.confirm(
+        `작업본을 버전 ${n}으로 되돌릴까요? 지금 작업본은 새 버전으로 자동 저장돼서 다시 돌아올 수 있어요.`,
+      )
+    )
+      restore.mutate(n, {
+        onSuccess: () => toast.success(`버전 ${n}으로 되돌렸어요.`),
+        onError: (err) => toast.error(err),
+      });
+  };
   const vc = useListControls(versions.data, {
     key: "app-versions",
     defaultSize: 10,
@@ -531,6 +549,34 @@ function VersionsCard({ appId, editable }: { appId: string; editable: boolean })
         {(versions.data?.length ?? 0) > 0 && (
           <ListToolbar c={vc} placeholder="버전 번호·메모로 찾기" className="px-4 pb-3 sm:px-5" />
         )}
+        {editable && (versions.data?.length ?? 0) > 0 && (
+          <div className="flex flex-wrap items-center gap-2 px-4 pb-3 text-sm sm:px-5">
+            <label htmlFor="ver-when" className="text-slate-600">
+              이 시각 상태로 돌아가기
+            </label>
+            <input
+              id="ver-when"
+              type="datetime-local"
+              value={when}
+              onChange={(e) => setWhen(e.target.value)}
+              className="rounded-lg border border-slate-300 px-2 py-1"
+            />
+            {when && !atWhen && (
+              <span className="text-xs text-amber-700">그 시각 이전에 저장한 버전이 없어요.</span>
+            )}
+            {atWhen && (
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={restore.isPending}
+                onClick={() => restoreTo(atWhen.version)}
+              >
+                <RotateCcw className="h-3.5 w-3.5" /> 버전 {atWhen.version}(
+                {formatDate(atWhen.created_at)})로 되돌리기
+              </Button>
+            )}
+          </div>
+        )}
         <NoMatch c={vc} />
         <ul className="divide-y divide-slate-100 border-t border-slate-100 empty:hidden">
           {vc.pageItems.map((v) => (
@@ -548,17 +594,7 @@ function VersionsCard({ appId, editable }: { appId: string; editable: boolean })
                   size="sm"
                   variant="ghost"
                   disabled={restore.isPending}
-                  onClick={() => {
-                    if (
-                      window.confirm(
-                        `작업본을 버전 ${v.version}으로 되돌릴까요? 지금 작업본의 바뀐 내용은 사라져요.`,
-                      )
-                    )
-                      restore.mutate(v.version, {
-                        onSuccess: () => toast.success(`버전 ${v.version}으로 되돌렸어요.`),
-                        onError: (err) => toast.error(err),
-                      });
-                  }}
+                  onClick={() => restoreTo(v.version)}
                 >
                   <RotateCcw className="h-3.5 w-3.5" /> 되돌리기
                 </Button>

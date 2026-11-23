@@ -213,6 +213,22 @@ def restore_version(app_id: str, version: int, ctx: AppBuilders) -> dict[str, An
     )
     if v is None:
         raise not_found("버전")
+    # 지금 작업본이 저장한 버전과 다르면 되돌리기 전에 자동으로 한 번 남겨 둔다(되돌린 걸 다시 되돌릴 수 있게)
+    ctx.db.refresh(app, with_for_update=True)
+    last = svc.latest_version(ctx.db, app.id)
+    backed_up: int | None = None
+    saved = ctx.db.scalars(select(WorkflowVersion.graph).where(WorkflowVersion.app_id == app.id))
+    if app.draft_graph and all(g != app.draft_graph for g in saved):
+        backed_up = (last.version + 1) if last else 1
+        ctx.db.add(
+            WorkflowVersion(
+                app_id=app.id,
+                version=backed_up,
+                graph=app.draft_graph,
+                created_by=ctx.user.id,
+                note=f"버전 {version}로 되돌리기 전 자동 저장",
+            )
+        )
     app.draft_graph = v.graph
     audit(
         ctx.db,
@@ -221,7 +237,7 @@ def restore_version(app_id: str, version: int, ctx: AppBuilders) -> dict[str, An
         action="app.version_restore",
         target_type="app",
         target_id=app.id,
-        meta={"version": version},
+        meta={"version": version, "backup": backed_up},
     )
     ctx.db.commit()
     return _detail(ctx, app)

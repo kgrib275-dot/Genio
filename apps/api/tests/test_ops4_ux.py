@@ -1393,3 +1393,28 @@ def test_team_template_save_and_use(client: TestClient, team: Team) -> None:
     assert all(
         t["key"] != key for t in client.get(f"{base}/templates", headers=team.h("member")).json()
     )
+
+
+def test_restore_keeps_backup_of_current_draft(client: TestClient, team: Team) -> None:
+    from api.db import SessionLocal
+    from api.models import App
+    from api.tests.test_v02_features import faq_app
+
+    app_id = faq_app(client, team)
+    h = team.h("builder")
+    first = min(
+        v["version"] for v in client.get(f"/api/v1/apps/{app_id}/versions", headers=h).json()
+    )
+    with SessionLocal() as db:  # 저장하지 않은 작업본 변경
+        a = db.get(App, app_id)
+        assert a is not None
+        a.draft_graph = {**(a.draft_graph or {}), "meta_test": 1}
+        db.commit()
+    r = client.post(f"/api/v1/apps/{app_id}/versions/{first}/restore", headers=h)
+    assert r.status_code == 200
+    after = client.get(f"/api/v1/apps/{app_id}/versions", headers=h).json()
+    assert any("자동 저장" in (v.get("note") or "") for v in after)
+    # 이미 저장된 상태에서 다시 되돌리면 중복 백업을 만들지 않는다
+    again = client.post(f"/api/v1/apps/{app_id}/versions/{first}/restore", headers=h)
+    assert again.status_code == 200
+    assert len(client.get(f"/api/v1/apps/{app_id}/versions", headers=h).json()) == len(after)
