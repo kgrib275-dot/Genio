@@ -26,6 +26,8 @@ import {
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { AnnouncementBanner } from "@/components/announcement/AnnouncementBanner";
+import { SupportBanner } from "@/components/support/SupportBanner";
+import { useSupport } from "@/store/support";
 import { Link, NavLink, Outlet, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { Avatar } from "@/components/AppIcon";
 import { ErrorBox, Loading } from "@/components/ErrorBox";
@@ -197,6 +199,7 @@ function SidebarBody({
   const navigate = useNavigate();
   const workspaces = me?.workspaces ?? [];
   const current = workspaces.find((w) => w.id === workspaceId);
+  const supportTarget = useSupport((s) => s.target);
   return (
     <>
       {onSearch && (
@@ -234,9 +237,15 @@ function SidebarBody({
             value={workspaceId}
             onChange={(e) => {
               const w = workspaces.find((x) => x.id === e.target.value);
-              if (w) setWorkspace(w.id, w.role);
+              if (w) {
+                useSupport.getState().exit(); // 다른 워크스페이스를 고르면 지원 접속은 끝난다
+                setWorkspace(w.id, w.role);
+              }
             }}
           >
+            {supportTarget && !current && (
+              <option value={supportTarget.id}>{supportTarget.name} (지원 중)</option>
+            )}
             {workspaces.map((w) => (
               <option key={w.id} value={w.id}>
                 {w.name}
@@ -452,6 +461,8 @@ export function Layout() {
   useEffect(() => {
     const list = me.data?.workspaces ?? [];
     if (list.length === 0) return;
+    // 지원 접속 중인 회사는 내 목록에 없어도 그대로 둔다
+    if (useSupport.getState().target?.id === workspaceId) return;
     const current = list.find((w) => w.id === workspaceId);
     if (current) {
       if (useSession.getState().role !== current.role) setWorkspace(current.id, current.role);
@@ -637,6 +648,7 @@ export function Layout() {
       </aside>
 
       <main className="min-h-0 min-w-0 flex-1 overflow-y-auto">
+        <SupportBanner />
         <AnnouncementBanner />
         {workspaceId ? (
           <ErrorBoundary resetKey={pathname}>

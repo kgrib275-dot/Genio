@@ -94,6 +94,7 @@ export interface CompanyRow {
   month_cost: number;
   monthly_budget_usd: number | null;
   last_active_at: string | null;
+  support_access: "off" | "read" | "edit";
 }
 
 export interface CompaniesOverview {

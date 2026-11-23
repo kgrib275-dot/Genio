@@ -33,9 +33,14 @@ from api.models import (
 Role = Literal["owner", "admin", "builder", "operator", "member"]
 ROLES: tuple[Role, ...] = ("owner", "admin", "builder", "operator", "member")
 
+
 # 설계서 §3-1 역할 권한표
+class _RoleSet(tuple):  # type: ignore[type-arg]
+    """값이 같은 권한 묶음도 서로 다른 객체로 구별하려고 쓴다(`is`로 '연결 정보·AI 키 전용'을 가린다)."""
+
+
 MANAGE_MEMBERS: tuple[Role, ...] = ("owner", "admin")
-MANAGE_SECRETS: tuple[Role, ...] = ("owner", "admin")
+MANAGE_SECRETS: tuple[Role, ...] = _RoleSet(("owner", "admin"))
 MANAGE_MARKET: tuple[Role, ...] = ("owner", "admin")
 EDIT_APPS: tuple[Role, ...] = ("owner", "admin", "builder")
 DEPLOY_APPS: tuple[Role, ...] = ("owner", "admin", "builder")
@@ -306,6 +311,68 @@ def membership_role(db: Session, user_id: str, workspace_id: str) -> Role | None
     return m.role if m else None  # type: ignore[return-value]
 
 
+SUPPORT_LEVELS = ("off", "read", "edit")
+DEFAULT_SUPPORT_LEVEL = "read"
+
+
+def support_level(db: Session, workspace_id: str) -> str:
+    """이 회사가 서비스 지원 접속을 어디까지 허용하는지(off·read·edit). 기본은 보기만."""
+    from api.models import Workspace
+
+    ws = db.get(Workspace, workspace_id)
+    level = ((ws.settings if ws else None) or {}).get("security", {}).get("support_access")
+    return level if level in SUPPORT_LEVELS else DEFAULT_SUPPORT_LEVEL
+
+
+def _support_role(
+    request: Request, db: Session, user: Any, workspace_id: str, roles: tuple[Role, ...]
+) -> Role | None:
+    """서비스 관리자가 '지원 접속'으로 들어온 요청이면 관리자 권한을 준다(회사가 허용한 범위 안에서만).
+    멤버·연결 정보·AI 키·한도 같은 민감한 설정은 바꿀 수 없고, 접속과 수정은 기록에 남는다."""
+    if not request.headers.get("x-genio-support"):
+        return None
+    from api.services.system import is_instance_admin
+
+    if not is_instance_admin(db, user.id):
+        return None
+    level = support_level(db, workspace_id)
+    if level == "off":
+        raise AppError(
+            403,
+            "이 회사는 서비스 지원 접속을 꺼 두었어요.",
+            "회사 소유자에게 '안전·규칙 > 서비스 지원 접속'을 켜 달라고 요청하세요.",
+        )
+    if request.method not in ("GET", "HEAD", "OPTIONS"):
+        if level != "edit":
+            raise AppError(
+                403,
+                "지원 접속은 지금 '보기만' 허용돼 있어요.",
+                "고치려면 회사 소유자가 '안전·규칙 > 서비스 지원 접속'을 '수정까지'로 바꿔야 해요.",
+            )
+        if tuple(roles) == ("owner", "admin"):
+            raise AppError(
+                403,
+                "지원 접속으로는 멤버·연결 정보·AI 키·한도·보안 설정을 바꿀 수 없어요.",
+                "이 설정은 회사 소유자가 직접 바꿔야 해요.",
+            )
+    db.info["support"] = True
+    from api.core import ratelimit
+    from api.core.audit import audit
+
+    if ratelimit.allow(f"support:{user.id}:{workspace_id}", 1, window=3600):
+        audit(
+            db,
+            workspace_id=workspace_id,
+            user_id=user.id,
+            action="support.access",
+            target_type="workspace",
+            target_id=workspace_id,
+            meta={"level": level},
+        )
+        db.commit()
+    return "admin"
+
+
 def _check_admin_2fa(db: Session, workspace_id: str, user: Any) -> None:
     """'관리자는 2단계 인증 필수'를 켠 워크스페이스에서는 연결 정보·AI 키를 바꾸는 일만 막는다(로그인·보기는 그대로)."""
     from api.models import Workspace
@@ -329,6 +396,8 @@ def require_role(roles: tuple[Role, ...], via: Via = "ws") -> Callable[..., Ctx]
             raise not_found("대상")
         workspace_id = _workspace_of(db, via, str(key))
         role = membership_role(db, user.id, workspace_id)
+        if role is None:
+            role = _support_role(request, db, user, workspace_id, roles)
         if role is None:
             # 다른 워크스페이스의 존재 여부를 드러내지 않는다
             raise not_found("대상")

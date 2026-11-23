@@ -7,7 +7,7 @@ from sqlalchemy import case, func, select
 
 from api.core.audit import audit
 from api.core.errors import AppError
-from api.deps import CurrentUser, DbDep
+from api.deps import CurrentUser, DbDep, support_level
 from api.models import App, AuditLog, Membership, Organization, Run, User, Workspace
 from api.services import limits, system
 
@@ -104,6 +104,7 @@ def list_workspaces(user: CurrentUser, db: DbDep) -> dict[str, Any]:
                 "month_cost": round(cost, 4),
                 "monthly_budget_usd": budget,
                 "last_active_at": max(times) if times else None,
+                "support_access": support_level(db, ws.id),
             }
         )
     audit(

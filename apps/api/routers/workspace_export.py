@@ -11,6 +11,7 @@ from fastapi import APIRouter, Depends, Response
 from sqlalchemy import select
 
 from api.core.audit import audit
+from api.core.errors import AppError
 from api.deps import MANAGE_MEMBERS, Ctx, require_role
 from api.models import App, DataTable, Workspace
 from api.services import data_tables as table_svc
@@ -41,6 +42,12 @@ def _safe(name: str, used: set[str]) -> str:
 @router.get("/workspaces/{ws}/export")
 def export_workspace(ws: str, ctx: Managers) -> Response:
     db = ctx.db
+    if db.info.get("support"):
+        raise AppError(
+            403,
+            "지원 접속으로는 회사 데이터를 내려받을 수 없어요.",
+            "회사 소유자가 직접 내려받아야 해요.",
+        )
     w = db.get(Workspace, ws)
     buf = io.BytesIO()
     used_apps: set[str] = set()

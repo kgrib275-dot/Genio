@@ -1580,3 +1580,109 @@ def test_instance_admin_sees_all_companies_but_others_cannot(
     # 다른 역할은 막힌다
     assert client.get("/api/v1/admin/workspaces", headers=team.h("admin")).status_code == 403
     assert client.get("/api/v1/admin/workspaces", headers=team.h("builder")).status_code == 403
+
+
+def _second_company(client: TestClient) -> tuple[str, dict[str, str]]:
+    """서비스 관리자(시험 팀 소유자)가 멤버가 아닌 두 번째 회사와 그 소유자 로그인 헤더."""
+    from api.core.security import hash_password
+    from api.db import SessionLocal
+    from api.models import Membership, Organization, User, Workspace
+    from api.tests.conftest import PASSWORD
+
+    with SessionLocal() as db:
+        org = Organization(name="고객 회사", slug="customer-co")
+        db.add(org)
+        db.flush()
+        ws = Workspace(org_id=org.id, name="고객 회사", slug="customer-co", settings={})
+        db.add(ws)
+        db.flush()
+        u = User(
+            email="boss@customer.example", name="고객 대표", password_hash=hash_password(PASSWORD)
+        )
+        db.add(u)
+        db.flush()
+        db.add(Membership(user_id=u.id, workspace_id=ws.id, role="owner"))
+        db.commit()
+        ws_id = ws.id
+    res = client.post(
+        "/api/v1/auth/login", json={"email": "boss@customer.example", "password": PASSWORD}
+    )
+    return ws_id, {"Authorization": f"Bearer {res.json()['access_token']}"}
+
+
+def test_support_access_respects_company_setting(client: TestClient, team: Team) -> None:
+    from api.db import SessionLocal
+    from api.models import AuditLog
+
+    ws2, boss = _second_company(client)
+    admin = team.h("owner")  # 서비스 관리자
+    support = {**admin, "X-Genio-Support": "1"}
+    apps_url = f"/api/v1/workspaces/{ws2}/apps"
+    body = {"name": "지원이 만든 앱", "type": "chat", "description": "", "icon": ""}
+
+    # 지원 접속 표시 없이는 다른 회사가 안 보인다
+    assert client.get(apps_url, headers=admin).status_code == 404
+    # 기본은 보기만
+    assert client.get(apps_url, headers=support).status_code == 200
+    r = client.post(apps_url, json=body, headers=support)
+    assert r.status_code == 403 and "보기만" in r.json()["detail"]["message"]
+    # 서비스 관리자가 아닌 사람은 표시를 붙여도 소용없다
+    assert (
+        client.get(apps_url, headers={**team.h("builder"), "X-Genio-Support": "1"}).status_code
+        == 404
+    )
+
+    # 회사 소유자가 '수정까지' 허용하면 앱은 만들 수 있지만 민감한 설정은 여전히 못 바꾼다
+    sec = f"/api/v1/workspaces/{ws2}/security"
+    assert (
+        client.put(sec, json={"support_access": "edit"}, headers=boss).json()["support_access"]
+        == "edit"
+    )
+    assert client.post(apps_url, json=body, headers=support).status_code == 201
+    r = client.post(
+        f"/api/v1/workspaces/{ws2}/invitations",
+        json={"email": "x@y.example", "role": "member"},
+        headers=support,
+    )
+    assert r.status_code == 403  # 멤버 초대는 지원 접속으로 못 한다
+    assert client.get(f"/api/v1/workspaces/{ws2}/export", headers=support).status_code == 403
+    assert client.put(sec, json={"support_access": "off"}, headers=support).status_code == 403
+
+    # 회사가 끄면 보기도 막힌다
+    assert client.put(sec, json={"support_access": "off"}, headers=boss).status_code == 200
+    r = client.get(apps_url, headers=support)
+    assert r.status_code == 403 and "꺼 두었" in r.json()["detail"]["message"]
+
+    # 기록: 접속은 한 번, 지원으로 한 수정은 표시가 붙는다
+    with SessionLocal() as db:
+        rows = db.query(AuditLog).filter(AuditLog.workspace_id == ws2).all()
+        assert any(a.action == "support.access" for a in rows)
+        created = [a for a in rows if a.action == "app.create"]
+        assert created and all(a.meta.get("via_support") for a in created)
+
+
+def test_admin_2fa_option_only_blocks_secret_changes(client: TestClient, team: Team) -> None:
+    from api.db import SessionLocal
+    from api.models import User
+
+    base = f"/api/v1/workspaces/{team.ws}"
+    with SessionLocal() as db:
+        db.get(User, team.users["admin"]).totp_enabled = True  # type: ignore[union-attr]
+        db.commit()
+    assert (
+        client.put(
+            f"{base}/security", json={"require_admin_2fa": True}, headers=team.h("admin")
+        ).status_code
+        == 200
+    )
+    # 2단계 인증을 안 쓰는 소유자: 연결 정보 삭제는 막히지만 개인정보 설정 같은 다른 관리 작업은 된다
+    assert (
+        client.delete(f"{base}/connectors/credentials/none", headers=team.h("owner")).status_code
+        == 403
+    )
+    assert (
+        client.patch(
+            f"{base}/privacy", json={"mask_logs": True}, headers=team.h("owner")
+        ).status_code
+        == 200
+    )

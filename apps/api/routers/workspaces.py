@@ -966,20 +966,27 @@ def put_builder_rules(ws: str, body: BuilderRulesIn, ctx: Managers) -> dict[str,
 
 # ---------------- 관리자 2단계 인증 필수 옵션 ----------------
 class SecurityPatch(BaseModel):
-    require_admin_2fa: bool
+    require_admin_2fa: bool | None = None
+    support_access: Literal["off", "read", "edit"] | None = None
 
 
 def _security_view(db: Any, ws: str) -> dict[str, Any]:
     from api.models import Membership, User
 
     w = db.get(Workspace, ws)
+    from api.deps import support_level
+
     on = bool(((w.settings if w else None) or {}).get("security", {}).get("require_admin_2fa"))
     rows = db.execute(
         select(User.name, User.totp_enabled)
         .join(Membership, Membership.user_id == User.id)
         .where(Membership.workspace_id == ws, Membership.role.in_(("owner", "admin")))
     ).all()
-    return {"require_admin_2fa": on, "without_2fa": [n for n, t in rows if not t]}
+    return {
+        "require_admin_2fa": on,
+        "without_2fa": [n for n, t in rows if not t],
+        "support_access": support_level(db, ws),
+    }
 
 
 @router.get("/workspaces/{ws}/security")
@@ -998,7 +1005,10 @@ def put_security(ws: str, body: SecurityPatch, ctx: Managers) -> dict[str, Any]:
             "먼저 내 계정에 2단계 인증을 켜야 이 옵션을 켤 수 있어요.",
             "내 계정 화면에서 2단계 인증을 켠 뒤 다시 시도하세요. 안 그러면 본인이 막혀요.",
         )
-    w.settings = {**(w.settings or {}), "security": {"require_admin_2fa": body.require_admin_2fa}}
+    sec = {**((w.settings or {}).get("security") or {})}
+    changes = body.model_dump(exclude_none=True)
+    sec.update(changes)
+    w.settings = {**(w.settings or {}), "security": sec}
     audit(
         ctx.db,
         workspace_id=ws,
@@ -1006,7 +1016,7 @@ def put_security(ws: str, body: SecurityPatch, ctx: Managers) -> dict[str, Any]:
         action="workspace.security",
         target_type="workspace",
         target_id=ws,
-        meta={"require_admin_2fa": body.require_admin_2fa},
+        meta=changes,
     )
     ctx.db.commit()
     return _security_view(ctx.db, ws)

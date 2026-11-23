@@ -17,6 +17,8 @@ def audit(
     target_id: str | None = None,
     meta: dict[str, Any] | None = None,
 ) -> None:
+    if db.info.get("support"):
+        meta = {**(meta or {}), "via_support": True}
     db.add(
         AuditLog(
             workspace_id=workspace_id,

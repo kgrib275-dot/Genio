@@ -87,6 +87,7 @@ import { DependenciesCard } from "@/pages/workspace/DependenciesCard";
 import { ImpactCard } from "@/pages/workspace/ImpactCard";
 import { NodePolicyCard } from "@/pages/workspace/NodePolicyCard";
 import { AdminTwoFactorCard } from "@/pages/workspace/AdminTwoFactorCard";
+import { SupportAccessCard } from "@/pages/workspace/SupportAccessCard";
 import { ExportCard } from "@/pages/workspace/ExportCard";
 import { PrivacyCard } from "@/pages/workspace/PrivacyCard";
 import { SkillsCard } from "@/pages/workspace/SkillsCard";
@@ -1237,6 +1238,7 @@ export function SafetySection({ ws }: { ws: string }) {
         <div className="grid gap-6 lg:grid-cols-2">
           <PrivacyCard ws={ws} />
           <AdminTwoFactorCard ws={ws} />
+          <SupportAccessCard ws={ws} />
           <ExportCard ws={ws} />
           <NodePolicyCard ws={ws} />
           <BuilderRulesCard ws={ws} />
@@ -1313,6 +1315,8 @@ const ACTION_LABELS: Record<string, string> = {
   "system.update": "시스템 설정 변경",
   "workspace.transfer_ownership": "소유권 넘기기",
   "workspace.security": "보안 설정 변경",
+  "support.access": "서비스 지원 접속",
+  "admin.workspaces_view": "전체 회사 현황 열람",
   "workspace.export": "데이터 내려받기",
   "workspace.privacy": "개인정보 설정 변경",
   "template.save": "팀 템플릿 저장",

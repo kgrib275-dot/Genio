@@ -8,6 +8,7 @@ export const NOTABLE = new Set([
   "member.password_reset",
   "workspace.transfer_ownership",
   "workspace.security",
+  "support.access",
   "workspace.export",
   "credential.delete",
   "llm_provider.create",
