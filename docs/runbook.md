@@ -255,3 +255,8 @@ docker compose run --rm --user root api chown -R 10001:10001 /data/files
 
 ## PostgreSQL 동시 호출 시험
 `apps/api/tests/test_pg_concurrency.py`는 평소 시험에서는 건너뛴다. 시험용 PostgreSQL을 따로 띄워(실제 DB 주소를 쓰지 말 것 — 안의 표를 모두 지운다) 실행한다. 파일 맨 위 설명 참고.
+
+## Redis 비밀번호 (2026-11-23)
+- `.env`의 `REDIS_PASSWORD`가 없으면 `docker compose up`이 멈추고 안내 문구를 보여 준다. 값은 영문·숫자만(`openssl rand -hex 24`).
+- 비밀번호를 바꾸면 `docker compose up -d redis api worker scheduler`(연결 주소가 함께 바뀐다). 호스트에서 직접 붙는 도구는 `.env`의 `REDIS_URL`을 쓴다.
+- 확인: `docker compose exec redis sh -c 'redis-cli -a "$REDIS_PASSWORD" --no-auth-warning ping'` → `PONG`, 비밀번호 없이 `redis-cli ping`은 `NOAUTH`.

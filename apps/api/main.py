@@ -15,7 +15,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
 from sqlalchemy import text
 
-from api.config import get_settings
+from api.config import get_settings, is_production
 from api.core.errors import install_error_handlers
 from api.core.observability import observe_request, render_metrics, request_id_var, setup_logging
 from api.core.sentry import init_sentry
@@ -164,10 +164,17 @@ def _cors_origins() -> list[str]:
     return [o for o in dict.fromkeys(out) if o]
 
 
+def _cors_origin_regex() -> str | None:
+    """개발 중에만 localhost를 허용한다(운영에서는 공개 웹 주소와 GENIO_CORS_ORIGINS만)."""
+    if is_production(get_settings()):
+        return None
+    return r"https?://(localhost|127\.0\.0\.1)(:\d+)?"
+
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_cors_origins(),
-    allow_origin_regex=r"https?://(localhost|127\.0\.0\.1)(:\d+)?",
+    allow_origin_regex=_cors_origin_regex(),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

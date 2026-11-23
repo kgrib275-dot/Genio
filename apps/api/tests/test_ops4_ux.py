@@ -1530,3 +1530,22 @@ def test_attention_counts_unanswered_questions(client: TestClient, team: Team) -
         db.commit()
     res = client.get(f"/api/v1/workspaces/{team.ws}/attention", headers=team.h("builder")).json()
     assert res["unanswered"][0]["count"] == 1
+
+
+def test_cors_allows_localhost_only_outside_production(monkeypatch: pytest.MonkeyPatch) -> None:
+    from api import main
+    from api.config import Settings
+
+    def fake(**kw: Any) -> Settings:
+        return Settings(_env_file=None, **kw)
+
+    monkeypatch.setattr(main, "get_settings", lambda: fake(genio_env="dev"))
+    assert main._cors_origin_regex() is not None
+    monkeypatch.setattr(main, "get_settings", lambda: fake(genio_env="prod"))
+    assert main._cors_origin_regex() is None
+    monkeypatch.setattr(
+        main,
+        "get_settings",
+        lambda: fake(genio_env="dev", genio_public_web_url="https://genio.example.com"),
+    )
+    assert main._cors_origin_regex() is None

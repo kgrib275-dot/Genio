@@ -36,7 +36,7 @@
 - **실서비스 편의 보강**([coverage](docs/feature-coverage.md) '실서비스 편의 보강'): 서비스 공지·상태 페이지(`/status`), 첫 사용 현황, 관리자 2단계 인증 필수 옵션(연결 정보·AI 키 변경만 막음), 워크스페이스 데이터 내려받기(zip), 팀 템플릿, 날짜로 되돌리기, 검색 확장(문서·대화), 승인 대기 알림 메일·시험 메일, 빌더 완료 뒤 다음 할 일 버튼, 결과 표 보기·엑셀 받기, 예약 실행 달력(`/schedules`), 작업함에서 바로 승인·반려, 활동 기록 7일 요약, 답 못한 질문 알림.
 - **공유 링크 미리보기 수정**: 카카오톡 안에서 링크를 열면 미리보기 페이지만 보이던 문제를 고쳤다(로봇만 `kakaotalk-scrap`으로 구분, `?open=1` 우회). **웹 이미지(nginx)를 다시 빌드해야 반영된다**: `docker compose up -d --build web`.
 - 자동 검사(GitHub Actions `ci.yml`): ruff·mypy·pytest 1,187개·eslint·tsc·vitest 276개·빌드·`pip-audit`·`npm audit`, PostgreSQL 동시 호출 시험.
-- **반영 방법**: `docker compose up -d --build`(마이그레이션 0019~0021 자동 적용, 새 `scheduler`; 이번 보강은 마이그레이션이 늘지 않았다). **`.env`에 `POSTGRES_PASSWORD`가 꼭 있어야 한다**(기본값 `genio`는 더 이상 쓰지 않는다). 공개 주소를 쓰면 `GENIO_FERNET_KEY`도 필수다. `GENIO_STORAGE=disk`면 이미지를 다시 빌드한 뒤 [runbook](docs/runbook.md)의 '비루트 실행' 명령을 한 번 실행한다.
+- **반영 방법**: `docker compose up -d --build`(마이그레이션 0019~0021 자동 적용, 새 `scheduler`; 이번 보강은 마이그레이션이 늘지 않았다). **`.env`에 `POSTGRES_PASSWORD`와 `REDIS_PASSWORD`가 꼭 있어야 한다**(`openssl rand -hex 24`로 만든 영문·숫자 값; 기본값은 쓰지 않는다. Redis를 처음 켤 때는 api·worker·scheduler가 같이 다시 시작된다). 공개 주소를 쓰면 `GENIO_FERNET_KEY`도 필수다. `GENIO_STORAGE=disk`면 이미지를 다시 빌드한 뒤 [runbook](docs/runbook.md)의 '비루트 실행' 명령을 한 번 실행한다.
 - 결과 요약과 위치: [docs/feature-coverage.md](docs/feature-coverage.md) 맨 아래 표들, 남은 후보: [docs/field-needs-2026-11-19.html](docs/field-needs-2026-11-19.html).
 
 ## 최근 점검 (2026-11-06) — 안정성·보안·전체 화면
@@ -55,7 +55,7 @@
 
 ## 오픈 전 남은 일
 - **꼭**: 데모 계정 비밀번호 바꾸기(공개 주소; 시스템 상태 '공개 서버 보안'에 경고가 뜬다), 필요 없으면 회원가입 끄기, **실제 AI 키로 빌더·샘플 ⑧~⑩·품질 점검 AI 심판 확인**, **실제 슬랙·팀즈·메일 연결 확인**, 시스템 메일(SMTP) 설정 후 이메일 인증 켜기, 전체 컨테이너 재빌드 리허설, 약관·개인정보처리방침 법률 검토.
-- 결정이 필요해서 남김: 로그인 잠금 정책, 신뢰 프록시 범위, Redis 비밀번호, AI 호출 DNS 재바인딩 방지([ADR 0017](docs/decisions/0017-안정성-보안-점검-반영.md) '하지 않은 것').
+- 결정이 필요해서 남김: 로그인 잠금 정책, 신뢰 프록시 범위, AI 호출 DNS 재바인딩 방지([ADR 0017](docs/decisions/0017-안정성-보안-점검-반영.md) '하지 않은 것').
 - **판매형 전환 때 결정 필요**(작업 규칙상 범위 밖, [ADR 0011](docs/decisions/0011-오픈-준비.md)): 결제·요금제, 사용량 과금, 기본 제공 AI·체험 크레딧, SSO, 고객사별 데이터 격리, 클라우드 서버 이전.
 - v0.8 선택 설정: 파일을 S3·디스크에 두기(`GENIO_STORAGE`), 코드 실행 샌드박스(`GENIO_SANDBOX_URL`, 컴포즈 프로필 `sandbox`), Sentry(`SENTRY_DSN`). 자세히는 [runbook](docs/runbook.md)의 'v0.8 운영 안전'.
 - 운영 준비 1차 선택 설정: 바깥 백업(`GENIO_BACKUP_S3_BUCKET`), JSON 로그(`GENIO_LOG_FORMAT=json`), 지표(`GENIO_METRICS_TOKEN`, 프로필 `monitoring`). 자세히는 [runbook](docs/runbook.md) '관측'·'외부 백업·복구 연습'.
@@ -64,7 +64,7 @@
 
 ## 빠른 시작
 ```bash
-cp .env.example .env          # 키 채우기(GENIO_SECRET_KEY, GENIO_FERNET_KEY, POSTGRES_PASSWORD 등)
+cp .env.example .env          # 키 채우기(GENIO_SECRET_KEY, GENIO_FERNET_KEY, POSTGRES_PASSWORD, REDIS_PASSWORD 등)
 docker compose up --build -d  # postgres, redis, api(프로세스 4), worker, scheduler(예약), web(nginx), backup(매일 3시·매주 복구 연습), tailscale
 open http://127.0.0.1:5190
 ```

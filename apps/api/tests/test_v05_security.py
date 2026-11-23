@@ -108,7 +108,11 @@ def test_cors_restricted(client: TestClient) -> None:
 
     assert allowed("https://evil-site.attacker.ts.net") is None
     assert allowed("https://evil.example.com") is None
-    assert allowed("http://localhost:5190") == "http://localhost:5190"
+    # localhost는 개발 설정일 때만 허용한다(운영으로 판정되면 막힌다)
+    from api import main
+
+    expected = "http://localhost:5190" if main._cors_origin_regex() else None
+    assert allowed("http://localhost:5190") == expected
 
 
 def test_nul_in_query_is_400(client: TestClient, team: Team) -> None:
