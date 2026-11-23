@@ -1433,3 +1433,60 @@ def test_search_finds_conversation_and_respects_roles(client: TestClient, team: 
     # 사용자(member) 역할에는 대화 내용을 보여 주지 않는다
     mine = client.get(base, params={"q": "환불"}, headers=team.h("member")).json()["groups"]
     assert all(g["kind"] != "conversations" for g in mine)
+
+
+def test_stale_task_alert_and_test_mail(
+    client: TestClient, team: Team, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from datetime import timedelta
+
+    from api.db import SessionLocal
+    from api.models import HumanTask, Workspace
+    from api.services import limits
+    from api.services.limits import now_utc
+
+    sent: list[str] = []
+
+    def fake_send(db: Any, ws: Any, subject: str, body: str) -> bool:
+        sent.append(subject)
+        return True
+
+    monkeypatch.setattr(limits, "_send_alert", fake_send)
+    base = f"/api/v1/workspaces/{team.ws}"
+    assert client.post(f"{base}/limits/test-alert", headers=team.h("admin")).status_code == 200
+    assert client.post(f"{base}/limits/test-alert", headers=team.h("builder")).status_code == 403
+    with SessionLocal() as db:
+        w = db.get(Workspace, team.ws)
+        assert w is not None
+        w.settings = {
+            **(w.settings or {}),
+            "limits": {
+                **limits.get_limits(w),
+                "alert_emails": ["a@b.co"],
+                "alert_credential_id": "x",
+                "alert_stale_tasks": True,
+            },
+        }
+        from api.tests.test_v02_features import faq_app
+
+        db.commit()
+    app_id = faq_app(client, team)
+    with SessionLocal() as db:
+        db.add(
+            HumanTask(
+                workspace_id=team.ws,
+                app_id=app_id,
+                kind="approval",
+                title="오래된 승인",
+                status="open",
+                token="tok-stale-1",  # noqa: S106
+                created_at=now_utc() - timedelta(hours=30),
+            )
+        )
+        db.commit()
+    sent.clear()
+    limits._check_workspace(team.ws, now_utc())
+    assert any("기다리는 요청" in s for s in sent)
+    sent.clear()
+    limits._check_workspace(team.ws, now_utc())  # 같은 날 두 번 보내지 않는다
+    assert not any("기다리는 요청" in s for s in sent)

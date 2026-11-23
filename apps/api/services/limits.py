@@ -5,6 +5,7 @@
   cost_alert_usd       이번 달 비용이 이 값을 넘으면 한 번 메일로 알린다
   (월 한도가 있으면 80%에 이를 때 한 번 미리 메일로 알린다)
   alert_on_failure     실행이 실패하면 메일로 알린다(5분마다 모아서)
+  alert_stale_tasks    하루 넘게 기다리는 승인·확인 요청이 있으면 하루 한 번 메일로 알린다
   monthly_report       매달 1일(그 뒤 처음 확인 때) 지난달 효과 리포트를 같은 받는 사람에게 메일로 보낸다
   alert_emails         받는 사람
   alert_credential_id  메일을 보낼 'Email (SMTP)' 연결 정보
@@ -26,7 +27,16 @@ from typing import Any
 from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
-from api.models import App, AppTrigger, Conversation, Message, Run, StoredFile, Workspace
+from api.models import (
+    App,
+    AppTrigger,
+    Conversation,
+    HumanTask,
+    Message,
+    Run,
+    StoredFile,
+    Workspace,
+)
 
 log = logging.getLogger("genio.limits")
 
@@ -37,6 +47,7 @@ DEFAULTS: dict[str, Any] = {
     "cost_alert_usd": None,
     "alert_on_failure": False,
     "monthly_report": False,
+    "alert_stale_tasks": False,
     "alert_emails": [],
     "alert_credential_id": None,
     "retention_days": None,
@@ -98,6 +109,8 @@ def clean_limits(patch: dict[str, Any], current: dict[str, Any]) -> dict[str, An
         out["cost_alert_usd"] = _num(patch["cost_alert_usd"], 0, 1_000_000, "비용 알림 기준")
     if "alert_on_failure" in patch:
         out["alert_on_failure"] = bool(patch["alert_on_failure"])
+    if "alert_stale_tasks" in patch:
+        out["alert_stale_tasks"] = bool(patch["alert_stale_tasks"])
     if "monthly_report" in patch:
         out["monthly_report"] = bool(patch["monthly_report"])
     if "alert_emails" in patch:
@@ -393,6 +406,35 @@ def _check_workspace(ws_id: str, n: datetime) -> int:
                         sent += 1
                     else:
                         _release_state(ws_id, "budget_warned_month", month_key, before)
+
+    if lim.get("alert_stale_tasks"):
+        day_key = n.strftime("%Y-%m-%d")
+        if state.get("stale_alerted_day") != day_key:
+            with SessionLocal() as db:
+                ws = db.get(Workspace, ws_id)
+                stale_rows = db.execute(
+                    select(HumanTask.title, HumanTask.created_at)
+                    .where(
+                        HumanTask.workspace_id == ws_id,
+                        HumanTask.status == "open",
+                        HumanTask.created_at < n - timedelta(hours=24),
+                    )
+                    .order_by(HumanTask.created_at)
+                    .limit(20)
+                ).all()
+                if stale_rows and ws is not None:
+                    before = _claim_state(ws_id, "stale_alerted_day", day_key)
+                    if before is not None:
+                        lines = [f"- {t}" for t, _ in stale_rows]
+                        body = (
+                            "하루 넘게 기다리는 승인·확인 요청이 있어요.\n"
+                            + "\n".join(lines)
+                            + "\n\n작업함에서 처리해 주세요."
+                        )
+                        if _send_alert(db, ws, f"[Genio] 기다리는 요청 {len(stale_rows)}건", body):
+                            sent += 1
+                        else:
+                            _release_state(ws_id, "stale_alerted_day", day_key, before)
 
     if lim["monthly_report"]:
         prev_start = (month_start(n) - timedelta(days=1)).replace(day=1)

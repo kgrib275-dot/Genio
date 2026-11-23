@@ -836,6 +836,7 @@ class LimitsPatch(BaseModel):
     cost_alert_usd: float | None = None
     alert_on_failure: bool | None = None
     monthly_report: bool | None = None
+    alert_stale_tasks: bool | None = None
     alert_emails: list[str] | None = None
     alert_credential_id: str | None = None
     retention_days: int | None = None
@@ -1009,3 +1010,24 @@ def put_security(ws: str, body: SecurityPatch, ctx: Managers) -> dict[str, Any]:
     )
     ctx.db.commit()
     return _security_view(ctx.db, ws)
+
+
+@router.post("/workspaces/{ws}/limits/test-alert")
+def test_alert(ws: str, ctx: Managers) -> dict[str, Any]:
+    """알림 메일이 제대로 가는지 시험 메일을 한 통 보낸다."""
+    w = ctx.db.get(Workspace, ws)
+    if w is None:
+        raise not_found("워크스페이스")
+    ok = limits._send_alert(
+        ctx.db,
+        w,
+        "[Genio] 시험 메일",
+        "알림 메일이 잘 도착했어요. 이 메일은 시험용이라 답장하지 않아도 돼요.",
+    )
+    if not ok:
+        raise AppError(
+            422,
+            "시험 메일을 보내지 못했어요.",
+            "받는 사람과 메일 연결 정보를 저장했는지, 연결 정보가 맞는지 확인하세요.",
+        )
+    return {"sent": True}

@@ -13,6 +13,7 @@ import {
   useCostEstimate,
   useLimits,
   useLlmCatalog,
+  useTestAlert,
   useUpdateLimits,
   useUsageByUser,
   type WorkspaceLimits,
@@ -299,6 +300,8 @@ function LimitsForm({ ws, initial }: { ws: string; initial: WorkspaceLimits }) {
   const [alertAt, setAlertAt] = useState(initial.cost_alert_usd?.toString() ?? "");
   const [onFail, setOnFail] = useState(initial.alert_on_failure);
   const [monthly, setMonthly] = useState(initial.monthly_report ?? false);
+  const [stale, setStale] = useState(initial.alert_stale_tasks ?? false);
+  const testMail = useTestAlert(ws);
   const [emails, setEmails] = useState(initial.alert_emails.join(", "));
   const [cred, setCred] = useState(initial.alert_credential_id ?? "");
   const [retention, setRetention] = useState(initial.retention_days?.toString() ?? "");
@@ -418,6 +421,15 @@ function LimitsForm({ ws, initial }: { ws: string; initial: WorkspaceLimits }) {
             />
             매달 1일, 지난달 이용 요약(성공·실패·아낀 시간)을 메일로 받기
           </label>
+          <label className="flex items-center gap-2 self-end pb-2 text-sm">
+            <input
+              type="checkbox"
+              className="accent-indigo-600"
+              checked={stale}
+              onChange={(e) => setStale(e.target.checked)}
+            />
+            하루 넘게 기다리는 승인·확인 요청이 있으면 메일로 알리기
+          </label>
         </div>
         <div className="border-t border-slate-100 pt-4 dark:border-slate-800">
           <p className="text-sm font-medium">실행·저장 한도</p>
@@ -446,7 +458,18 @@ function LimitsForm({ ws, initial }: { ws: string; initial: WorkspaceLimits }) {
             ))}
           </div>
         </div>
-        <ErrorBox error={save.error} />
+        <ErrorBox error={save.error ?? testMail.error} />
+        <Button
+          variant="outline"
+          disabled={testMail.isPending}
+          onClick={() =>
+            testMail.mutate(undefined, {
+              onSuccess: () => toast.success("시험 메일을 보냈어요. 받은편지함을 확인해 보세요."),
+            })
+          }
+        >
+          {testMail.isPending ? "보내는 중…" : "시험 메일 보내기(저장한 설정으로)"}
+        </Button>{" "}
         <Button
           disabled={save.isPending}
           onClick={() =>
@@ -456,6 +479,7 @@ function LimitsForm({ ws, initial }: { ws: string; initial: WorkspaceLimits }) {
                 cost_alert_usd: numOrNull(alertAt),
                 alert_on_failure: onFail,
                 monthly_report: monthly,
+                alert_stale_tasks: stale,
                 alert_emails: emails
                   .split(/[,;\s]+/)
                   .map((x) => x.trim())

@@ -93,6 +93,7 @@ export interface WorkspaceLimits {
   cost_alert_usd: number | null;
   alert_on_failure: boolean;
   monthly_report?: boolean;
+  alert_stale_tasks?: boolean;
   alert_emails: string[];
   alert_credential_id: string | null;
   retention_days: number | null;
@@ -323,5 +324,12 @@ export function useCreateKnowledgeBaseV5(ws: string) {
       void qc.invalidateQueries({ queryKey: ["kbs", ws] });
       void qc.invalidateQueries({ queryKey: ["projects", ws] });
     },
+  });
+}
+
+/** 알림 시험 메일(저장한 받는 사람·메일 연결 정보로 한 통 보낸다) */
+export function useTestAlert(ws: string) {
+  return useMutation({
+    mutationFn: () => api.post<{ sent: boolean }>(`/workspaces/${ws}/limits/test-alert`),
   });
 }
