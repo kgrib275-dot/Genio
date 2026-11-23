@@ -696,3 +696,34 @@ def test_system_prompt_is_stable_within_one_turn(
     send(client, team, sid, "지금 흐름 알려 줘")
     systems = [c["system"] for c in fake_llm.calls if c["kind"] == "chat"]
     assert systems[-1] != systems[0] and "다듬기" in systems[-1]
+
+
+def test_same_timestamp_messages_keep_order_and_do_not_block(
+    client: TestClient, team: Team
+) -> None:
+    """시계 눈금이 거친 환경에서 사용자·AI 메시지가 같은 시각이어도 순서가 바뀌거나 '답하는 중'으로 막히지 않는다."""
+    from datetime import UTC, datetime
+
+    from api.db import SessionLocal
+    from api.models import BuilderMessage
+
+    _app_id, session_id = new_session(client, team, "동시각")
+    same = datetime(2026, 1, 1, 9, 0, 0, tzinfo=UTC)
+    with SessionLocal() as db:
+        # AI 답을 먼저 넣어도(저장 순서와 무관하게) 사용자 말이 앞에 와야 한다
+        db.add(
+            BuilderMessage(session_id=session_id, role="assistant", content="답", created_at=same)
+        )
+        db.add(BuilderMessage(session_id=session_id, role="user", content="질문", created_at=same))
+        db.commit()
+    listed = client.get(
+        f"/api/v1/builder/sessions/{session_id}/messages", headers=team.h("builder")
+    ).json()
+    assert [m["role"] for m in listed] == ["user", "assistant"]
+    # 마지막이 AI 답이므로 다음 말을 보낼 수 있다(409가 아니다)
+    r = client.post(
+        f"/api/v1/builder/sessions/{session_id}/messages",
+        json={"content": "다음"},
+        headers=team.h("builder"),
+    )
+    assert r.status_code != 409

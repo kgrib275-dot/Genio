@@ -7,7 +7,7 @@ from typing import Annotated, Any, Literal
 from fastapi import APIRouter, Depends
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlalchemy import case, select
 
 from api.builder import checkpoint
 from api.builder.agent import message_dict, run_turn
@@ -19,6 +19,9 @@ from api.models import BuilderMessage, BuilderSession
 from api.routers.common import sse_frame, sse_response
 
 router = APIRouter(tags=["builder"])
+
+# 같은 시각(시계 눈금이 거친 환경)에 찍힌 메시지는 사용자 → AI 답 순서로 본다
+_ROLE_RANK = case((BuilderMessage.role == "user", 0), else_=1)
 AppBuilders = Annotated[Ctx, Depends(require_role(EDIT_APPS, via="app"))]
 SessionBuilders = Annotated[Ctx, Depends(require_role(EDIT_APPS, via="session"))]
 Managers = Annotated[Ctx, Depends(require_role(MANAGE_MEMBERS))]
@@ -57,7 +60,7 @@ def list_messages(session_id: str, ctx: SessionBuilders) -> list[dict[str, Any]]
     rows = ctx.db.scalars(
         select(BuilderMessage)
         .where(BuilderMessage.session_id == session_id)
-        .order_by(BuilderMessage.created_at)
+        .order_by(BuilderMessage.created_at, _ROLE_RANK)
     )
     return [message_dict(m) for m in rows]
 
@@ -81,7 +84,7 @@ def post_message(session_id: str, body: MessageIn, ctx: SessionBuilders) -> Stre
     last = ctx.db.scalar(
         select(BuilderMessage)
         .where(BuilderMessage.session_id == session_id)
-        .order_by(BuilderMessage.created_at.desc())
+        .order_by(BuilderMessage.created_at.desc(), _ROLE_RANK.desc())
         .limit(1)
     )
     if last is not None and last.role == "user":
