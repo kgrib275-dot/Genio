@@ -968,6 +968,7 @@ def put_builder_rules(ws: str, body: BuilderRulesIn, ctx: Managers) -> dict[str,
 class SecurityPatch(BaseModel):
     require_admin_2fa: bool | None = None
     support_access: Literal["off", "read", "edit"] | None = None
+    external_catalog: bool | None = None
 
 
 def _security_view(db: Any, ws: str) -> dict[str, Any]:
@@ -986,6 +987,9 @@ def _security_view(db: Any, ws: str) -> dict[str, Any]:
         "require_admin_2fa": on,
         "without_2fa": [n for n, t in rows if not t],
         "support_access": support_level(db, ws),
+        "external_catalog": bool(
+            ((w.settings if w else None) or {}).get("security", {}).get("external_catalog")
+        ),
     }
 
 
