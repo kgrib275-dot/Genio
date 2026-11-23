@@ -38,9 +38,10 @@
 - **외부 서비스 찾기**([ADR 0020](docs/decisions/0020-외부-카탈로그-조회와-설치.md)): 연결 정보 화면에서 공식 MCP 목록을 실시간 검색해 바로 연결하고, n8n 공개 무료 템플릿을 검색해 초안 앱으로 가져온다(시작·웹 요청·응답만 옮기고 나머지는 꺼 둔 자리 표시 + 필요한 연결 보고서). 회사가 '안전·규칙 > 외부 서비스 찾기'를 켜야 쓸 수 있고(기본 꺼짐), 검색·설치는 활동 기록에 남는다. 서비스 관리자는 왼쪽 워크스페이스 선택에서도 다른 회사를 골라 지원 접속할 수 있다.
 - **임베딩 없이 문서 챗봇**([ADR 0021](docs/decisions/0021-임베딩-없이-문서-검색.md)): OpenAI 같은 임베딩 키가 없어도(예: Anthropic만) 문서를 올리면 단어 검색 전용으로 저장되고 검색은 자동 전환된다. 실제 Anthropic 키로 빌더 생성·문서 질의·승인 흐름·공유 링크 배포를 끝까지 확인했다(Slack·메일·구글시트 연동과 브라우저 화면 점검은 아직 못 함).
 - **운영 신뢰성·보안 마무리(2026-11-23)**: 서비스 이상 알림(5분마다 점검해 오류·백업 문제를 서비스 관리자 메일·웹훅으로 알림, `GENIO_ALERT_WEBHOOK_URL`), 복구에 꼭 필요한 것 3가지 안내([runbook](docs/runbook.md)), AI 연결 주소를 호출 직전에도 내부 IP 검사(DNS 리바인딩 방어), 공개 기본 비밀번호(`genio1234!`) 데모 계정을 시스템 상태에서 '오류'로 알림(**인터넷에 공개하기 전에 데모 계정 비밀번호를 꼭 바꾸거나 지울 것**), 약관·개인정보 초안에 지원 접속 안내(법률 검토 필요). 화면 점검으로 빌더가 단계를 끼워 넣을 때 겹치던 문제와 복잡하던 연결 정보 화면(탭 카드)을 정리했고, 가끔 실패하던 빌더 테스트(같은 시각 메시지 순서)를 고쳤다. `sections.tsx`를 구간별 파일로 나누고 react-router 7로 올렸다.
+- **이번 주 새로 나온 것(트렌드)**([ADR 0020](docs/decisions/0020-외부-카탈로그-조회와-설치.md) 3단계): 연결 정보 > '새 서비스 찾기'의 첫 탭. scheduler가 하루 한 번 새 MCP 서비스(바로 연결 가능한 것)와 n8n 최신·인기 템플릿을 모아 저장하고, 화면에서 바로 연결·가져오기를 한다. 회사가 '외부 서비스 찾기'를 켜야 보이며(기본 꺼짐), 인기·최신은 품질 보증이 아니다. 한국어 요약·주간 알림은 후속.
 - **점검 반영(2026-11-23)**: Redis 비밀번호 필수, 운영에서 localhost CORS 차단, CI 액션 SHA 고정. 외부 점검 기준 문서: 기본 등급 A~G 정적 점검에서 치명·높음 없음.
 - **공유 링크 미리보기 수정**: 카카오톡 안에서 링크를 열면 미리보기 페이지만 보이던 문제를 고쳤다(로봇만 `kakaotalk-scrap`으로 구분, `?open=1` 우회). **웹 이미지(nginx)를 다시 빌드해야 반영된다**: `docker compose up -d --build web`.
-- 자동 검사(GitHub Actions `ci.yml`): ruff·mypy·pytest 1,231개·eslint·tsc·vitest 284개·빌드·`pip-audit`·`npm audit`, PostgreSQL 동시 호출 시험.
+- 자동 검사(GitHub Actions `ci.yml`): ruff·mypy·pytest 1,235개·eslint·tsc·vitest 286개·빌드·`pip-audit`·`npm audit`, PostgreSQL 동시 호출 시험.
 - **반영 방법**: `docker compose up -d --build`(마이그레이션 0019~0021 자동 적용, 새 `scheduler`; 이번 보강은 마이그레이션이 늘지 않았다). **`.env`에 `POSTGRES_PASSWORD`와 `REDIS_PASSWORD`가 꼭 있어야 한다**(`openssl rand -hex 24`로 만든 영문·숫자 값; 기본값은 쓰지 않는다. Redis를 처음 켤 때는 api·worker·scheduler가 같이 다시 시작된다). 공개 주소를 쓰면 `GENIO_FERNET_KEY`도 필수다. `GENIO_STORAGE=disk`면 이미지를 다시 빌드한 뒤 [runbook](docs/runbook.md)의 '비루트 실행' 명령을 한 번 실행한다.
 - 결과 요약과 위치: [docs/feature-coverage.md](docs/feature-coverage.md) 맨 아래 표들, 남은 후보: [docs/field-needs-2026-11-19.html](docs/field-needs-2026-11-19.html).
 
