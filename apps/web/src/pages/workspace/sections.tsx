@@ -18,7 +18,9 @@ import {
   X,
   XCircle,
 } from "lucide-react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState, type FormEvent } from "react";
+import { api } from "@/lib/api/client";
 import { Link } from "react-router-dom";
 import { Avatar } from "@/components/AppIcon";
 import { ActivationFunnel } from "@/components/onboarding/ActivationFunnel";
@@ -296,7 +298,42 @@ export function MembersSection({ ws, manage }: { ws: string; manage: boolean }) 
   const members = useMembers(ws);
   const update = useUpdateMemberRole(ws);
   const remove = useRemoveMember(ws);
+  const qc = useQueryClient();
   const transfer = useTransferOwnership(ws);
+  /** 내보내기 전에: 이 사람이 만든 앱·키·예약이 있으면 먼저 넘기자고 안내한다 */
+  const askRemove = async (m: Member) => {
+    let owned = 0;
+    try {
+      const a = await qc.fetchQuery({
+        queryKey: ["member-assets", ws, m.user_id],
+        queryFn: () =>
+          api.get<{
+            apps: unknown[];
+            api_keys: number;
+            triggers: number;
+            data_tables: number;
+            credentials: number;
+          }>(`/workspaces/${ws}/members/${m.user_id}/assets`),
+        staleTime: 0,
+      });
+      owned = a.apps.length + a.api_keys + a.triggers + a.data_tables + a.credentials;
+    } catch {
+      owned = 0; // 확인하지 못해도 내보내기 자체는 막지 않는다
+    }
+    if (
+      owned > 0 &&
+      window.confirm(
+        `${m.name}님이 만든 앱·표·키·예약이 ${owned}개 있어요. 내보내면 이어서 관리할 사람이 없어요.
+
+먼저 다른 사람에게 넘길까요? (확인을 누르면 넘기기 창이 열려요)`,
+      )
+    ) {
+      setHandover(m);
+      return;
+    }
+    if (window.confirm(`${m.name}님을 워크스페이스에서 내보낼까요?`))
+      remove.mutate(m.id, { onSuccess: () => toast.success("내보냈어요.") });
+  };
   const invitations = useInvitations(ws, manage);
   const revoke = useRevokeInvitation(ws);
   const invite = useInvite(ws);
@@ -512,10 +549,7 @@ export function MembersSection({ ws, manage }: { ws: string; manage: boolean }) 
                         aria-label={`${m.name} 내보내기`}
                         title="내보내기"
                         disabled={remove.isPending}
-                        onClick={() => {
-                          if (window.confirm(`${m.name}님을 워크스페이스에서 내보낼까요?`))
-                            remove.mutate(m.id, { onSuccess: () => toast.success("내보냈어요.") });
-                        }}
+                        onClick={() => void askRemove(m)}
                       >
                         <UserMinus className="h-3.5 w-3.5" />
                       </Button>
