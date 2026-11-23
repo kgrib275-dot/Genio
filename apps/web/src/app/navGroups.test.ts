@@ -34,3 +34,12 @@ test("관리자·소유자는 관리까지 본다", () => {
 test("역할을 모르면(로딩 중) 쓰는 메뉴만 보인다", () => {
   expect(names(null)).toEqual(["대시보드", "챗봇 모음", "작업함", "워크스페이스"]);
 });
+
+test("배우기(앱 만드는 강좌)는 제작자 이상에게만 보인다", async () => {
+  const { BOTTOM_NAV } = await import("./nav");
+  const seen = (role: Parameters<typeof navGroups>[0]) =>
+    BOTTOM_NAV.filter((n) => !n.show || n.show(role)).map((n) => n.label);
+  expect(seen("member")).toEqual(["사용설명서"]);
+  expect(seen("operator")).toEqual(["사용설명서"]);
+  expect(seen("builder")).toEqual(["배우기", "사용설명서"]);
+});

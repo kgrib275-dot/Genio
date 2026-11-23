@@ -23,7 +23,9 @@ test("화면 투어 단계는 역할에 맞게 고른다", () => {
   expect(builder).not.toContain("admin-ai");
   expect(builder).toContain("composer");
   const member = stepsFor("member").map((s) => s.id);
-  expect(member).toEqual(["apps", "nav", "learn", "help"]);
+  // 배우기는 앱을 만드는 사람용이라 사용자에게는 메뉴도 투어 단계도 없다
+  expect(member).toEqual(["apps", "nav", "help"]);
+  expect(builder).toContain("learn");
   expect(stepsFor(null).every((s) => !s.roles)).toBe(true);
 });
 

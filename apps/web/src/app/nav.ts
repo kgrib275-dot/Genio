@@ -61,6 +61,6 @@ export function navGroups(
   return out;
 }
 export const BOTTOM_NAV: NavItem[] = [
-  { to: "/learn", label: "배우기", icon: GraduationCap, tour: "nav-learn" },
+  { to: "/learn", label: "배우기", icon: GraduationCap, tour: "nav-learn", show: canEdit },
   { to: "/help", label: "사용설명서", icon: BookMarked, tour: "nav-help" },
 ];

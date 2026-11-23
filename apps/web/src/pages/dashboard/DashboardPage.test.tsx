@@ -104,6 +104,19 @@ describe("대시보드 프로젝트", () => {
     expect(screen.getByTestId("loc")).toHaveTextContent("");
   });
 
+  it("단계 안내가 보낸 ?guide=prompt 주소는 입력칸을 채우고 주소에서 지운다", async () => {
+    renderAt("/?guide=prompt&example=휴가 신청을 받아 줘");
+    const box = (await screen.findByLabelText("만들고 싶은 앱 설명")) as HTMLTextAreaElement;
+    await waitFor(() => expect(box.value).toBe("휴가 신청을 받아 줘"));
+    expect(screen.getByTestId("loc")).toHaveTextContent("");
+  });
+
+  it("?guide=docbot 주소는 '내 문서로 챗봇 만들기' 창을 연다", async () => {
+    renderAt("/?guide=docbot");
+    expect(await screen.findByRole("dialog")).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByTestId("loc")).toHaveTextContent(""));
+  });
+
   it("프로젝트를 보고 있을 때 만든 앱은 그 프로젝트에 들어간다", async () => {
     renderAt("/?project=p1");
     await screen.findByText("문의 분류기");

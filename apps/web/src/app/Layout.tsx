@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { AnnouncementBanner } from "@/components/announcement/AnnouncementBanner";
+import { GuideDock } from "@/components/guide/GuideDock";
 import { SupportBanner } from "@/components/support/SupportBanner";
 import { useEnterSupport } from "@/components/support/useEnterSupport";
 import { useCompanies } from "@/lib/api/ops";
@@ -669,6 +670,7 @@ export function Layout() {
         )}
       </main>
       <HelpWidget hideButton={inApp} />
+      <GuideDock />
       <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
       <ShortcutsDialog open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
       {touring && (

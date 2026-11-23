@@ -20,6 +20,7 @@ import {
   Wand2,
 } from "lucide-react";
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
+import { GuidedStart } from "@/components/guide/GuidedStart";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { PageContainer } from "@/app/Layout";
 import { AppIcon, Avatar } from "@/components/AppIcon";
@@ -74,6 +75,23 @@ function PromptHero({
   const navigate = useNavigate();
   const [text, setText] = useState("");
   const [docBot, setDocBot] = useState(false);
+  const areaRef = useRef<HTMLTextAreaElement>(null);
+  const [guideParams, setGuideParams] = useSearchParams();
+
+  // 단계 안내가 보내 준 주소(?guide=docbot · ?guide=prompt&example=…)를 처리한다
+  useEffect(() => {
+    const g = guideParams.get("guide");
+    if (!g) return;
+    if (g === "docbot") setDocBot(true);
+    if (g === "prompt") {
+      setText(guideParams.get("example") ?? "");
+      areaRef.current?.focus();
+    }
+    const next = new URLSearchParams(guideParams);
+    next.delete("guide");
+    next.delete("example");
+    setGuideParams(next, { replace: true });
+  }, [guideParams, setGuideParams]);
 
   const start = (prompt: string) => {
     const p = prompt.trim();
@@ -117,6 +135,7 @@ function PromptHero({
       <form onSubmit={submit} className="mt-5">
         <div className="flex items-end gap-2 rounded-xl border border-slate-200 bg-white p-2 shadow-lift focus-within:border-indigo-400 focus-within:ring-4 focus-within:ring-indigo-500/10">
           <textarea
+            ref={areaRef}
             aria-label="만들고 싶은 앱 설명"
             rows={2}
             className="min-h-[52px] flex-1 resize-none border-0 bg-transparent px-2 py-1.5 text-[15px] placeholder:text-slate-400 focus:outline-none"
@@ -754,10 +773,11 @@ export default function DashboardPage() {
       {editable && <AttentionCard />}
       {/* 처음엔 '무엇을 만들까요' 입력칸이 맨 위, 안내(체크리스트·배우기)는 그 아래에 접어 둔다 */}
       {editable && <PromptHero projectId={projectId} dept={dept} onDept={chooseDept} />}
+      <GuidedStart />
       {editable && <TemplateRow projectId={projectId} dept={dept} />}
       <div className="mt-6">
         <StartChecklist firstAppId={appList[0]?.id} />
-        <LearnBanner />
+        {editable && <LearnBanner />}
       </div>
 
       <section className="mt-10" data-tour="apps">

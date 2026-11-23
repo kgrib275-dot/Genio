@@ -45,6 +45,8 @@ export const TOUR_STEPS: TourStep[] = [
     target: "nav-learn",
     title: "배우기",
     body: "샘플 11가지와 따라 하기 강좌가 있어요. 처음이라면 여기서 30분만 따라 해 보세요.",
+    // 앱을 만드는 사람용 강좌라서 사용자·운영자에게는 메뉴도 안내도 없다
+    roles: EDITORS,
   },
   {
     id: "help",
