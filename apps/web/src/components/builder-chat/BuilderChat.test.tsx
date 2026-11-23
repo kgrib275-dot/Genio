@@ -201,4 +201,37 @@ describe("BuilderChatView", () => {
     await waitFor(() => expect(sent.map((x) => x.content)).toEqual(["규정 챗봇 만들어 줘"]));
     expect(demoCalls).toEqual(["demo"]);
   });
+
+  it("검증이 통과하면 다음 할 일 버튼(시험·공유·고치기)을 보여 준다", async () => {
+    const opened: string[] = [];
+    const history = [
+      {
+        id: "a1",
+        role: "assistant",
+        content: "다 만들었어요.",
+        graph_patch: {
+          tool_calls: [{ id: "t", name: "validate", input: {}, ok: true, summary: "ok" }],
+        },
+        created_at: new Date().toISOString(),
+      },
+    ] as unknown as BuilderMessage[];
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <MemoryRouter>
+          <BuilderChatView
+            sessionId="s1"
+            appId="app1"
+            history={history}
+            wsId="ws1"
+            onOpenTest={() => opened.push("test")}
+          />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "지금 시험해 보기" }));
+    expect(opened).toEqual(["test"]);
+    expect(screen.getByRole("link", { name: "공유 링크 만들기" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "답을 더 짧게 해 줘" }));
+    await waitFor(() => expect(sent.map((x) => x.content)).toEqual(["답을 더 짧게 해 줘"]));
+  });
 });

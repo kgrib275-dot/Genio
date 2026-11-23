@@ -84,6 +84,7 @@ function TurnBody({
   onNoAiRetry,
   wsId,
   appId,
+  onOpenTest,
 }: {
   content: string;
   record: TurnRecord | DraftTurn | null;
@@ -96,6 +97,7 @@ function TurnBody({
   onNoAiRetry?: () => void;
   wsId?: string;
   appId?: string;
+  onOpenTest?: () => void;
 }) {
   const role = useSession((s) => s.role);
   const patch = record as TurnRecord | null;
@@ -119,21 +121,41 @@ function TurnBody({
             className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2.5 text-[13px] text-emerald-900"
             data-testid="next-steps"
           >
-            <p className="font-semibold">흐름이 다 만들어졌어요. 이렇게 써 보세요</p>
-            <ol className="mt-1 list-decimal space-y-0.5 pl-5">
-              <li>
-                위쪽 <b>대화로 시험</b>을 눌러 질문을 한두 개 해 보세요.
-              </li>
-              <li>
-                마음에 들면{" "}
-                <Link to={`/apps/${appId}/settings`} className="font-medium underline">
-                  공유·설정
-                </Link>
-                에서
-                <b> 배포하기</b>를 눌러 링크를 만드세요.
-              </li>
-              <li>고치고 싶으면 아래 입력칸에 &quot;답을 더 짧게&quot;처럼 말해 주세요.</li>
-            </ol>
+            <p className="font-semibold">흐름이 다 만들어졌어요. 다음엔 이렇게 해 보세요</p>
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {onOpenTest && (
+                <button
+                  type="button"
+                  onClick={onOpenTest}
+                  className="rounded-lg bg-emerald-600 px-3 py-1.5 text-[13px] font-medium text-white hover:bg-emerald-700"
+                >
+                  지금 시험해 보기
+                </button>
+              )}
+              <Link
+                to={`/apps/${appId}/settings`}
+                className="rounded-lg border border-emerald-300 bg-white px-3 py-1.5 text-[13px] font-medium text-emerald-800 hover:bg-emerald-100"
+              >
+                공유 링크 만들기
+              </Link>
+            </div>
+            <p className="mt-2 text-[12px] text-emerald-800">고치고 싶다면 눌러 보세요</p>
+            <div className="mt-1 flex flex-wrap gap-1.5">
+              {[
+                "답을 더 짧게 해 줘",
+                "말투를 더 친절하게 바꿔 줘",
+                "모르는 건 모른다고 말하게 해 줘",
+              ].map((t) => (
+                <button
+                  key={t}
+                  type="button"
+                  onClick={() => onPick(t)}
+                  className="rounded-full border border-emerald-300 bg-white px-2.5 py-1 text-[12px] text-emerald-900 hover:bg-emerald-100"
+                >
+                  {t}
+                </button>
+              ))}
+            </div>
           </div>
         )}
       {record?.market_suggestion && (
@@ -169,6 +191,7 @@ export interface BuilderChatViewProps {
   history: BuilderMessage[];
   wsId: string;
   onNewSession?: () => void;
+  onOpenTest?: () => void;
 }
 
 /** 빌더 챗 본체. 세션과 이전 메시지를 받아서 대화를 이어 간다. */
@@ -178,6 +201,7 @@ export function BuilderChatView({
   history,
   wsId,
   onNewSession,
+  onOpenTest,
 }: BuilderChatViewProps) {
   const [messages, setMessages] = useState<BuilderMessage[]>(history);
   const [draft, setDraft] = useState<DraftTurn | null>(null);
@@ -387,6 +411,7 @@ ${err.hint}`)
                   onNoAiRetry={i === lastAssistantIdx ? retryLast : undefined}
                   wsId={wsId}
                   appId={appId}
+                  onOpenTest={onOpenTest}
                 />
               </div>
             </div>
@@ -404,6 +429,8 @@ ${err.hint}`)
                 onPick={(o) => void send({ content: o })}
                 onInstall={onInstall}
                 installing={install.isPending}
+                appId={appId}
+                onOpenTest={onOpenTest}
               />
               {draft.error && (
                 <div
@@ -472,7 +499,15 @@ ${err.hint}`)
 }
 
 /** promptNonce가 바뀌면 대화를 다시 그려, 맡겨 둔 첫 메시지(예: 고쳐 달라는 요청)를 보낸다 */
-export function BuilderChat({ appId, promptNonce = 0 }: { appId: string; promptNonce?: number }) {
+export function BuilderChat({
+  appId,
+  promptNonce = 0,
+  onOpenTest,
+}: {
+  appId: string;
+  promptNonce?: number;
+  onOpenTest?: () => void;
+}) {
   const wsId = useSession((s) => s.workspaceId);
   const qc = useQueryClient();
   const session = useBuilderSession(appId);
@@ -505,6 +540,7 @@ export function BuilderChat({ appId, promptNonce = 0 }: { appId: string; promptN
       history={messages.data ?? []}
       wsId={wsId}
       onNewSession={() => void newSession()}
+      onOpenTest={onOpenTest}
     />
   );
 }

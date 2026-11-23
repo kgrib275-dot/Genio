@@ -342,7 +342,11 @@ export default function BuilderPage() {
           <section
             className={`w-full shrink-0 border-r border-slate-200 lg:block lg:w-[380px] ${mobileTab === "chat" ? "block" : "hidden"}`}
           >
-            <BuilderChat appId={appId} promptNonce={promptNonce} />
+            <BuilderChat
+              appId={appId}
+              promptNonce={promptNonce}
+              onOpenTest={() => setTestOpen(true)}
+            />
           </section>
         )}
         <section
