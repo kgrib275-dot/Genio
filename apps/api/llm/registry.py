@@ -65,6 +65,31 @@ def _no_provider() -> LlmError:
     )
 
 
+def guard_endpoint(db: Session, workspace_id: str, base_url: str | None) -> None:
+    """호출 직전에 AI 연결 주소가 사내망·내부 IP인지 다시 본다(DNS 리바인딩 방어).
+
+    연결을 만들 때 한 번 검사하지만, 그 뒤 주소가 내부 IP를 가리키도록 바뀔 수 있다.
+    관리자가 '허용할 내부 주소'에 등록한 사내 AI 서버만 통과한다."""
+    if not base_url:
+        return
+    from urllib.parse import urlparse
+
+    from api.connectors.runtime import allowed_private_hosts
+    from api.engine import safe_http
+    from nodes import NodeError
+
+    host = (urlparse(base_url.strip()).hostname or "").lower()
+    if host and host in {h.strip().lower() for h in allowed_private_hosts(db, workspace_id)}:
+        return
+    try:
+        safe_http.check_url(base_url.strip())
+    except NodeError as exc:
+        raise LlmError(
+            exc.message,
+            "사내 AI 서버라면 관리자에게 연결 정보 > '허용할 내부 주소'에 등록해 달라고 하세요.",
+        ) from None
+
+
 def _no_embedding() -> NoEmbeddingError:
     return NoEmbeddingError(
         "문서를 검색용으로 바꿀 AI 연결(임베딩)이 없어요.",
@@ -176,6 +201,7 @@ def resolve_llm(
                 f"'{ref}' AI 연결을 찾지 못했어요.",
                 "단계 설정에서 AI 연결을 '기본'으로 바꾸거나 다시 고르세요.",
             )
+    guard_endpoint(db, workspace_id, chosen.base_url)
     secret = decrypt_str(chosen.api_key_encrypted)
     use_model = model or chosen.default_model
     hops = [hop_for(chosen, use_model)]
@@ -190,6 +216,7 @@ def resolve_llm(
                 row = by_id.get(str(link.get("provider_id")))
                 if row is None or any(h.conn_id == row.id for h in hops):
                     continue
+                guard_endpoint(db, workspace_id, row.base_url)
                 hops.append(hop_for(row, str(link.get("model") or row.default_model)))
     if len(hops) == 1 and len(hops[0].keys) <= 1 and not simulate_first_failure:
         # 키 하나·대체 연결 없음: 예전과 똑같이 어댑터를 바로 쓴다

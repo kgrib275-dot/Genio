@@ -99,10 +99,49 @@ def _secret_key() -> dict[str, Any]:
     return _item("ok", "비밀 키", "직접 정한 값을 쓰고 있어요.")
 
 
+_DEFAULT_PW_CACHE: dict[str, Any] = {"at": 0.0, "names": []}
+
+
+def default_password_accounts(db: Session, *, now: float | None = None) -> list[str]:
+    """공개된 데모 비밀번호(README에 적힌 값)로 지금 로그인되는 데모 계정 이메일. 10분 동안 결과를 재사용한다."""
+    from api.core.security import verify_password
+    from api.models import User
+    from api.services.seed import DEMO_PASSWORD, DEMO_USERS
+
+    t = time.time() if now is None else now
+    if t - float(_DEFAULT_PW_CACHE["at"]) < 600:
+        return list(_DEFAULT_PW_CACHE["names"])
+    emails = [e for e, _n, _r in DEMO_USERS]
+    rows = db.execute(select(User.email, User.password_hash).where(User.email.in_(emails))).all()
+    names = [e for e, h in rows if h and verify_password(DEMO_PASSWORD, h)]
+    _DEFAULT_PW_CACHE.update({"at": t, "names": names})
+    return names
+
+
+def _default_passwords(db: Session) -> dict[str, Any]:
+    """README에 적힌 공개 비밀번호가 그대로인 데모 계정. 인터넷에 열려 있으면 누구나 로그인할 수 있다."""
+    from api.config import is_production
+
+    names = default_password_accounts(db)
+    if not names:
+        return _item("ok", "기본 비밀번호 계정", "공개 비밀번호를 쓰는 계정이 없어요.")
+    detail = f"{len(names)}개 계정({', '.join(names[:3])}{' 등' if len(names) > 3 else ''})이 공개된 기본 비밀번호 그대로예요."
+    if is_production(get_settings()):
+        return _item(
+            "error",
+            "기본 비밀번호 계정",
+            detail
+            + " 인터넷에서 누구나 로그인할 수 있어요. 비밀번호를 바꾸거나 계정을 지워 주세요.",
+            accounts=len(names),
+        )
+    return _item(
+        "warn", "기본 비밀번호 계정", detail + " 내 컴퓨터 밖에 공개하기 전에 바꿔 주세요."
+    )
+
+
 def _public_exposure(db: Session) -> dict[str, Any]:
     """공개 주소로 열려 있는 서버의 가입·계정 보안 설정 점검(바꾸지는 않고 알려만 준다)."""
     from api.config import is_production
-    from api.models import User
     from api.services import mailer, system
 
     st = get_settings()
@@ -117,13 +156,6 @@ def _public_exposure(db: Session) -> dict[str, Any]:
             else "먼저 시스템 메일을 설정하세요."
         )
         problems.append(f"누구나 가입할 수 있는데 이메일 인증이 꺼져 있어요({hint})")
-    demo = db.scalar(
-        select(func.count()).select_from(User).where(User.email == "owner@example.com")
-    )
-    if demo:
-        problems.append(
-            "공개 비밀번호를 쓰는 데모 계정(owner@example.com)이 남아 있어요. 지우거나 비밀번호를 바꾸세요"
-        )
     if problems:
         return _item("warn", "공개 서버 보안", " · ".join(problems))
     return _item("ok", "공개 서버 보안", "가입·계정 설정이 안전해요.")
@@ -363,6 +395,7 @@ def system_status(db: Session) -> dict[str, Any]:
         _disk(),
         _secret_key(),
         _public_exposure(db),
+        _default_passwords(db),
     ]
     runs_24h = db.scalar(select(func.count()).select_from(Run).where(Run.created_at >= since)) or 0
     failed_24h = (

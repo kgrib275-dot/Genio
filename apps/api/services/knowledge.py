@@ -502,6 +502,9 @@ def _dedicated_rerank(
     if row is None or row.workspace_id != workspace_id:
         return None
     try:
+        from api.llm.registry import guard_endpoint
+
+        guard_endpoint(db, workspace_id, row.base_url)  # 호출 직전에도 내부 주소를 막는다
         ranked_idx = rerank_documents(row, model, query, [c.content for c, _ in items])
     except LlmError as exc:
         log.warning("재정렬 전용 모델 호출 실패(kb 검색, %s)", exc.message)

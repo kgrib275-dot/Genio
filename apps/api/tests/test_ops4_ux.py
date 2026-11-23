@@ -1117,9 +1117,10 @@ def test_status_warns_about_public_exposure(
         monkeypatch.setattr(get_settings(), "genio_public_web_url", "https://genio.example.com")
         item = status._public_exposure(db)
         assert item["status"] == "warn" and "이메일 인증" in item["detail"]
+        # 데모 계정의 공개 비밀번호 점검은 '기본 비밀번호 계정' 항목이 맡는다(test_health_alert)
         db.add(User(email="owner@example.com", name="데모", password_hash="x"))  # noqa: S106
         db.commit()
-        assert "데모 계정" in status._public_exposure(db)["detail"]
+        assert "데모 계정" not in status._public_exposure(db)["detail"]
 
 
 def test_service_run_idempotency_key_returns_same_run(client: TestClient, team: Team) -> None:

@@ -109,3 +109,36 @@ def test_no_mail_settings_does_not_break_the_check(
     monkeypatch.setattr(status, "system_status", lambda db: report(("error", "DB", "x")))
     out = run({}, 1.0)  # 메일 설정이 없어도 예외 없이 끝난다
     assert out["alerted"] == ["DB"]
+
+
+def test_default_password_accounts_are_flagged(
+    monkeypatch: pytest.MonkeyPatch, client: TestClient, team: Team
+) -> None:
+    """README에 적힌 공개 비밀번호가 그대로인 데모 계정은 운영 환경에서 '오류'로 알린다."""
+    from api.core.security import hash_password
+    from api.models import User
+    from api.services.seed import DEMO_PASSWORD
+
+    status._DEFAULT_PW_CACHE["at"] = 0.0
+    with SessionLocal() as db:
+        db.add(
+            User(email="owner@example.com", name="데모", password_hash=hash_password(DEMO_PASSWORD))
+        )
+        db.add(
+            User(
+                email="admin@example.com",
+                name="바꿈",
+                password_hash=hash_password("Other-pw-1234!"),
+            )
+        )
+        db.commit()
+        assert status.default_password_accounts(db) == [
+            "owner@example.com"
+        ]  # 바꾼 계정은 안 걸린다
+        monkeypatch.setattr("api.config.is_production", lambda st: False)
+        assert status._default_passwords(db)["status"] == "warn"  # 내 컴퓨터 설정이면 주의
+        monkeypatch.setattr("api.config.is_production", lambda st: True)
+        item = status._default_passwords(db)
+        assert item["status"] == "error" and "owner@example.com" in item["detail"]
+        assert health_alert.problems({"items": [item]}) == {"기본 비밀번호 계정": item["detail"]}
+    status._DEFAULT_PW_CACHE["at"] = 0.0
