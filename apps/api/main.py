@@ -70,6 +70,7 @@ from api.routers import (
     tracing,
     triggers,
     versions_v06,
+    workspace_export,
     workspaces,
 )
 from api.services.seed import seed_demo, seed_demo_samples
@@ -263,6 +264,7 @@ for r in (
     skills,
     dependencies,
     digest,
+    workspace_export,
     doc_bot,
     apidocs,
     mcp,

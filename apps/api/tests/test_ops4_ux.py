@@ -1344,3 +1344,18 @@ def test_admin_2fa_required_blocks_only_secret_changes(client: TestClient, team:
         ).status_code
         == 403
     )
+
+
+def test_workspace_export_zip(client: TestClient, team: Team) -> None:
+    import io
+    import zipfile
+
+    from api.tests.test_v02_features import faq_app
+
+    faq_app(client, team)
+    url = f"/api/v1/workspaces/{team.ws}/export"
+    res = client.get(url, headers=team.h("admin"))
+    assert res.status_code == 200 and res.headers["content-type"] == "application/zip"
+    names = zipfile.ZipFile(io.BytesIO(res.content)).namelist()
+    assert "README.txt" in names and any(n.startswith("apps/") for n in names)
+    assert client.get(url, headers=team.h("builder")).status_code == 403
