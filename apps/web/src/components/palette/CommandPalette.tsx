@@ -32,6 +32,8 @@ const KIND_ICON: Record<string, LucideIcon> = {
   apps: Bot,
   projects: FolderKanban,
   knowledge: BookOpen,
+  documents: BookOpen,
+  conversations: History,
   tables: Table2,
   connections: Plug,
   market: Store,

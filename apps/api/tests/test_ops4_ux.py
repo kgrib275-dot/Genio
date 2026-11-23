@@ -1418,3 +1418,18 @@ def test_restore_keeps_backup_of_current_draft(client: TestClient, team: Team) -
     again = client.post(f"/api/v1/apps/{app_id}/versions/{first}/restore", headers=h)
     assert again.status_code == 200
     assert len(client.get(f"/api/v1/apps/{app_id}/versions", headers=h).json()) == len(after)
+
+
+def test_search_finds_conversation_and_respects_roles(client: TestClient, team: Team) -> None:
+    from api.tests.test_v02_features import chat, deploy, faq_app
+
+    app_id = faq_app(client, team)
+    token = deploy(client, team, app_id)
+    chat(client, token, "환불 규정이 궁금해요")
+    base = f"/api/v1/workspaces/{team.ws}/search"
+    got = client.get(base, params={"q": "환불"}, headers=team.h("admin")).json()["groups"]
+    conv = next((g for g in got if g["kind"] == "conversations"), None)
+    assert conv and "환불" in conv["items"][0]["title"]
+    # 사용자(member) 역할에는 대화 내용을 보여 주지 않는다
+    mine = client.get(base, params={"q": "환불"}, headers=team.h("member")).json()["groups"]
+    assert all(g["kind"] != "conversations" for g in mine)

@@ -8,16 +8,19 @@
 from dataclasses import dataclass
 from typing import Any
 
-from sqlalchemy import Select, or_, select
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from api.models import (
     App,
     ConnectorCredential,
+    Conversation,
     DataTable,
     Deployment,
+    Document,
     KnowledgeBase,
     MarketItem,
+    Message,
     Project,
 )
 from api.services.projects import hidden_project_ids
@@ -114,7 +117,7 @@ def _rank(title: str, q: str) -> tuple[int, int, str]:
     return (0 if t.startswith(ql) else 1, t.find(ql) if ql in t else 999, t)
 
 
-def _limit(stmt: Select[Any], n: int) -> Select[Any]:
+def _limit(stmt: Any, n: int) -> Any:
     return stmt.limit(n * 3)  # 순위를 매긴 뒤 n개만 쓴다
 
 
@@ -228,6 +231,52 @@ def search_workspace(
             if k.project_id not in hidden
         ]
         add("knowledge", "지식베이스", _pick(kbs, q, limit))
+
+        docs = [
+            {"id": d.id, "title": d.filename, "subtitle": f"문서 · {kb.name}", "to": "/knowledge"}
+            for d, kb in db.execute(
+                _limit(
+                    select(Document, KnowledgeBase)
+                    .join(KnowledgeBase, Document.kb_id == KnowledgeBase.id)
+                    .where(
+                        KnowledgeBase.workspace_id == ws, Document.filename.ilike(pat, escape="\\")
+                    ),
+                    limit,
+                )
+            ).all()
+            if kb.project_id not in hidden
+        ]
+        add("documents", "지식 문서", _pick(docs, q, limit))
+
+        # 대화 내용(개인정보 가리기를 켰으면 보이는 글도 가린다)
+        from api.services import pii
+
+        masked = pii.logs_masked(db, ws)
+        convs: list[dict[str, Any]] = []
+        seen: set[str] = set()
+        for m, c, a in db.execute(
+            select(Message, Conversation, App)
+            .join(Conversation, Message.conversation_id == Conversation.id)
+            .join(App, Conversation.app_id == App.id)
+            .where(App.workspace_id == ws, Message.content.ilike(pat, escape="\\"))
+            .order_by(Message.created_at.desc())
+            .limit(limit * 6)
+        ).all():
+            if c.id in seen or (a.project_id and a.project_id in hidden):
+                continue
+            seen.add(c.id)
+            text = " ".join(m.content.split())
+            i = max(text.lower().find(q.lower()), 0)
+            snippet = text[max(0, i - 20) : i + 60]
+            convs.append(
+                {
+                    "id": c.id,
+                    "title": pii.mask(snippet) if masked else snippet,
+                    "subtitle": f"대화 · {a.name}",
+                    "to": f"/apps/{a.id}/logs",
+                }
+            )
+        add("conversations", "대화", convs[:limit])
 
     tables = [
         {
