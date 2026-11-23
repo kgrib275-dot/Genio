@@ -5,6 +5,7 @@ from typing import Any
 from fastapi import APIRouter
 from sqlalchemy import case, func, select
 
+from api.core import ratelimit
 from api.core.audit import audit
 from api.core.errors import AppError
 from api.deps import CurrentUser, DbDep, support_level
@@ -107,16 +108,17 @@ def list_workspaces(user: CurrentUser, db: DbDep) -> dict[str, Any]:
                 "support_access": support_level(db, ws.id),
             }
         )
-    audit(
-        db,
-        workspace_id=first,
-        user_id=user.id,
-        action="admin.workspaces_view",
-        target_type="system",
-        target_id=None,
-        meta={"count": len(items)},
-    )
-    db.commit()
+    if ratelimit.allow(f"companies_view:{user.id}", 1, window=600):
+        audit(
+            db,
+            workspace_id=first,
+            user_id=user.id,
+            action="admin.workspaces_view",
+            target_type="system",
+            target_id=None,
+            meta={"count": len(items)},
+        )
+        db.commit()
     return {
         "items": items,
         "totals": {

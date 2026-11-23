@@ -352,10 +352,11 @@ export function useAdminApiKeys(ws: string) {
   });
 }
 
-export function useSystemSettings() {
+export function useSystemSettings(enabled = true) {
   return useQuery({
     queryKey: ["system-settings"],
     queryFn: () => api.get<SystemSettings>("/admin/system"),
+    enabled,
   });
 }
 

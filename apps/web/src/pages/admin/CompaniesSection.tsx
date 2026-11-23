@@ -5,29 +5,14 @@ import { ListPager, ListToolbar, NoMatch } from "@/components/ListControls";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody } from "@/components/ui/card";
-import { useNavigate } from "react-router-dom";
+import { useEnterSupport } from "@/components/support/useEnterSupport";
 import { useCompanies, type CompanyRow } from "@/lib/api/ops";
-import { useSession } from "@/store/session";
-import { useSupport } from "@/store/support";
 import { formatCost, formatDate, timeAgo } from "@/lib/cn";
 import { useListControls } from "@/lib/useListControls";
 
 export function CompaniesSection() {
   const q = useCompanies();
-  const navigate = useNavigate();
-  const { workspaceId, role, setWorkspace } = useSession();
-  const enter = useSupport((s) => s.enter);
-  const help = (c: CompanyRow) => {
-    if (c.support_access === "off") return;
-    enter({
-      id: c.id,
-      name: c.name,
-      level: c.support_access === "edit" ? "edit" : "read",
-      back: { id: workspaceId, role },
-    });
-    setWorkspace(c.id, "admin");
-    navigate("/");
-  };
+  const help = useEnterSupport();
   const lc = useListControls<CompanyRow>(q.data?.items, {
     key: "companies",
     search: (c) => `${c.name} ${c.slug} ${c.owners.join(" ")}`,

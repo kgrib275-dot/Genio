@@ -27,6 +27,9 @@ import {
 import { useEffect, useState } from "react";
 import { AnnouncementBanner } from "@/components/announcement/AnnouncementBanner";
 import { SupportBanner } from "@/components/support/SupportBanner";
+import { useEnterSupport } from "@/components/support/useEnterSupport";
+import { useCompanies } from "@/lib/api/ops";
+import { useSystemSettings } from "@/lib/api/v2";
 import { useSupport } from "@/store/support";
 import { Link, NavLink, Outlet, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { Avatar } from "@/components/AppIcon";
@@ -200,6 +203,13 @@ function SidebarBody({
   const workspaces = me?.workspaces ?? [];
   const current = workspaces.find((w) => w.id === workspaceId);
   const supportTarget = useSupport((s) => s.target);
+  const enterSupport = useEnterSupport();
+  // 서비스 관리자는 다른 회사도 여기서 고른다(소유자일 때만 확인한다)
+  const sys = useSystemSettings(workspaces.some((w) => w.role === "owner"));
+  const companies = useCompanies(Boolean(sys.data?.is_instance_admin));
+  const others = (companies.data?.items ?? []).filter(
+    (c) => !workspaces.some((w) => w.id === c.id),
+  );
   return (
     <>
       {onSearch && (
@@ -236,6 +246,11 @@ function SidebarBody({
             className="w-full truncate rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-2 text-sm font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
             value={workspaceId}
             onChange={(e) => {
+              const other = others.find((c) => `support:${c.id}` === e.target.value);
+              if (other) {
+                enterSupport(other);
+                return;
+              }
               const w = workspaces.find((x) => x.id === e.target.value);
               if (w) {
                 useSupport.getState().exit(); // 다른 워크스페이스를 고르면 지원 접속은 끝난다
@@ -251,6 +266,20 @@ function SidebarBody({
                 {w.name}
               </option>
             ))}
+            {others.length > 0 && (
+              <optgroup label="다른 회사(지원 접속)">
+                {others.map((c) => (
+                  <option
+                    key={c.id}
+                    value={`support:${c.id}`}
+                    disabled={c.support_access === "off"}
+                  >
+                    {c.name}
+                    {c.support_access === "off" ? " (접속 꺼짐)" : ""}
+                  </option>
+                ))}
+              </optgroup>
+            )}
           </select>
         </div>
       )}
