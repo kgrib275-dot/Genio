@@ -141,6 +141,15 @@ function DocRow({
         <ImageReportBadge report={(d as KbDocWithImages).image_report as ImageReport} />
       )}
       {!enabled && <Badge tone="gray">검색에서 뺌</Badge>}
+      {d.keyword_only && (
+        <span
+          className="basis-full rounded-md bg-sky-50 px-2 py-1 text-xs text-sky-800"
+          role="note"
+        >
+          단어로 찾는 검색만 쓸 수 있어요. 관리 &gt; AI 모델에서 OpenAI 키를 등록한 뒤 &apos;다시
+          처리&apos;를 누르면 뜻으로 찾는 검색도 돼요.
+        </span>
+      )}
       {(d as KbDocWithImages).pii && (
         <span
           className="basis-full rounded-md bg-amber-50 px-2 py-1 text-xs text-amber-800"

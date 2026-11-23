@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session
 
 from api.config import get_settings
 from api.db import is_postgres
-from api.llm.base import LlmError
+from api.llm.base import LlmError, NoEmbeddingError
 from api.llm.registry import resolve_llm
 from api.models import Chunk, Document, KnowledgeBase
 from api.services import storage
@@ -363,7 +363,16 @@ def process_document(db: Session, document_id: str) -> None:
         found = pii_svc.count_kinds("\n".join(p.content for p in pieces))
         meta_now = {k: v for k, v in (doc.doc_metadata or {}).items() if k != "_pii"}
         doc.doc_metadata = {**meta_now, "_pii": found} if found else meta_now
-        vectors = _embed(db, kb.workspace_id, [p.content for p in pieces], kb.embedding_model)
+        keyword_only = False
+        vectors: list[list[float] | None]
+        try:
+            vectors = list(
+                _embed(db, kb.workspace_id, [p.content for p in pieces], kb.embedding_model)
+            )
+        except NoEmbeddingError:
+            # 임베딩 연결이 없으면 단어로 찾는 검색 전용으로 저장한다(나중에 키를 등록하면 다시 처리)
+            vectors = [None] * len(pieces)
+            keyword_only = True
         # 새 결과가 준비된 뒤에야 예전 조각·그림을 지운다(실패하면 예전 것이 남는다)
         old_images = kb_images.delete_document_images(db, doc)
         db.execute(delete(Chunk).where(Chunk.document_id == doc.id))
@@ -400,7 +409,7 @@ def process_document(db: Session, document_id: str) -> None:
                     metadata_=meta,
                 )
             )
-        extra: dict[str, Any] = {}
+        extra: dict[str, Any] = {"_keyword_only": True} if keyword_only else {}
         if image_ids:
             extra[kb_images.IMG_META_KEY] = image_ids
         if result.image_report:
@@ -594,11 +603,15 @@ def search(
     scores: dict[str, float] = {}
     chunk_by_id: dict[str, Chunk] = {}
     vec_scores: dict[str, float] = {}
+    qvec: list[float] | None = None
     if method in ("vector", "hybrid"):
         try:
             qvec = _embed(db, workspace_id, [query], kb.embedding_model)[0]
+        except NoEmbeddingError:
+            method = "keyword"  # 임베딩 연결이 없으면 단어로 찾는다
         except LlmError as exc:
             raise NodeError(f"{exc.message} {exc.hint}") from exc
+    if qvec is not None and method in ("vector", "hybrid"):
         if is_postgres():
             # ivfflat는 근사 검색이라 목록을 여러 개 살펴봐야 작은 지식베이스에서도 놓치지 않는다
             db.execute(text("SET LOCAL ivfflat.probes = 10"))

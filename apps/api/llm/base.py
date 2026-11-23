@@ -40,6 +40,10 @@ class LlmError(Exception):
         self.kind = kind
 
 
+class NoEmbeddingError(LlmError):
+    """문서를 검색용으로 바꿀 임베딩 연결이 없다. 키워드 검색으로 대신할 수 있다."""
+
+
 @dataclass
 class ToolCall:
     id: str

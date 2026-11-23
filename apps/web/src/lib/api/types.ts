@@ -443,6 +443,8 @@ export interface KbDocument {
   error: string | null;
   created_at: string;
   chunk_count: number;
+  /** 임베딩 연결이 없어 단어 검색 전용으로 저장된 문서 */
+  keyword_only?: boolean;
 }
 
 export interface SearchHit {

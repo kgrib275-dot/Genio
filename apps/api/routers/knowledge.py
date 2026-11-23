@@ -211,6 +211,8 @@ def _doc(d: Document, chunks: int) -> dict[str, Any]:
         "image_report": (d.doc_metadata or {}).get(kb_images.IMG_REPORT_KEY),
         # 올린 문서에서 찾은 개인정보 종류별 개수(없으면 None)
         "pii": (d.doc_metadata or {}).get("_pii") or None,
+        # 임베딩 연결이 없어 단어 검색 전용으로 저장된 문서
+        "keyword_only": bool((d.doc_metadata or {}).get("_keyword_only")),
     }
 
 

@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 from api.core.crypto import decrypt_str
 from api.llm import keypool
 from api.llm.anthropic_adapter import AnthropicAdapter
-from api.llm.base import ChatAdapter, LlmError
+from api.llm.base import ChatAdapter, LlmError, NoEmbeddingError
 from api.llm.chain import DEFAULT_TRIGGERS, ChainAdapter, Hop, effective_fallback
 from api.llm.google_adapter import GoogleAdapter
 from api.llm.openai_adapter import OpenAIAdapter
@@ -62,6 +62,13 @@ def _no_provider() -> LlmError:
     return LlmError(
         "등록된 AI 연결이 없어요.",
         "관리 > AI 모델에서 API 키를 등록하세요. 키가 아직 없으면 같은 화면의 '키 없이 데모 AI로 체험하기'로 먼저 둘러볼 수 있어요.",
+    )
+
+
+def _no_embedding() -> NoEmbeddingError:
+    return NoEmbeddingError(
+        "문서를 검색용으로 바꿀 AI 연결(임베딩)이 없어요.",
+        "관리 > AI 모델에서 OpenAI 키를 등록하면 뜻으로 찾는 검색을 쓸 수 있어요. 키가 없어도 단어로 찾는 검색은 쓸 수 있어요.",
     )
 
 
@@ -137,6 +144,8 @@ def resolve_llm(
         if not is_rerank(r.provider)
     ]
     if not rows:
+        if purpose == "embedding":
+            raise _no_embedding()
         raise _no_provider()
     chosen: LlmProvider | None = None
     ws = db.get(Workspace, workspace_id)
@@ -154,10 +163,7 @@ def resolve_llm(
         chosen = next((r for r in real if r.is_default), None) or next(iter(real), None)
         chosen = chosen or next((r for r in rows if r.provider == "demo"), None)
         if chosen is None:
-            raise LlmError(
-                "문서를 검색용으로 바꿀 AI 연결이 없어요.",
-                "관리 > AI 모델에서 OpenAI 키를 등록하세요. 키가 아직 없으면 '키 없이 데모 AI로 체험하기'로 먼저 써 볼 수 있어요.",
-            )
+            raise _no_embedding()
     elif ref in ("", "default"):
         chosen = next((r for r in rows if r.is_default), rows[0])
     else:

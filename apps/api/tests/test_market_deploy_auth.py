@@ -298,13 +298,13 @@ def test_kb_upload_search_and_failure(
         json={"name": "규정"},
         headers=team.h("builder"),
     ).json()
-    # 임베딩 연결이 없으면 실패 사유를 문서에 남긴다
+    # 임베딩 연결이 없어도 올릴 수 있다(단어 검색 전용으로 저장)
     doc = client.post(
         f"/api/v1/knowledge-bases/{kb['id']}/documents",
         files={"file": ("a.txt", "재택근무는 주 2회".encode(), "text/plain")},
         headers=team.h("builder"),
     ).json()
-    assert doc["status"] == "failed" and "AI 연결" in doc["error"]
+    assert doc["status"] == "ready" and doc["keyword_only"] is True
     add_llm(client, team, provider="openai", model="gpt-4o-mini")
     for name, body in [
         ("leave.txt", "연차는 15일이고 3년마다 늘어난다."),
@@ -477,3 +477,34 @@ def test_old_password_hash_upgraded_on_login(client: TestClient, team: Team) -> 
     with SessionLocal() as db:
         u = db.get(User, team.users["admin"])
         assert u is not None and u.password_hash.startswith(f"$2b${BCRYPT_ROUNDS}$")
+
+
+def test_kb_works_without_embedding_connection(client: TestClient, team: Team) -> None:
+    """Anthropic처럼 임베딩이 없는 키만 있어도 문서를 올리고 단어로 찾을 수 있다."""
+    add_llm(client, team, provider="anthropic", model="claude-sonnet-5-5")
+    kb = client.post(
+        f"/api/v1/workspaces/{team.ws}/knowledge-bases",
+        json={"name": "규정"},
+        headers=team.h("builder"),
+    ).json()
+    doc = client.post(
+        f"/api/v1/knowledge-bases/{kb['id']}/documents",
+        files={
+            "file": (
+                "rule.txt",
+                "연차는 15일이다.\n재택근무는 주 2회까지 가능하다.".encode(),
+                "text/plain",
+            )
+        },
+        headers=team.h("builder"),
+    ).json()
+    assert doc["status"] == "ready" and doc["keyword_only"] is True and doc["chunk_count"] >= 1
+    # 기본(하이브리드)·벡터를 골라도 단어 검색으로 자동 전환된다
+    for method in ("hybrid", "vector", "keyword"):
+        r = client.post(
+            f"/api/v1/knowledge-bases/{kb['id']}/search",
+            json={"query": "재택근무는 몇 번 가능해?", "method": method, "top_k": 2},
+            headers=team.h("builder"),
+        )
+        assert r.status_code == 200, (method, r.text)
+        assert r.json() and "재택근무" in r.json()[0]["content"], method
