@@ -27,8 +27,7 @@ import { optionsFrom, useListControls } from "@/lib/useListControls";
 import { canEdit, canManage, useSession } from "@/store/session";
 import { EmptyState } from "@/components/EmptyState";
 import { ApiToolImportCard } from "@/pages/connectors/ApiToolImportCard";
-import { CatalogCard } from "@/pages/connectors/CatalogCard";
-import { N8nCard } from "@/pages/connectors/N8nCard";
+import { FinderCard } from "@/pages/connectors/FinderCard";
 import { McpServerCard, McpToolsButton } from "@/pages/connectors/McpServerCard";
 
 function NewCredentialForm({ ws }: { ws: string }) {
@@ -306,8 +305,7 @@ export default function ConnectorsPage() {
               )}
             </CardBody>
           </Card>
-          {manage && <CatalogCard ws={ws} />}
-          {manage && <N8nCard ws={ws} />}
+          {manage && <FinderCard ws={ws} />}
           {manage && <McpServerCard ws={ws} />}
           {manage && <ApiToolImportCard ws={ws} />}
           {manage && <PrivateHostsCard ws={ws} />}

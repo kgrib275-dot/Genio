@@ -402,9 +402,21 @@ class BuilderToolbox:
         else:
             max_x = max((n.position.x for n in g.nodes), default=-300)
             pos = Position(x=max_x + 300, y=0)
+        # 새 단계가 이미 있는 단계와 겹치면 그 단계와 오른쪽 단계들을 한 칸(300) 밀어 자리를 만든다
+        moved: list[dict[str, Any]] = []
+        if any(
+            abs(n.position.x - pos.x) < 260 and abs(n.position.y - pos.y) < 120 for n in g.nodes
+        ):
+            for n in g.nodes:
+                if n.position.x >= pos.x - 20:
+                    n.position = Position(x=n.position.x + 300, y=n.position.y)
+                    moved.append({"id": n.id, "position": {"x": n.position.x, "y": n.position.y}})
         node = GraphNode(id=node_id, type=type, position=pos, data=data)
         g.nodes.append(node)
-        ops.append({"op": "add_node", "node": node.model_dump()})
+        add_op: dict[str, Any] = {"op": "add_node", "node": node.model_dump()}
+        if moved:
+            add_op["moved"] = moved
+        ops.append(add_op)
         if prev is not None:
             old = [
                 e

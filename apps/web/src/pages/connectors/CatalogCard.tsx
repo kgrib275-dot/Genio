@@ -107,7 +107,7 @@ function Row({ ws, item }: { ws: string; item: CatalogItem }) {
   );
 }
 
-export function CatalogCard({ ws }: { ws: string }) {
+export function CatalogCard({ ws, bare = false }: { ws: string; bare?: boolean }) {
   const enabled = useCatalogEnabled(ws);
   const [q, setQ] = useState("");
   const [page, setPage] = useState<CatalogPage | null>(null);
@@ -129,6 +129,58 @@ export function CatalogCard({ ws }: { ws: string }) {
     }
   };
 
+  const body = (
+    <div className="space-y-3">
+      {enabled.data && !enabled.data.external_catalog ? (
+        <p className="text-sm text-slate-600">
+          이 회사는 아직 켜지 않았어요. 소유자나 관리자가{" "}
+          <b>관리 &gt; 안전·규칙 &gt; 외부 서비스 찾기</b>를 켜면 쓸 수 있어요.
+        </p>
+      ) : (
+        <>
+          <form
+            className="flex gap-2"
+            onSubmit={(e) => {
+              e.preventDefault();
+              void run(q.trim());
+            }}
+          >
+            <Input
+              aria-label="서비스 검색"
+              placeholder="예: slack, notion, github"
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+            />
+            <Button type="submit" disabled={busy}>
+              {busy ? "찾는 중…" : "찾기"}
+            </Button>
+          </form>
+          <ErrorBox error={error} />
+          {page && page.items.length === 0 && (
+            <p className="text-sm text-slate-500">찾은 서비스가 없어요. 다른 말로 검색해 보세요.</p>
+          )}
+          {page && page.items.length > 0 && (
+            <ul className="max-h-[28rem] space-y-2 overflow-y-auto">
+              {page.items.map((it) => (
+                <Row key={it.name} ws={ws} item={it} />
+              ))}
+            </ul>
+          )}
+          {page?.next_cursor && (
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={busy}
+              onClick={() => void run(last, page.next_cursor)}
+            >
+              더 보기
+            </Button>
+          )}
+        </>
+      )}
+    </div>
+  );
+  if (bare) return body;
   return (
     <Card>
       <CardHeader
@@ -139,57 +191,7 @@ export function CatalogCard({ ws }: { ws: string }) {
         }
         description="공식 MCP 목록에서 최신 서비스를 찾아 바로 연결해요. 연결하면 흐름의 '외부 도구 호출' 단계에서 쓸 수 있어요."
       />
-      <CardBody className="space-y-3">
-        {enabled.data && !enabled.data.external_catalog ? (
-          <p className="text-sm text-slate-600">
-            이 회사는 아직 켜지 않았어요. 소유자나 관리자가{" "}
-            <b>관리 &gt; 안전·규칙 &gt; 외부 서비스 찾기</b>를 켜면 쓸 수 있어요.
-          </p>
-        ) : (
-          <>
-            <form
-              className="flex gap-2"
-              onSubmit={(e) => {
-                e.preventDefault();
-                void run(q.trim());
-              }}
-            >
-              <Input
-                aria-label="서비스 검색"
-                placeholder="예: slack, notion, github"
-                value={q}
-                onChange={(e) => setQ(e.target.value)}
-              />
-              <Button type="submit" disabled={busy}>
-                {busy ? "찾는 중…" : "찾기"}
-              </Button>
-            </form>
-            <ErrorBox error={error} />
-            {page && page.items.length === 0 && (
-              <p className="text-sm text-slate-500">
-                찾은 서비스가 없어요. 다른 말로 검색해 보세요.
-              </p>
-            )}
-            {page && page.items.length > 0 && (
-              <ul className="max-h-[28rem] space-y-2 overflow-y-auto">
-                {page.items.map((it) => (
-                  <Row key={it.name} ws={ws} item={it} />
-                ))}
-              </ul>
-            )}
-            {page?.next_cursor && (
-              <Button
-                size="sm"
-                variant="outline"
-                disabled={busy}
-                onClick={() => void run(last, page.next_cursor)}
-              >
-                더 보기
-              </Button>
-            )}
-          </>
-        )}
-      </CardBody>
+      <CardBody>{body}</CardBody>
     </Card>
   );
 }

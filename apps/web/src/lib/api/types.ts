@@ -373,7 +373,12 @@ export interface BuilderSession {
 }
 
 export type PatchOp =
-  | { op: "add_node"; node: GraphNode }
+  | {
+      op: "add_node";
+      node: GraphNode;
+      /** 자리를 만들려고 오른쪽으로 민 기존 단계들의 새 위치 */
+      moved?: { id: string; position: { x: number; y: number } }[];
+    }
   | { op: "update_node"; id: string; data: Record<string, unknown> }
   | { op: "remove_node"; id: string }
   | { op: "add_edge"; edge: GraphEdge }

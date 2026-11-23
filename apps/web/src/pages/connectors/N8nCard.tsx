@@ -17,7 +17,7 @@ import {
 } from "@/lib/api/catalog";
 import type { DifyImportResult } from "@/lib/api/difyImport";
 
-export function N8nCard({ ws }: { ws: string }) {
+export function N8nCard({ ws, bare = false }: { ws: string; bare?: boolean }) {
   const enabled = useCatalogEnabled(ws);
   const imp = useImportN8n(ws);
   const navigate = useNavigate();
@@ -51,17 +51,9 @@ export function N8nCard({ ws }: { ws: string }) {
     });
   };
 
-  return (
-    <Card>
-      <CardHeader
-        title={
-          <span className="flex items-center gap-1.5">
-            <Workflow className="h-4 w-4 text-slate-400" /> n8n 템플릿 가져오기
-          </span>
-        }
-        description="n8n의 공개 무료 템플릿을 찾아 제니오 초안 앱으로 만들어요. 웹 요청과 시작·결과 단계만 옮기고, 나머지는 꺼진 자리 표시로 남아요."
-      />
-      <CardBody className="space-y-3">
+  const body = (
+    <>
+      <div className="space-y-3">
         {enabled.data && !enabled.data.external_catalog ? (
           <p className="text-sm text-slate-600">
             이 회사는 아직 켜지 않았어요. 소유자나 관리자가{" "}
@@ -143,7 +135,7 @@ export function N8nCard({ ws }: { ws: string }) {
             )}
           </>
         )}
-      </CardBody>
+      </div>
       <Dialog
         open={result !== null}
         onClose={() => setResult(null)}
@@ -168,6 +160,20 @@ export function N8nCard({ ws }: { ws: string }) {
       >
         {result && <DifyReportView result={result} />}
       </Dialog>
+    </>
+  );
+  if (bare) return body;
+  return (
+    <Card>
+      <CardHeader
+        title={
+          <span className="flex items-center gap-1.5">
+            <Workflow className="h-4 w-4 text-slate-400" /> n8n 템플릿 가져오기
+          </span>
+        }
+        description="n8n의 공개 무료 템플릿을 찾아 제니오 초안 앱으로 만들어요. 웹 요청과 시작·결과 단계만 옮기고, 나머지는 꺼진 자리 표시로 남아요."
+      />
+      <CardBody>{body}</CardBody>
     </Card>
   );
 }

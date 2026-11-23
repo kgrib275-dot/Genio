@@ -216,3 +216,40 @@ def test_builder_parallel_tools(client: TestClient, team: Team) -> None:
         assert sorted(outs) == sorted(["n2", na, nb])
         ins = [e.source for e in g.edges if e.target == "n2"]
         assert sorted(ins) == sorted(["n1", na, nb])
+
+
+def test_builder_add_node_makes_room_instead_of_overlapping(client: TestClient, team: Team) -> None:
+    """단계를 끼워 넣을 때 이미 있는 단계와 겹치면 오른쪽 단계들을 밀어 자리를 만든다."""
+    from api.builder.tools import BuilderToolbox
+    from api.db import SessionLocal
+    from api.models import App
+
+    app_id = make_app(
+        client,
+        team,
+        {
+            "nodes": [
+                {"id": "n1", "type": "input", "position": {"x": 0, "y": 0}, "data": {"fields": []}},
+                {
+                    "id": "n2",
+                    "type": "output",
+                    "position": {"x": 320, "y": 0},
+                    "data": {"template": "x"},
+                },
+            ],
+            "edges": [{"id": "e1", "source": "n1", "target": "n2"}],
+        },
+    )
+    with SessionLocal() as db:
+        app = db.get(App, app_id)
+        assert app is not None
+        tools = BuilderToolbox(db, app, team.users["builder"])
+        out = tools.t_add_node("template", {"label": "끼움", "template": "A"}, after="n1")
+        add = next(op for op in out.ops if op["op"] == "add_node")
+        assert add["moved"] == [{"id": "n2", "position": {"x": 620.0, "y": 0.0}}]
+        g = tools.graph()
+        pos = {n.id: n.position.x for n in g.nodes}
+        assert pos["n2"] == 620.0 and pos[add["node"]["id"]] == 300.0
+        # 겹치지 않으면 아무것도 밀지 않는다
+        out2 = tools.t_add_node("template", {"label": "뒤", "template": "B"}, after="n2")
+        assert "moved" not in next(op for op in out2.ops if op["op"] == "add_node")

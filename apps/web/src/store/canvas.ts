@@ -34,9 +34,19 @@ export function applyPatch(graph: Graph, ops: PatchOp[]): Graph {
   let edges = [...graph.edges];
   for (const op of ops) {
     switch (op.op) {
-      case "add_node":
-        nodes = [...nodes.filter((n) => n.id !== op.node.id), op.node];
+      case "add_node": {
+        const moved = new Map((op.moved ?? []).map((m) => [m.id, m.position]));
+        nodes = [
+          ...nodes
+            .filter((n) => n.id !== op.node.id)
+            .map((n) => {
+              const to = moved.get(n.id);
+              return to ? { ...n, position: to } : n;
+            }),
+          op.node,
+        ];
         break;
+      }
       case "update_node":
         nodes = nodes.map((n) => (n.id === op.id ? { ...n, data: { ...n.data, ...op.data } } : n));
         break;

@@ -63,3 +63,26 @@ describe("applyPatch", () => {
     ).toEqual(["n1", "n2", "n3"]);
   });
 });
+
+test("단계를 끼워 넣으면서 민 기존 단계의 위치가 함께 바뀐다", () => {
+  const base = emptyGraph();
+  const g = applyPatch(
+    {
+      ...base,
+      nodes: [
+        { id: "a", type: "input", position: { x: 0, y: 0 }, data: {} },
+        { id: "b", type: "output", position: { x: 320, y: 0 }, data: {} },
+      ],
+    },
+    [
+      {
+        op: "add_node",
+        node: { id: "c", type: "llm", position: { x: 300, y: 0 }, data: {} },
+        moved: [{ id: "b", position: { x: 620, y: 0 } }],
+      },
+    ],
+  );
+  expect(g.nodes.find((n) => n.id === "b")?.position.x).toBe(620);
+  expect(g.nodes.find((n) => n.id === "a")?.position.x).toBe(0);
+  expect(g.nodes.find((n) => n.id === "c")?.position.x).toBe(300);
+});
