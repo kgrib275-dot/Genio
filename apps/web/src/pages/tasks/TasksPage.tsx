@@ -28,6 +28,7 @@ import {
 import { canEdit, canViewRuns, useSession } from "@/store/session";
 import { useMe } from "@/lib/api/auth";
 import { ForwardDialog } from "@/pages/tasks/ForwardDialog";
+import { QuickApprove } from "@/pages/tasks/QuickApprove";
 import { TaskForm } from "@/pages/tasks/TaskForm";
 import { EmptyState } from "@/components/EmptyState";
 
@@ -182,6 +183,21 @@ export default function TasksPage() {
                       </Badge>
                     )}
                   </button>
+                  {t.kind === "approval" && t.status === "open" && t.can_act && (
+                    <QuickApprove
+                      title={t.title}
+                      pending={complete.isPending}
+                      onDecide={(approved) =>
+                        complete.mutate(
+                          { id: t.id, approved, comment: "" },
+                          {
+                            onSuccess: () =>
+                              toast.success(approved ? "승인했어요." : "반려했어요."),
+                          },
+                        )
+                      }
+                    />
+                  )}
                 </li>
               ))}
             </ul>
