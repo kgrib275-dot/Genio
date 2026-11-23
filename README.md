@@ -34,8 +34,10 @@
 - **사용성 점검 반영**([ADR 0016](docs/decisions/0016-사용성-점검-반영-1차.md)): 처음 쓰는 비개발자가 가입~공유까지 눌러 본 결과로 25개 항목 반영, 메뉴·탭 이름을 쉬운 말로 정리(챗봇 모음·품질 점검·대화 기록·공유·설정 등), 모바일 점검(도움 버튼 가림·캔버스 맞춤 수정), 로고를 누르면 홈으로 이동.
 - **안정성·보안 점검 반영**([ADR 0017](docs/decisions/0017-안정성-보안-점검-반영.md)): 공개 주소 서버는 운영으로 판정(키 필수·데모 계정 시드 금지), 내부 주소 허용 제한, 실행 선점·승인 결정 중복 방지·버전 저장 잠금, 멈춘 실행 자동 정리, 비밀번호·2단계 시도 제한, 코드 단계 자원 한도, api·worker 비루트 실행. **진짜 PostgreSQL 동시 호출 시험 8개**와 마이그레이션 0001~0021 위·아래 확인.
 - **실서비스 편의 보강**([coverage](docs/feature-coverage.md) '실서비스 편의 보강'): 서비스 공지·상태 페이지(`/status`), 첫 사용 현황, 관리자 2단계 인증 필수 옵션(연결 정보·AI 키 변경만 막음), 워크스페이스 데이터 내려받기(zip), 팀 템플릿, 날짜로 되돌리기, 검색 확장(문서·대화), 승인 대기 알림 메일·시험 메일, 빌더 완료 뒤 다음 할 일 버튼, 결과 표 보기·엑셀 받기, 예약 실행 달력(`/schedules`), 작업함에서 바로 승인·반려, 활동 기록 7일 요약, 답 못한 질문 알림.
+- **서비스 관리자 전체 현황**: 관리 > 전체 회사(서비스 관리자만) — 회사별 소유자·사람·앱·이번 달 실행·비용·마지막 활동을 숫자로만 보여 준다(앱·대화 내용은 안 보임, 열람 기록 남김). 회사 정지·한도 조정, 허락받는 지원 접속은 아직 없다([coverage](docs/feature-coverage.md)).
+- **점검 반영(2026-11-23)**: Redis 비밀번호 필수, 운영에서 localhost CORS 차단, CI 액션 SHA 고정. 외부 점검 기준 문서: 기본 등급 A~G 정적 점검에서 치명·높음 없음.
 - **공유 링크 미리보기 수정**: 카카오톡 안에서 링크를 열면 미리보기 페이지만 보이던 문제를 고쳤다(로봇만 `kakaotalk-scrap`으로 구분, `?open=1` 우회). **웹 이미지(nginx)를 다시 빌드해야 반영된다**: `docker compose up -d --build web`.
-- 자동 검사(GitHub Actions `ci.yml`): ruff·mypy·pytest 1,187개·eslint·tsc·vitest 276개·빌드·`pip-audit`·`npm audit`, PostgreSQL 동시 호출 시험.
+- 자동 검사(GitHub Actions `ci.yml`): ruff·mypy·pytest 1,198개·eslint·tsc·vitest 278개·빌드·`pip-audit`·`npm audit`, PostgreSQL 동시 호출 시험.
 - **반영 방법**: `docker compose up -d --build`(마이그레이션 0019~0021 자동 적용, 새 `scheduler`; 이번 보강은 마이그레이션이 늘지 않았다). **`.env`에 `POSTGRES_PASSWORD`와 `REDIS_PASSWORD`가 꼭 있어야 한다**(`openssl rand -hex 24`로 만든 영문·숫자 값; 기본값은 쓰지 않는다. Redis를 처음 켤 때는 api·worker·scheduler가 같이 다시 시작된다). 공개 주소를 쓰면 `GENIO_FERNET_KEY`도 필수다. `GENIO_STORAGE=disk`면 이미지를 다시 빌드한 뒤 [runbook](docs/runbook.md)의 '비루트 실행' 명령을 한 번 실행한다.
 - 결과 요약과 위치: [docs/feature-coverage.md](docs/feature-coverage.md) 맨 아래 표들, 남은 후보: [docs/field-needs-2026-11-19.html](docs/field-needs-2026-11-19.html).
 
