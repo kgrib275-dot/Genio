@@ -80,3 +80,38 @@ export async function downloadAuditCsv(ws: string, f: AuditExportFilters): Promi
   a.remove();
   URL.revokeObjectURL(url);
 }
+
+export interface CompanyRow {
+  id: string;
+  name: string;
+  slug: string;
+  is_instance: boolean;
+  owners: string[];
+  members: number;
+  apps: number;
+  published_apps: number;
+  month_runs: number;
+  month_cost: number;
+  monthly_budget_usd: number | null;
+  last_active_at: string | null;
+}
+
+export interface CompaniesOverview {
+  items: CompanyRow[];
+  totals: {
+    workspaces: number;
+    members: number;
+    apps: number;
+    month_runs: number;
+    month_cost: number;
+  };
+}
+
+/** 서비스 관리자용: 전체 회사 현황(숫자만, 내용은 없음) */
+export function useCompanies(enabled = true) {
+  return useQuery({
+    queryKey: ["admin-companies"],
+    queryFn: () => api.get<CompaniesOverview>("/admin/workspaces"),
+    enabled,
+  });
+}

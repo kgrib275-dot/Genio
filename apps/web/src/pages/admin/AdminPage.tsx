@@ -23,6 +23,7 @@ import {
   SafetySection,
   ToolboxSection,
 } from "@/pages/workspace/sections";
+import { CompaniesSection } from "@/pages/admin/CompaniesSection";
 import { TracingSection } from "@/pages/admin/TracingSection";
 import { canManage, useSession } from "@/store/session";
 
@@ -37,7 +38,8 @@ type Tab =
   | "keys"
   | "tracing"
   | "system"
-  | "status";
+  | "status"
+  | "companies";
 
 const TABS: { value: Tab; label: string }[] = [
   { value: "overview", label: "개요" },
@@ -52,6 +54,7 @@ const TABS: { value: Tab; label: string }[] = [
   { value: "system", label: "시스템 설정" },
   // 인스턴스 관리자(가장 먼저 만든 워크스페이스의 소유자)에게만 보인다
   { value: "status", label: "시스템 상태" },
+  { value: "companies", label: "전체 회사" },
 ];
 
 function Overview({ ws }: { ws: string }) {
@@ -238,7 +241,9 @@ export default function AdminPage() {
     TABS.some((t) => t.value === initial) ? initial : "overview",
   );
   const sys = useSystemSettings();
-  const tabs = TABS.filter((t) => t.value !== "status" || sys.data?.is_instance_admin);
+  const tabs = TABS.filter(
+    (t) => (t.value !== "status" && t.value !== "companies") || sys.data?.is_instance_admin,
+  );
   const setTab = (t: Tab) => {
     setTabState(t);
     setParams(t === "overview" ? {} : { tab: t }, { replace: true });
@@ -271,6 +276,7 @@ export default function AdminPage() {
       {tab === "tracing" && <TracingSection ws={ws} />}
       {tab === "system" && <SystemSection ws={ws} />}
       {tab === "status" && <StatusSection />}
+      {tab === "companies" && sys.data?.is_instance_admin && <CompaniesSection />}
     </PageContainer>
   );
 }

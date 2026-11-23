@@ -86,6 +86,13 @@ PAGES: tuple[PageEntry, ...] = (
     ),
     PageEntry("관리", "/admin", "소유자·관리자 화면", ("admin", "관리자"), MANAGE_ROLES),
     PageEntry(
+        "관리 · 전체 회사",
+        "/admin?tab=companies",
+        "모든 회사 현황(서비스 관리자)",
+        ("회사", "워크스페이스", "고객사", "슈퍼관리자"),
+        MANAGE_ROLES,
+    ),
+    PageEntry(
         "관리 · AI 모델",
         "/admin?tab=llm",
         "AI 연결·모델",

@@ -1549,3 +1549,34 @@ def test_cors_allows_localhost_only_outside_production(monkeypatch: pytest.Monke
         lambda: fake(genio_env="dev", genio_public_web_url="https://genio.example.com"),
     )
     assert main._cors_origin_regex() is None
+
+
+def test_instance_admin_sees_all_companies_but_others_cannot(
+    client: TestClient, team: Team
+) -> None:
+    from api.db import SessionLocal
+    from api.models import Organization, Workspace
+    from api.tests.test_v02_features import faq_app
+
+    faq_app(client, team)
+    with SessionLocal() as db:  # 두 번째 회사
+        org = Organization(name="둘째 회사", slug="second-co")
+        db.add(org)
+        db.flush()
+        db.add(Workspace(org_id=org.id, name="둘째 회사", slug="second-co", settings={}))
+        db.commit()
+    # 시험 팀의 소유자가 가장 먼저 만든 회사의 소유자 = 서비스 관리자
+    res = client.get("/api/v1/admin/workspaces", headers=team.h("owner"))
+    assert res.status_code == 200, res.text
+    body = res.json()
+    names = {i["name"]: i for i in body["items"]}
+    assert "테스트 워크스페이스" in names and "둘째 회사" in names
+    mine = names["테스트 워크스페이스"]
+    assert mine["is_instance"] is True and mine["apps"] >= 1 and mine["members"] == 5
+    assert names["둘째 회사"]["members"] == 0 and names["둘째 회사"]["apps"] == 0
+    assert body["totals"]["workspaces"] == 2
+    # 앱 이름·대화 같은 내용은 응답에 없다
+    assert "graph" not in res.text and "draft" not in res.text
+    # 다른 역할은 막힌다
+    assert client.get("/api/v1/admin/workspaces", headers=team.h("admin")).status_code == 403
+    assert client.get("/api/v1/admin/workspaces", headers=team.h("builder")).status_code == 403
