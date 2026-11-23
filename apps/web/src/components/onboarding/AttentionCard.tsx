@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { AlertTriangle, ClipboardList, ThumbsDown } from "lucide-react";
+import { AlertTriangle, ClipboardList, HelpCircle, ThumbsDown } from "lucide-react";
 import { Link } from "react-router-dom";
 import { api } from "@/lib/api/client";
 import { useOpenTaskCount } from "@/lib/api/v5a";
@@ -8,6 +8,7 @@ import { useSession } from "@/store/session";
 interface Attention {
   failed: { app_id: string; app_name: string; count: number }[];
   disliked: { app_id: string; app_name: string; count: number }[];
+  unanswered?: { app_id: string; app_name: string; count: number }[];
 }
 
 /** 홈 맨 위: 지금 해야 할 일(승인 대기, 실패한 실행, 싫어요 받은 답)만 모아서 보여 준다. 없으면 안 보인다. */
@@ -23,7 +24,9 @@ export function AttentionCard() {
   const open = tasks.data?.open ?? 0;
   const failed = q.data?.failed ?? [];
   const disliked = q.data?.disliked ?? [];
-  if (open === 0 && failed.length === 0 && disliked.length === 0) return null;
+  const unanswered = q.data?.unanswered ?? [];
+  if (open === 0 && failed.length === 0 && disliked.length === 0 && unanswered.length === 0)
+    return null;
   const row = "flex items-center gap-2 rounded-lg px-3 py-2 text-sm hover:bg-slate-50";
   return (
     <section
@@ -43,6 +46,15 @@ export function AttentionCard() {
             <AlertTriangle className="h-4 w-4 text-red-500" />
             <span>
               &apos;{f.app_name}&apos;이(가) 오늘 <b>{f.count}번 실패</b>했어요 — 이유 보기
+            </span>
+          </Link>
+        ))}
+        {unanswered.map((u) => (
+          <Link key={`u${u.app_id}`} to={`/apps/${u.app_id}/logs`} className={row}>
+            <HelpCircle className="h-4 w-4 text-sky-600" />
+            <span>
+              &apos;{u.app_name}&apos;이(가) 답하지 못한 질문 <b>{u.count}개</b> — 답을 알려 주러
+              가기
             </span>
           </Link>
         ))}

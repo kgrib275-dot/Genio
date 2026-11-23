@@ -45,7 +45,29 @@ def attention(ws: str, ctx: WsBuilders) -> dict[str, Any]:
         .order_by(func.count(Message.id).desc())
         .limit(5)
     ).all()
+    # 챗봇이 "찾지 못했어요" 같은 말로 답을 못 한 질문(싫어요를 안 받았어도 모은다)
+    from sqlalchemy import or_
+
+    from api.services.improvements import NO_ANSWER_HINTS
+
+    unanswered = ctx.db.execute(
+        select(App.id, App.name, func.count(Message.id))
+        .join(Conversation, Conversation.app_id == App.id)
+        .join(Message, Message.conversation_id == Conversation.id)
+        .where(
+            App.workspace_id == ws,
+            Message.role == "assistant",
+            Message.annotation_id.is_(None),
+            Message.moderated.is_(False),
+            Message.created_at >= now - timedelta(days=30),
+            or_(*[Message.content.contains(h) for h in NO_ANSWER_HINTS]),
+        )
+        .group_by(App.id, App.name)
+        .order_by(func.count(Message.id).desc())
+        .limit(5)
+    ).all()
     return {
+        "unanswered": [{"app_id": a, "app_name": n, "count": int(c)} for a, n, c in unanswered],
         "failed": [{"app_id": a, "app_name": n, "count": int(c)} for a, n, c in failed],
         "disliked": [{"app_id": a, "app_name": n, "count": int(c)} for a, n, c in disliked],
     }

@@ -1513,3 +1513,20 @@ def test_workspace_schedule_calendar(client: TestClient, team: Team) -> None:
         client.get(f"/api/v1/workspaces/{team.ws}/schedules", headers=team.h("member")).status_code
         == 403
     )
+
+
+def test_attention_counts_unanswered_questions(client: TestClient, team: Team) -> None:
+    from api.db import SessionLocal
+    from api.models import Message
+    from api.tests.test_v02_features import chat, deploy, faq_app
+
+    app_id = faq_app(client, team)
+    token = deploy(client, team, app_id)
+    mid = next(d for n, d in chat(client, token, "연차 며칠이에요?") if n == "answer")["message_id"]
+    with SessionLocal() as db:
+        m = db.get(Message, mid)
+        assert m is not None
+        m.content = "문서에서 찾지 못했어요. 담당자에게 문의해 주세요."
+        db.commit()
+    res = client.get(f"/api/v1/workspaces/{team.ws}/attention", headers=team.h("builder")).json()
+    assert res["unanswered"][0]["count"] == 1
