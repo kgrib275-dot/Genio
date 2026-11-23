@@ -1,28 +1,16 @@
 import {
-  ClipboardList,
-  MessagesSquare,
-  GraduationCap,
   Gauge,
-  BookMarked,
-  BookOpen,
   ChevronDown,
   ChevronRight,
-  Table2,
-  LayoutGrid,
   Lock,
   LogOut,
   Menu,
   PanelLeftClose,
   PanelLeftOpen,
-  Plug,
   Plus,
   Search,
   Settings,
-  Shield,
-  Store,
-  Users,
   X,
-  type LucideIcon,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { AnnouncementBanner } from "@/components/announcement/AnnouncementBanner";
@@ -51,18 +39,9 @@ import { useProjects } from "@/lib/api/v3";
 import { cn } from "@/lib/cn";
 import { IS_MAC, isHelpKey, isPaletteKey, isTypingTarget } from "@/lib/shortcuts";
 import { rememberEnterToSend } from "@/lib/composer";
-import { canManage, canViewRuns, useSession } from "@/store/session";
+import { canViewRuns, useSession } from "@/store/session";
 import { applyFontSize, applyTheme } from "@/store/theme";
-
-interface NavItem {
-  to: string;
-  label: string;
-  icon: LucideIcon;
-  end?: boolean;
-  show?: (role: Role | null) => boolean;
-  /** 화면 투어가 짚는 표시(data-tour) */
-  tour?: string;
-}
+import { BOTTOM_NAV, navGroups, type NavItem } from "@/app/nav";
 
 /** 메뉴에 마우스를 올리면 보이는 한 줄 설명(처음 보는 말을 풀어 준다) */
 const NAV_HINT: Record<string, string> = {
@@ -78,23 +57,6 @@ const NAV_HINT: Record<string, string> = {
   "/learn": "샘플로 따라 하며 배우기",
   "/help": "주제별 사용설명서",
 };
-
-const NAV: NavItem[] = [
-  { to: "/", label: ko.nav.dashboard, icon: LayoutGrid, end: true },
-  { to: "/hub", label: "챗봇 모음", icon: MessagesSquare },
-  { to: "/tasks", label: "작업함", icon: ClipboardList },
-  { to: "/knowledge", label: ko.nav.knowledge, icon: BookOpen },
-  { to: "/data", label: "데이터 표", icon: Table2 },
-  { to: "/connectors", label: ko.nav.connectors, icon: Plug },
-  { to: "/market", label: ko.nav.market, icon: Store },
-  { to: "/workspace", label: ko.nav.workspace, icon: Users },
-  { to: "/admin", label: "관리", icon: Shield, show: canManage, tour: "nav-admin" },
-];
-
-const BOTTOM_NAV: NavItem[] = [
-  { to: "/learn", label: "배우기", icon: GraduationCap, tour: "nav-learn" },
-  { to: "/help", label: "사용설명서", icon: BookMarked, tour: "nav-help" },
-];
 
 /** 로고를 누르면 어느 화면에서든 홈(대시보드)으로 간다. */
 export function Logo({
@@ -288,13 +250,28 @@ function SidebarBody({
         data-tour="nav"
         className={cn("flex-1 space-y-0.5 overflow-y-auto", compact ? "px-2" : "px-3")}
       >
-        <NavItems
-          items={NAV}
-          compact={compact}
-          role={role}
-          onNavigate={onNavigate}
-          badges={{ "/tasks": openTasks.data?.open ?? 0 }}
-        />
+        {(() => {
+          const groups = navGroups(role);
+          return groups.map((g) => (
+            <div key={g.id} className="space-y-0.5">
+              {groups.length > 1 && !compact && (
+                <p className="px-3 pb-1 pt-3 text-[11px] font-semibold tracking-wide text-slate-400">
+                  {g.label}
+                </p>
+              )}
+              {groups.length > 1 && compact && g.id !== "use" && (
+                <div className="mx-2 my-1.5 border-t border-slate-200" aria-hidden />
+              )}
+              <NavItems
+                items={g.items}
+                compact={compact}
+                role={role}
+                onNavigate={onNavigate}
+                badges={{ "/tasks": openTasks.data?.open ?? 0 }}
+              />
+            </div>
+          ));
+        })()}
         {!compact && <ProjectsSection myUserId={me?.id} onNavigate={onNavigate} />}
       </nav>
 
