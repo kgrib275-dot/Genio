@@ -1,9 +1,11 @@
 // 실행 입력·출력, 활동 기록 세부 내용 같은 데이터를 JSON 대신 읽기 쉬운 목록으로 보여 준다.
 // 개발자용으로 '원본 보기'를 누르면 JSON 원문도 볼 수 있다.
-import { ChevronDown, ChevronRight, Code2, List } from "lucide-react";
+import { ChevronDown, ChevronRight, Code2, Download, List, Table2 } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { cn, copyText } from "@/lib/cn";
+import { downloadText } from "@/lib/api/chat";
 import { keyLabel } from "@/lib/dataLabels";
+import { findTable, toCsv } from "@/lib/tableData";
 import { toast } from "@/components/ui/toast-store";
 
 const ISO = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/;
@@ -146,6 +148,7 @@ export function DataView({
   empty?: ReactNode;
 }) {
   const [showRaw, setShowRaw] = useState(false);
+  const [asList, setAsList] = useState(false);
   if (value === null || value === undefined || (isObj(value) && Object.keys(value).length === 0))
     return <span className="text-xs text-slate-400">{empty ?? "-"}</span>;
   // 문자열이 JSON이면 풀어서 보여 준다
@@ -158,6 +161,7 @@ export function DataView({
     }
   }
   const text = typeof v === "string" ? v : JSON.stringify(v, null, 2);
+  const table = findTable(v);
   return (
     <div
       className={cn(
@@ -167,6 +171,28 @@ export function DataView({
     >
       {raw && typeof v !== "string" && (
         <div className="sticky top-0 z-10 float-right ml-2 flex gap-0.5 rounded-md bg-slate-50/90">
+          {table && (
+            <>
+              <button
+                type="button"
+                onClick={() => setAsList((a) => !a)}
+                title={asList ? "표로 보기" : "목록으로 보기"}
+                aria-label={asList ? "표로 보기" : "목록으로 보기"}
+                className="rounded p-1 text-slate-400 hover:bg-slate-200 hover:text-slate-700"
+              >
+                {asList ? <Table2 className="h-3.5 w-3.5" /> : <List className="h-3.5 w-3.5" />}
+              </button>
+              <button
+                type="button"
+                onClick={() => downloadText("결과.csv", toCsv(table), "text/csv")}
+                title="엑셀로 받기(CSV)"
+                aria-label="엑셀로 받기"
+                className="rounded p-1 text-slate-400 hover:bg-slate-200 hover:text-slate-700"
+              >
+                <Download className="h-3.5 w-3.5" />
+              </button>
+            </>
+          )}
           <button
             type="button"
             onClick={() => setShowRaw((s) => !s)}
@@ -187,8 +213,43 @@ export function DataView({
         >
           {text}
         </pre>
+      ) : table && !asList ? (
+        <table className="w-full border-collapse text-[11px]">
+          <thead>
+            <tr>
+              {table.columns.map((c) => (
+                <th
+                  key={c}
+                  className="border-b border-slate-300 px-2 py-1 text-left font-semibold text-slate-600"
+                >
+                  {keyLabel(c)}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {table.rows.slice(0, 100).map((r, i) => (
+              <tr key={i} className="odd:bg-white">
+                {table.columns.map((c) => (
+                  <td key={c} className="max-w-[240px] break-words px-2 py-1 align-top">
+                    <Primitive
+                      value={
+                        typeof r[c] === "object" && r[c] !== null ? JSON.stringify(r[c]) : r[c]
+                      }
+                    />
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
       ) : (
         <Node value={v} depth={0} />
+      )}
+      {table && !asList && table.rows.length > 100 && (
+        <p className="mt-1 text-[11px] text-slate-500">
+          앞의 100개만 보여요. 전체는 엑셀로 받아서 확인하세요.
+        </p>
       )}
     </div>
   );
