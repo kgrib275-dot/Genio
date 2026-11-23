@@ -312,3 +312,59 @@ def test_sample(trigger_id: str, ctx: TriggerEditors) -> dict[str, Any]:
     ctx.db.expire_all()
     fresh = ctx.db.get(type(run), run.id)
     return {"run": run_dict(fresh or run), "input": run_input}
+
+
+WsViewers = Annotated[Ctx, Depends(require_role(VIEW_RUNS))]
+
+
+@router.get("/workspaces/{ws}/schedules")
+def list_schedules(ws: str, ctx: WsViewers) -> dict[str, Any]:
+    """이 워크스페이스의 예약 실행 전체와 앞으로 7일 안의 실행 시각(달력용)."""
+    from datetime import timedelta
+
+    from api.services.projects import hidden_project_ids
+
+    hidden = hidden_project_ids(ctx.db, ws, ctx.user.id, ctx.role)
+    now = svc.now_utc()
+    end = now + timedelta(days=7)
+    rows = ctx.db.execute(
+        select(AppTrigger, App)
+        .join(App, App.id == AppTrigger.app_id)
+        .where(App.workspace_id == ws, AppTrigger.kind == "schedule")
+        .order_by(AppTrigger.next_run_at)
+    ).all()
+    items: list[dict[str, Any]] = []
+    upcoming: list[dict[str, Any]] = []
+    for t, app in rows:
+        if app.project_id and app.project_id in hidden:
+            continue
+        cfg = t.config or {}
+        items.append(
+            {
+                "id": t.id,
+                "app_id": app.id,
+                "app_name": app.name,
+                "name": t.name,
+                "enabled": t.enabled,
+                "cron": cfg.get("cron", ""),
+                "timezone": cfg.get("timezone", ""),
+                "next_run_at": svc.trigger_dict(t, None)["next_run_at"],
+                "last_run_at": svc.trigger_dict(t, None)["last_run_at"],
+                "last_status": t.last_status,
+            }
+        )
+        if not t.enabled:
+            continue
+        at = now
+        for _ in range(8):
+            try:
+                at = svc.next_fire(
+                    str(cfg.get("cron")), str(cfg.get("timezone") or "Asia/Seoul"), at
+                )
+            except Exception:
+                break
+            if at > end:
+                break
+            upcoming.append({"at": at, "trigger_id": t.id, "app_name": app.name, "name": t.name})
+    upcoming.sort(key=lambda u: u["at"])
+    return {"items": items, "upcoming": upcoming[:100]}

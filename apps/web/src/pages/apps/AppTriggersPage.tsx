@@ -778,6 +778,9 @@ export default function AppTriggersPage() {
               바깥 서비스가 주소로 부르거나(외부에서 받기), Slack·GitHub 같은 서비스에 일이 생기면
               (서비스 이벤트), 정해진 시간마다(예약) 이 흐름을 실행해요.
             </p>
+            <Link to="/schedules" className="text-sm font-medium text-indigo-600 hover:underline">
+              우리 팀 예약 전체 보기(달력)
+            </Link>
           </div>
           {editable && (
             <div className="flex flex-wrap gap-2">

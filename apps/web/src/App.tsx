@@ -22,6 +22,7 @@ const MarketDetailPage = lazy(() => import("@/pages/market/MarketDetailPage"));
 const WorkspacePage = lazy(() => import("@/pages/workspace/WorkspacePage"));
 const SharePage = lazy(() => import("@/pages/share/SharePage"));
 const StatusPage = lazy(() => import("@/pages/status/StatusPage"));
+const SchedulesPage = lazy(() => import("@/pages/schedules/SchedulesPage"));
 const TaskLinkPage = lazy(() => import("@/pages/share/TaskLinkPage"));
 const TasksPage = lazy(() => import("@/pages/tasks/TasksPage"));
 const LearnPage = lazy(() => import("@/pages/learn/LearnPage"));
@@ -95,6 +96,7 @@ export default function App() {
               <Route path="help" element={<HelpPage />} />
               <Route path="settings" element={<SettingsPage />} />
               <Route path="tasks" element={<TasksPage />} />
+              <Route path="schedules" element={<SchedulesPage />} />
               <Route path="learn" element={<LearnPage />} />
               <Route path="projects" element={<ProjectsBoardPage />} />
               <Route path="*" element={<NotFoundPage />} />

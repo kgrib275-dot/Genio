@@ -48,6 +48,13 @@ PAGES: tuple[PageEntry, ...] = (
     ),
     PageEntry("작업함", "/tasks", "승인·질문·배정", ("승인", "할 일", "task", "inbox"), ALL_ROLES),
     PageEntry(
+        "예약 실행",
+        "/schedules",
+        "언제 무엇이 도는지(달력)",
+        ("예약", "스케줄", "cron", "자동 실행", "달력"),
+        VIEW_ROLES,
+    ),
+    PageEntry(
         "지식베이스", "/knowledge", "문서로 답하게 하기", ("문서", "rag", "knowledge"), VIEW_ROLES
     ),
     PageEntry(

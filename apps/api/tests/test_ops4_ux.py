@@ -1490,3 +1490,26 @@ def test_stale_task_alert_and_test_mail(
     sent.clear()
     limits._check_workspace(team.ws, now_utc())  # 같은 날 두 번 보내지 않는다
     assert not any("기다리는 요청" in s for s in sent)
+
+
+def test_workspace_schedule_calendar(client: TestClient, team: Team) -> None:
+    from api.tests.test_v02_features import faq_app
+
+    app_id = faq_app(client, team)
+    r = client.post(
+        f"/api/v1/apps/{app_id}/triggers",
+        json={
+            "kind": "schedule",
+            "name": "매일 아침",
+            "config": {"cron": "0 9 * * *", "timezone": "Asia/Seoul", "input": {}},
+        },
+        headers=team.h("builder"),
+    )
+    assert r.status_code == 201, r.text
+    got = client.get(f"/api/v1/workspaces/{team.ws}/schedules", headers=team.h("operator")).json()
+    assert got["items"][0]["name"] == "매일 아침" and got["items"][0]["cron"] == "0 9 * * *"
+    assert len(got["upcoming"]) >= 6  # 7일 동안 매일
+    assert (
+        client.get(f"/api/v1/workspaces/{team.ws}/schedules", headers=team.h("member")).status_code
+        == 403
+    )
