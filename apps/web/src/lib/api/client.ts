@@ -1,6 +1,7 @@
 // 모든 API 호출의 단일 진입점. 컴포넌트에서 fetch를 직접 쓰지 않는다.
 import type { ApiErrorDetail, GraphError, Tokens } from "@/lib/api/types";
 import { supportHeaders } from "@/store/support";
+import { viewAsHeaders } from "@/store/viewAs";
 
 export const API_PREFIX = "/api/v1";
 
@@ -121,7 +122,7 @@ function logout(): void {
 
 export function authHeaders(): Record<string, string> {
   const token = getAccessToken();
-  return token ? { Authorization: `Bearer ${token}`, ...supportHeaders() } : {};
+  return token ? { Authorization: `Bearer ${token}`, ...supportHeaders(), ...viewAsHeaders() } : {};
 }
 
 export interface RequestOptions {

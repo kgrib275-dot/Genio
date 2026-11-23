@@ -373,6 +373,26 @@ def _support_role(
     return "admin"
 
 
+_VIEW_RANK: dict[str, int] = {"member": 0, "operator": 1, "builder": 2, "admin": 3, "owner": 4}
+
+
+def _view_as_role(request: Request, db: Session, user: Any, role: Role) -> Role:
+    """서비스 관리자(슈퍼 관리자)의 '권한 미리보기'. X-Genio-View-As 헤더로 고른 역할로 판단한다.
+
+    높이는 것은 안 되고 **내 권한과 같거나 낮은 역할로만** 바뀐다. 서비스 관리자가 아니면 헤더를 무시한다.
+    서버가 그 권한으로 직접 판단하므로, 그 역할이 실제로 막히는 곳이 그대로 보인다.
+    """
+    want = (request.headers.get("x-genio-view-as") or "").strip().lower()
+    if not want or want == role or want not in _VIEW_RANK:
+        return role
+    from api.services.system import is_instance_admin
+
+    if not is_instance_admin(db, user.id) or _VIEW_RANK[want] > _VIEW_RANK[role]:
+        return role
+    db.info["view_as"] = want
+    return want  # type: ignore[return-value]
+
+
 def _check_admin_2fa(db: Session, workspace_id: str, user: Any) -> None:
     """'관리자는 2단계 인증 필수'를 켠 워크스페이스에서는 연결 정보·AI 키를 바꾸는 일만 막는다(로그인·보기는 그대로)."""
     from api.models import Workspace
@@ -401,6 +421,7 @@ def require_role(roles: tuple[Role, ...], via: Via = "ws") -> Callable[..., Ctx]
         if role is None:
             # 다른 워크스페이스의 존재 여부를 드러내지 않는다
             raise not_found("대상")
+        role = _view_as_role(request, db, user, role)
         if role not in roles:
             raise forbidden()
         if roles is MANAGE_SECRETS and request.method not in ("GET", "HEAD", "OPTIONS"):

@@ -16,6 +16,9 @@ import { useEffect, useState } from "react";
 import { AnnouncementBanner } from "@/components/announcement/AnnouncementBanner";
 import { GuideDock } from "@/components/guide/GuideDock";
 import { SupportBanner } from "@/components/support/SupportBanner";
+import { ViewAsBanner } from "@/components/support/ViewAsBanner";
+import { ViewAsPicker } from "@/components/support/ViewAsPicker";
+import { useViewAs } from "@/store/viewAs";
 import { useEnterSupport } from "@/components/support/useEnterSupport";
 import { useCompanies } from "@/lib/api/ops";
 import { useSystemSettings } from "@/lib/api/v2";
@@ -217,6 +220,7 @@ function SidebarBody({
               const w = workspaces.find((x) => x.id === e.target.value);
               if (w) {
                 useSupport.getState().exit(); // 다른 워크스페이스를 고르면 지원 접속은 끝난다
+                useViewAs.getState().exit(); // 권한 미리보기도 끝난다
                 setWorkspace(w.id, w.role);
               }
             }}
@@ -246,6 +250,8 @@ function SidebarBody({
           </select>
         </div>
       )}
+      {/* 서비스 관리자(슈퍼 관리자)만: 다른 역할이 보는 화면·권한을 그대로 미리 본다 */}
+      {!compact && sys.data?.is_instance_admin && <ViewAsPicker />}
 
       <nav
         data-tour="nav"
@@ -472,7 +478,10 @@ export function Layout() {
     if (useSupport.getState().target?.id === workspaceId) return;
     const current = list.find((w) => w.id === workspaceId);
     if (current) {
-      if (useSession.getState().role !== current.role) setWorkspace(current.id, current.role);
+      // 권한 미리보기 중에는 고른 역할을 그대로 둔다
+      if (useSession.getState().role !== current.role && !useViewAs.getState().target) {
+        setWorkspace(current.id, current.role);
+      }
     } else {
       // 고른 워크스페이스가 없으면 '내 설정'의 기본 워크스페이스를 먼저 쓴다
       const pref = me.data?.preferences?.default_workspace_id;
@@ -656,6 +665,7 @@ export function Layout() {
 
       <main className="min-h-0 min-w-0 flex-1 overflow-y-auto">
         <SupportBanner />
+        <ViewAsBanner />
         <AnnouncementBanner />
         {workspaceId ? (
           <ErrorBoundary resetKey={pathname}>

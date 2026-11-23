@@ -1687,3 +1687,46 @@ def test_admin_2fa_option_only_blocks_secret_changes(client: TestClient, team: T
         ).status_code
         == 200
     )
+
+
+def test_view_as_role_preview_only_lowers_and_only_for_service_admin(
+    client: TestClient, team: Team
+) -> None:
+    """슈퍼 관리자의 권한 미리보기: 서버가 고른 역할로 판단하고, 올리거나 남이 쓰는 것은 막는다."""
+    from api.db import SessionLocal
+    from api.models import AuditLog
+
+    owner = team.h("owner")  # 서비스 관리자(첫 워크스페이스의 소유자)
+    apps = f"/api/v1/workspaces/{team.ws}/apps"
+    body = {"name": "미리보기 앱", "type": "chat", "description": "", "icon": ""}
+
+    def as_role(role: str) -> dict[str, str]:
+        return {**owner, "X-Genio-View-As": role}
+
+    # 내 권한으로는 만들 수 있다
+    assert client.post(apps, json=body, headers=owner).status_code == 201
+    # 사용자·운영자로 보면 만들 수 없다(서버가 실제로 막는다)
+    for role in ("member", "operator"):
+        assert client.post(apps, json=body, headers=as_role(role)).status_code == 403, role
+        assert client.get(apps, headers=as_role(role)).status_code == 200  # 보는 것은 된다
+    # 제작자로 보면 앱은 만들지만 멤버 관리는 못 한다
+    assert client.post(apps, json=body, headers=as_role("builder")).status_code == 201
+    members = f"/api/v1/workspaces/{team.ws}/security"  # 관리자·소유자 전용
+    assert client.get(members, headers=as_role("builder")).status_code == 403
+    assert client.get(members, headers=as_role("admin")).status_code == 200
+    # 알 수 없는 값은 무시한다(내 권한 그대로)
+    assert client.post(apps, json=body, headers=as_role("superuser")).status_code == 201
+    # 미리보기로 한 일은 활동 기록에 표시된다
+    with SessionLocal() as db:
+        rows = db.query(AuditLog).filter(AuditLog.action == "app.create").all()
+    assert any((r.meta or {}).get("view_as") == "builder" for r in rows)
+
+    # 서비스 관리자가 아닌 사람은 헤더로 권한을 올릴 수 없다
+    sneaky = {**team.h("builder"), "X-Genio-View-As": "owner"}
+    assert client.get(members, headers=sneaky).status_code == 403
+    sneaky_admin = {**team.h("admin"), "X-Genio-View-As": "owner"}
+    low = {**team.h("admin"), "X-Genio-View-As": "member"}
+    assert client.post(apps, json=body, headers=sneaky_admin).status_code == 201  # 그대로 관리자
+    assert (
+        client.post(apps, json=body, headers=low).status_code == 201
+    )  # 서비스 관리자가 아니라 무시

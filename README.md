@@ -40,9 +40,10 @@
 - **운영 신뢰성·보안 마무리(2026-11-23)**: 서비스 이상 알림(5분마다 점검해 오류·백업 문제를 서비스 관리자 메일·웹훅으로 알림, `GENIO_ALERT_WEBHOOK_URL`), 복구에 꼭 필요한 것 3가지 안내([runbook](docs/runbook.md)), AI 연결 주소를 호출 직전에도 내부 IP 검사(DNS 리바인딩 방어), 공개 기본 비밀번호(`genio1234!`) 데모 계정을 시스템 상태에서 '오류'로 알림(**인터넷에 공개하기 전에 데모 계정 비밀번호를 꼭 바꾸거나 지울 것**), 약관·개인정보 초안에 지원 접속 안내(법률 검토 필요). 화면 점검으로 빌더가 단계를 끼워 넣을 때 겹치던 문제와 복잡하던 연결 정보 화면(탭 카드)을 정리했고, 가끔 실패하던 빌더 테스트(같은 시각 메시지 순서)를 고쳤다. `sections.tsx`를 구간별 파일로 나누고 react-router 7로 올렸다.
 - **이번 주 새로 나온 것(트렌드)**([ADR 0020](docs/decisions/0020-외부-카탈로그-조회와-설치.md) 3단계): 연결 정보 > '새 서비스 찾기'의 첫 탭. scheduler가 하루 한 번 새 MCP 서비스(바로 연결 가능한 것)와 n8n 최신·인기 템플릿을 모아 저장하고, 화면에서 바로 연결·가져오기를 한다. 회사가 '외부 서비스 찾기'를 켜야 보이며(기본 꺼짐), 인기·최신은 품질 보증이 아니다. 한국어 요약·주간 알림은 후속.
 - **역할별 메뉴·단계 안내**([ADR 0022](docs/decisions/0022-역할별-메뉴와-단계-안내.md)): 사이드바를 쓰기·만들기·팀으로 묶고 역할(사용자·제작자·관리자·소유자)마다 필요한 메뉴만 보여 준다. 대시보드의 '무엇을 하고 싶으세요?'에서 목표를 고르면 한 단계씩 어디를 눌러야 하는지 알려 주고, 화면을 옮겨도 안내 창이 따라온다. 메뉴 이름 변경은 써 보고 정한다.
+- **권한 미리보기(서비스 관리자 전용)**: 사이드바에서 관리자·제작자·운영자·사용자로 '보기'를 고르면 그 역할이 보는 화면과 권한을 그대로 확인한다. 서버가 그 권한으로 판단하고(내 권한 이하만 가능, 높이기 불가), 위쪽 안내 줄로 알리며, 한 일은 실제로 저장되고 활동 기록에 `view_as`가 남는다.
 - **점검 반영(2026-11-23)**: Redis 비밀번호 필수, 운영에서 localhost CORS 차단, CI 액션 SHA 고정. 외부 점검 기준 문서: 기본 등급 A~G 정적 점검에서 치명·높음 없음.
 - **공유 링크 미리보기 수정**: 카카오톡 안에서 링크를 열면 미리보기 페이지만 보이던 문제를 고쳤다(로봇만 `kakaotalk-scrap`으로 구분, `?open=1` 우회). **웹 이미지(nginx)를 다시 빌드해야 반영된다**: `docker compose up -d --build web`.
-- 자동 검사(GitHub Actions `ci.yml`): ruff·mypy·pytest 1,235개·eslint·tsc·vitest 300개·빌드·`pip-audit`·`npm audit`, PostgreSQL 동시 호출 시험.
+- 자동 검사(GitHub Actions `ci.yml`): ruff·mypy·pytest 1,236개·eslint·tsc·vitest 304개·빌드·`pip-audit`·`npm audit`, PostgreSQL 동시 호출 시험.
 - **반영 방법**: `docker compose up -d --build`(마이그레이션 0019~0021 자동 적용, 새 `scheduler`; 이번 보강은 마이그레이션이 늘지 않았다). **`.env`에 `POSTGRES_PASSWORD`와 `REDIS_PASSWORD`가 꼭 있어야 한다**(`openssl rand -hex 24`로 만든 영문·숫자 값; 기본값은 쓰지 않는다. Redis를 처음 켤 때는 api·worker·scheduler가 같이 다시 시작된다). 공개 주소를 쓰면 `GENIO_FERNET_KEY`도 필수다. `GENIO_STORAGE=disk`면 이미지를 다시 빌드한 뒤 [runbook](docs/runbook.md)의 '비루트 실행' 명령을 한 번 실행한다.
 - 결과 요약과 위치: [docs/feature-coverage.md](docs/feature-coverage.md) 맨 아래 표들, 남은 후보: [docs/field-needs-2026-11-19.html](docs/field-needs-2026-11-19.html).
 

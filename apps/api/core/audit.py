@@ -19,6 +19,8 @@ def audit(
 ) -> None:
     if db.info.get("support"):
         meta = {**(meta or {}), "via_support": True}
+    if db.info.get("view_as"):
+        meta = {**(meta or {}), "view_as": str(db.info["view_as"])}
     db.add(
         AuditLog(
             workspace_id=workspace_id,
